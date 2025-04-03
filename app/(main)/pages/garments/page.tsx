@@ -170,6 +170,12 @@ const Garments = () => {
 
             <Divider className="my-2" />
 
+            <div className="flex flex-wrap gap-2 mt-2">
+              {garment.measurements.map((m, i) => (
+                <Tag key={i} value={m} />
+              ))}
+            </div>
+
             <div className="flex justify-content-end gap-1">
               <Button 
                 icon="pi pi-pencil" 
@@ -186,12 +192,6 @@ const Garments = () => {
                 onClick={() => confirmStatusChange(garment.id, garment.status === 'active' ? 'inactive' : 'active')}
               />
             </div>
-
-            <div className="flex flex-wrap gap-2 mt-2">
-              {garment.measurements.map((m, i) => (
-                <Tag key={i} value={m} />
-              ))}
-            </div>
           </Card>
         ))}
       </div>
@@ -201,9 +201,9 @@ const Garments = () => {
         onHide={() => setShowDialog(false)}
         header={editMode ? "Edit Garment" : "Add New Garment"}
         maximized={isMaximized}
-        className="max-w-30rem"
-        blockScroll
         onMaximize={(e) => setIsMaximized(e.maximized)}
+        className="w-full"
+        blockScroll
       >
         <div className="flex flex-column gap-3">
           <div className="field">

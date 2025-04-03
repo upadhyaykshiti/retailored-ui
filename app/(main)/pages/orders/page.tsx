@@ -6,7 +6,6 @@ import { Avatar } from 'primereact/avatar';
 import { Divider } from 'primereact/divider';
 import { Tag } from 'primereact/tag';
 import { TabView, TabPanel } from 'primereact/tabview';
-import { Badge } from 'primereact/badge';
 import { useState, useEffect } from 'react';
 import { Dialog } from 'primereact/dialog';
 import { InputNumber } from 'primereact/inputnumber';
@@ -52,7 +51,7 @@ const Orders = () => {
         phone: '+911234567890',
         dob: '2000-03-01',
         address: 'Address not available',
-        profileImage: '/demo/images/avatar/bernardodominic.png'
+        profileImage: '/demo/images/avatar.png'
     };
 
     const orders: Order[] = [
@@ -100,26 +99,6 @@ const Orders = () => {
         }
     }, [allMeasurements]);
 
-    const statusBodyTemplate = (rowData: Order) => {
-        const getSeverity = (status: string) => {
-            switch (status) {
-                case 'Completed': return 'success';
-                case 'In Progress': return 'info';
-                case 'Pending': return 'warning';
-                default: return null;
-            }
-        };
-        return <Tag value={rowData.status} severity={getSeverity(rowData.status)} />;
-    };
-
-    const amountBodyTemplate = (rowData: Order) => {
-        return `₹${rowData.amount.toLocaleString('en-IN')}`;
-    };
-
-    const orderTypeTemplate = (rowData: Order) => {
-        return <Badge value={rowData.type} severity={rowData.type === 'Active' ? 'info' : 'success'} />;
-    };
-
     const openMeasurementDialog = (garmentId: number) => {
         const selectedGarment = garments.find(g => g.id === garmentId);
         if (selectedGarment) {
@@ -160,15 +139,9 @@ const Orders = () => {
     const measurementFooter = (
         <div>
           <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
-          <Button label="Save" icon="pi pi-check" onClick={() => {
-            setVisible(false);
-          }} autoFocus />
+          <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus />
         </div>
     );
-
-    const getSavedMeasurement = (garmentId: number, measurement: string) => {
-        return allMeasurements[garmentId]?.[measurement] || null;
-    };
 
     const getSelectedGarmentName = () => {
         return garments.find(g => g.id === selectedGarmentId)?.name || '';

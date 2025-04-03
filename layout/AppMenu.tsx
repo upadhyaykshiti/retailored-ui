@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element */
-
 import React, { useContext } from 'react';
 import AppMenuitem from './AppMenuitem';
 import { LayoutContext } from './context/layoutcontext';
@@ -15,6 +14,7 @@ const AppMenu = () => {
             label: 'Home',
             items: [
                 { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+                { label: 'Companies', icon: 'pi pi-fw pi-building', to: '/pages/companies'},
                 { label: 'Orders', icon: 'pi pi-fw pi-shopping-cart', to: '/pages/orders'},
                 { label: 'Garments', icon: 'pi pi-fw pi-box', to: '/pages/garments'},
                 { label: 'Customer List', icon: 'pi pi-fw pi-users', to: '/customers', disabled: true }
