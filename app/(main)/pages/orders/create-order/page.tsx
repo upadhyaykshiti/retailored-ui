@@ -31,7 +31,7 @@ interface MeasurementValues {
     };
 }  
 
-const CreateOrderPage = () => {
+const CreateOrder = () => {
     const [selectedGarmentId, setSelectedGarmentId] = useState<number | null>(null);
     const [visible, setVisible] = useState(false);
     const [selectedGarments, setSelectedGarments] = useState<Garment[]>([]);
@@ -49,6 +49,15 @@ const CreateOrderPage = () => {
     const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: number | null}>({});
     const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
     const [isMesurementSaved, setIsMesurementSaved] = useState(false);
+    const [showStitchOptionsDialog, setShowStitchOptionsDialog] = useState(false);
+    const [collarOption, setCollarOption] = useState<string | null>(null);
+    const [sleeveOption, setSleeveOption] = useState<string | null>(null);
+    const [bottomOption, setBottomOption] = useState<string | null>(null);
+    const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [imageUploadRef, setImageUploadRef] = useState<HTMLInputElement | null>(null);
+    const [pocketOption, setPocketOption] = useState('');
+    const [pocketSquareOption, setPocketSquareOption] = useState('');
+    const [cuffsOption, setCuffsOption] = useState('');
 
     const selectedCustomer: Customer = {
         id: 1,
@@ -137,6 +146,18 @@ const CreateOrderPage = () => {
         setInspiration('');
     };
 
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+          const files = Array.from(e.target.files);
+          const newImages = files.map(file => URL.createObjectURL(file));
+          setUploadedImages(prev => [...prev, ...newImages]);
+        }
+    };
+      
+    const removeImage = (index: number) => {
+        setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    };      
+
     const dialogFooter = (
         <div className="mt-3">
             <Button label="Save" className="w-full" onClick={handleSaveOrder} autoFocus />
@@ -147,6 +168,13 @@ const CreateOrderPage = () => {
         <div>
           <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
           <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus />
+        </div>
+    );
+
+    const stitchFooter = (
+        <div>
+          <Button label="Cancel" icon="pi pi-times" onClick={() => setShowStitchOptionsDialog(false)} className="p-button-text" />
+          <Button label="Save" icon="pi pi-check" onClick={() => setShowStitchOptionsDialog(false)} autoFocus />
         </div>
     );
 
@@ -279,10 +307,10 @@ const CreateOrderPage = () => {
                                         <span className="font-medium w-9">Stitch Options</span>
                                         <div className="w-3 text-right">
                                             <Button 
-                                            label="Add" 
-                                            icon="pi pi-plus" 
-                                            onClick={() => console.log('Add Stitch Options clicked')}
-                                            className="p-button-sm p-button-outlined"
+                                                label="Add" 
+                                                icon="pi pi-plus" 
+                                                onClick={() => setShowStitchOptionsDialog(true)}
+                                                className="p-button-sm p-button-outlined"
                                             />
                                         </div>
                                     </div>
@@ -309,13 +337,46 @@ const CreateOrderPage = () => {
                             label="Record Audio" 
                             className="p-button-outlined w-7" 
                         />
-                        <Button 
-                            icon="pi pi-image" 
-                            label="Upload Image" 
-                            className="p-button-outlined w-7" 
-                        />
+                        <div>
+                            <input 
+                                type="file" 
+                                ref={ref => setImageUploadRef(ref)}
+                                onChange={handleImageUpload}
+                                multiple 
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                            />
+                            <Button 
+                                icon="pi pi-image" 
+                                label="Upload Image" 
+                                className="p-button-outlined w-7" 
+                                onClick={() => imageUploadRef?.click()}
+                            />
+                        </div>
+                        
+                        {uploadedImages.length > 0 && (
+                            <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
+                            {uploadedImages.map((image, index) => (
+                                <div key={index} className="relative flex-shrink-0" style={{ width: '120px' }}>
+                                <div className="border-1 surface-border border-round p-2 h-full">
+                                    <img 
+                                    src={image} 
+                                    alt={`Uploaded ${index + 1}`} 
+                                    className="w-full border-round" 
+                                    style={{ height: '80px', objectFit: 'cover' }}
+                                    />
+                                    <Button 
+                                    icon="pi pi-trash" 
+                                    className="p-button-rounded p-button-danger p-button-text absolute" 
+                                    style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
+                                    onClick={() => removeImage(index)}
+                                    />
+                                </div>
+                                </div>
+                            ))}
+                            </div>
+                        )}
                     </div>
-
                     <div className="field mb-4">
                         <label htmlFor="inspiration">Add Inspiration</label>
                         <span className="p-input-icon-left w-full">
@@ -377,27 +438,27 @@ const CreateOrderPage = () => {
                         <div className="field">
                             <label htmlFor="quantity">Quantity</label>
                             <InputNumber 
-                            id="quantity" 
-                            value={quantity} 
-                            onValueChange={(e) => setQuantity(e.value || 1)} 
-                            mode="decimal" 
-                            showButtons 
-                            min={1} 
-                            max={100} 
-                            className="w-full" 
+                                id="quantity"
+                                value={quantity} 
+                                onValueChange={(e) => setQuantity(e.value || 1)} 
+                                mode="decimal" 
+                                showButtons 
+                                min={1} 
+                                max={100} 
+                                className="w-full" 
                             />
                         </div>
 
                         <div className="field">
                             <label htmlFor="price">Stitching Price (₹)</label>
                             <InputNumber 
-                            id="price" 
-                            value={stitchingPrice} 
-                            onValueChange={(e) => setStitchingPrice(e.value || 0)} 
-                            mode="currency" 
-                            currency="INR" 
-                            locale="en-IN" 
-                            className="w-full" 
+                                id="price" 
+                                value={stitchingPrice} 
+                                onValueChange={(e) => setStitchingPrice(e.value || 0)} 
+                                mode="currency" 
+                                currency="INR" 
+                                locale="en-IN" 
+                                className="w-full" 
                             />
                         </div>
 
@@ -434,10 +495,10 @@ const CreateOrderPage = () => {
                 header={`${currentGarment?.name} Measurements`}
                 visible={visible} 
                 maximized={isMaximized}
+                onMaximize={(e) => setIsMaximized(e.maximized)}
                 footer={measurementFooter}
                 onHide={() => setVisible(false)}
                 blockScroll
-                onMaximize={(e) => setIsMaximized(e.maximized)}
             >
                 <div className="p-fluid">
                 {selectedGarmentId && garments.find(g => g.id === selectedGarmentId)?.measurements.map((measurement) => (
@@ -454,6 +515,224 @@ const CreateOrderPage = () => {
                     />
                     </div>
                 ))}
+                </div>
+            </Dialog>
+
+            <Dialog 
+                header="Stitch Options" 
+                visible={showStitchOptionsDialog} 
+                maximized={isMaximized}
+                onMaximize={(e) => setIsMaximized(e.maximized)}
+                footer={stitchFooter}
+                onHide={() => setShowStitchOptionsDialog(false)}
+                blockScroll
+            >
+                <div className="p-fluid">
+                    <div className="mb-4">
+                        <div className="surface-100 p-3 border-round mb-3">
+                            <h5 className="m-0 font-medium">Top</h5>
+                        </div>
+                        
+                        <div className="field mb-4">
+                            <h5 className="m-0 mb-3">Collar</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="collar1" 
+                                        name="collar" 
+                                        value="Mandarin" 
+                                        onChange={(e) => setCollarOption(e.value)} 
+                                        checked={collarOption === 'Mandarin'} 
+                                    />
+                                    <label htmlFor="collar1" className="ml-2">Mandarin</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="collar2" 
+                                        name="collar" 
+                                        value="Stand" 
+                                        onChange={(e) => setCollarOption(e.value)} 
+                                        checked={collarOption === 'Stand'} 
+                                    />
+                                    <label htmlFor="collar2" className="ml-2">Stand</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="collar3" 
+                                        name="collar" 
+                                        value="Classic" 
+                                        onChange={(e) => setCollarOption(e.value)} 
+                                        checked={collarOption === 'Classic'} 
+                                    />
+                                    <label htmlFor="collar3" className="ml-2">Classic</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Divider className="my-3" />
+
+                        <div className="field mb-4">
+                            <h5 className="m-0 mb-3">Pockets</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="pocket1" 
+                                        name="pocket" 
+                                        value="Straight" 
+                                        onChange={(e) => setPocketOption(e.value)} 
+                                        checked={pocketOption === 'Straight'} 
+                                    />
+                                    <label htmlFor="pocket1" className="ml-2">Straight</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="pocket2" 
+                                        name="pocket" 
+                                        value="Slant" 
+                                        onChange={(e) => setPocketOption(e.value)} 
+                                        checked={pocketOption === 'Slant'} 
+                                    />
+                                    <label htmlFor="pocket2" className="ml-2">Slant</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="pocket3" 
+                                        name="pocket" 
+                                        value="Patch" 
+                                        onChange={(e) => setPocketOption(e.value)} 
+                                        checked={pocketOption === 'Patch'} 
+                                    />
+                                    <label htmlFor="pocket3" className="ml-2">Patch</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Divider className="my-3" />
+
+                        <div className="field mb-4">
+                            <h5 className="m-0 mb-3">Pocket Square</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="pocketSquare1" 
+                                        name="pocketSquare" 
+                                        value="Yes" 
+                                        onChange={(e) => setPocketSquareOption(e.value)} 
+                                        checked={pocketSquareOption === 'Yes'} 
+                                    />
+                                    <label htmlFor="pocketSquare1" className="ml-2">Yes</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="pocketSquare2" 
+                                        name="pocketSquare" 
+                                        value="No" 
+                                        onChange={(e) => setPocketSquareOption(e.value)} 
+                                        checked={pocketSquareOption === 'No'} 
+                                    />
+                                    <label htmlFor="pocketSquare2" className="ml-2">No</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Divider className="my-3" />
+
+                        <div className="field mb-4">
+                            <h5 className="m-0 mb-3">Cuffs</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="cuffs1" 
+                                        name="cuffs" 
+                                        value="Yes" 
+                                        onChange={(e) => setCuffsOption(e.value)} 
+                                        checked={cuffsOption === 'Yes'} 
+                                    />
+                                    <label htmlFor="cuffs1" className="ml-2">Yes</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="cuffs2" 
+                                        name="cuffs" 
+                                        value="No" 
+                                        onChange={(e) => setCuffsOption(e.value)} 
+                                        checked={cuffsOption === 'No'} 
+                                    />
+                                    <label htmlFor="cuffs2" className="ml-2">No</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Divider className="my-3" />
+
+                        <div className="field">
+                            <h5 className="m-0 mb-3">Sleeves</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="sleeve1" 
+                                        name="sleeve" 
+                                        value="Full" 
+                                        onChange={(e) => setSleeveOption(e.value)} 
+                                        checked={sleeveOption === 'Full'} 
+                                    />
+                                    <label htmlFor="sleeve1" className="ml-2">Full</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="sleeve2" 
+                                        name="sleeve" 
+                                        value="Half" 
+                                        onChange={(e) => setSleeveOption(e.value)} 
+                                        checked={sleeveOption === 'Half'} 
+                                    />
+                                    <label htmlFor="sleeve2" className="ml-2">Half</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="sleeve3" 
+                                        name="sleeve" 
+                                        value="Three Quarter" 
+                                        onChange={(e) => setSleeveOption(e.value)} 
+                                        checked={sleeveOption === 'Three Quarter'} 
+                                    />
+                                    <label htmlFor="sleeve3" className="ml-2">Three Quarter</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="surface-100 p-3 border-round mb-3">
+                            <h5 className="m-0 font-medium">Bottom</h5>
+                        </div>
+                        
+                        <div className="field mb-4">
+                            <h5 className="m-0 mb-3">Pants/Pyjamas</h5>
+                            <div className="flex flex-wrap gap-3">
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="bottom3" 
+                                        name="bottom" 
+                                        value="Straight" 
+                                        onChange={(e) => setBottomOption(e.value)} 
+                                        checked={bottomOption === 'Straight'} 
+                                    />
+                                    <label htmlFor="bottom3" className="ml-2">Straight</label>
+                                </div>
+                                <div className="flex align-items-center">
+                                    <RadioButton 
+                                        inputId="bottom4" 
+                                        name="bottom" 
+                                        value="Slant" 
+                                        onChange={(e) => setBottomOption(e.value)} 
+                                        checked={bottomOption === 'Slant'} 
+                                    />
+                                    <label htmlFor="bottom4" className="ml-2">Slant</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </Dialog>
 
@@ -474,4 +753,4 @@ const CreateOrderPage = () => {
     );
 };
 
-export default CreateOrderPage;
+export default CreateOrder;

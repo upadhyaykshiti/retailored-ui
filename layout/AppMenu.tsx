@@ -14,7 +14,9 @@ const AppMenu = () => {
                 { label: 'Companies', icon: 'pi pi-fw pi-building', to: '/pages/companies'},
                 { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list'},
                 { label: 'Garments', icon: 'pi pi-fw pi-box', to: '/pages/garments'},
-                { label: 'Orders', icon: 'pi pi-fw pi-shopping-cart', to: '/pages/orders/pending-orders'}
+                { label: 'Orders', icon: 'pi pi-fw pi-shopping-cart', to: '/pages/orders/pending-orders'},
+                { label: 'Job Order', icon: 'pi pi-fw pi-briefcase', to: '/pages/orders/job-order'},
+                { label: 'Sales Order', icon: 'pi pi-fw pi-money-bill', to: '/pages/orders/sales-order'}
             ]
         },
         {
