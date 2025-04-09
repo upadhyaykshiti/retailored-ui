@@ -5,7 +5,8 @@ import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
 import { Tag } from 'primereact/tag';
-import { useState } from 'react';
+import { InputText } from 'primereact/inputtext';
+import { useState, useMemo } from 'react';
 
 interface Order {
   id: number;
@@ -37,6 +38,7 @@ const SalesOrder = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const orders: Order[] = [
     {
@@ -120,68 +122,99 @@ const SalesOrder = () => {
     return date ? date.toLocaleDateString('en-IN') : 'Not scheduled';
   };
 
+  const filteredOrders = useMemo(() => {
+    if (!searchTerm) return orders;
+    
+    const term = searchTerm.toLowerCase();
+    return orders.filter(order => 
+      order.orderNumber.toLowerCase().includes(term) ||
+      order.customerName.toLowerCase().includes(term) ||
+      order.status.toLowerCase().includes(term)
+    );
+  }, [orders, searchTerm]);
+
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <h2 className="text-2xl m-0 mb-3">Sales Orders</h2>
+      <div className="mb-4">
+        <span className="p-input-icon-left w-full">
+          <i className="pi pi-search" />
+          <InputText 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search"
+            className="w-full"
+          />
+        </span>
+      </div>
       
       <div className="grid">
-        {orders.map((order) => (
-          <div key={order.id} className="col-12 md:col-6 lg:col-4">
-            <Card className="h-full">
-              <div className="flex flex-column gap-2">
-                <div className="flex justify-content-between align-items-center">
-                  <span className="font-bold">{order.orderNumber}</span>
-                  <Tag value={order.status} severity={getStatusSeverity(order.status)} />
+        {filteredOrders.length > 0 ? (
+          filteredOrders.map((order) => (
+            <div key={order.id} className="col-12 md:col-6 lg:col-4">
+              <Card className="h-full">
+                <div className="flex flex-column gap-2">
+                  <div className="flex justify-content-between align-items-center">
+                    <span className="font-bold">{order.orderNumber}</span>
+                    <Tag value={order.status} severity={getStatusSeverity(order.status)} />
+                  </div>
+                  
+                  <Divider className="my-2" />
+                  
+                  <div className="flex flex-column gap-1">
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Customer:</span>
+                      <span>{order.customerName}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Order Date:</span>
+                      <span>{formatDate(order.orderDate)}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Trial Date:</span>
+                      <span>{formatDate(order.trialDate)}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Total Qty:</span>
+                      <span>{order.totalQty}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Delivered:</span>
+                      <span>{order.deliveredQty}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                      <span className="text-600">Cancelled:</span>
+                      <span>{order.cancelledQty}</span>
+                    </div>
+                  </div>
+                  
+                  <Divider className="my-2" />
+                  
+                  <div className="flex flex-column gap-1">
+                    <span className="text-600">Notes:</span>
+                    <p className="m-0 text-sm">{order.notes || 'No notes'}</p>
+                  </div>
+                  
+                  <div className="mt-3">
+                    <Button 
+                      label="View Details" 
+                      icon="pi pi-eye"
+                      onClick={() => openOrderDetails(order)}
+                      className="w-full p-button-sm"
+                    />
+                  </div>
                 </div>
-                
-                <Divider className="my-2" />
-                
-                <div className="flex flex-column gap-1">
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Customer:</span>
-                    <span>{order.customerName}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Order Date:</span>
-                    <span>{formatDate(order.orderDate)}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Trial Date:</span>
-                    <span>{formatDate(order.trialDate)}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Total Qty:</span>
-                    <span>{order.totalQty}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Delivered:</span>
-                    <span>{order.deliveredQty}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Cancelled:</span>
-                    <span>{order.cancelledQty}</span>
-                  </div>
-                </div>
-                
-                <Divider className="my-2" />
-                
-                <div className="flex flex-column gap-1">
-                  <span className="text-600">Notes:</span>
-                  <p className="m-0 text-sm">{order.notes || 'No notes'}</p>
-                </div>
-                
-                <div className="mt-3">
-                  <Button 
-                    label="View Details" 
-                    icon="pi pi-eye"
-                    onClick={() => openOrderDetails(order)}
-                    className="w-full p-button-sm"
-                  />
-                </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
+          ))
+        ) : (
+          <div className="col-12">
+            <div className="p-4 text-center surface-100 border-round">
+              <i className="pi pi-search text-3xl mb-1" />
+              <h4>No orders found</h4>
+            </div>
           </div>
-        ))}
+        )}
       </div>
 
       <Dialog 
