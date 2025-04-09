@@ -4,9 +4,22 @@ import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
+import { useRouter } from 'next/navigation';
 import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
+import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
+import { MultiSelect, MultiSelectChangeEvent } from 'primereact/multiselect';
 import { useState, useMemo } from 'react';
+
+interface Customer {
+  id: number;
+  name: string;
+}
+
+interface Garment {
+  id: number;
+  name: string;
+}
 
 interface Order {
   id: number;
@@ -35,10 +48,29 @@ interface OrderItem {
 }
 
 const SalesOrder = () => {
+  const router = useRouter();
+  const [showDialog, setShowDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedGarments, setSelectedGarments] = useState<Garment[]>([]);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const customers: Customer[] = [
+    { id: 1, name: 'Nishant Kumar' },
+    { id: 2, name: 'Rahul Sharma' },
+    { id: 3, name: 'Priya Mehta' },
+    { id: 4, name: 'Amit Singh' },
+  ];
+
+  const garments: Garment[] = [
+    { id: 1, name: 'Shirt' },
+    { id: 2, name: 'Pant' },
+    { id: 3, name: 'Kurta Pajama' },
+    { id: 4, name: 'Sherwani' },
+    { id: 5, name: 'Blazer' },
+  ];
 
   const orders: Order[] = [
     {
@@ -133,10 +165,18 @@ const SalesOrder = () => {
     );
   }, [orders, searchTerm]);
 
+  const handleAddOrder = () => {
+    setShowDialog(true);
+  };
+
+  const handleCreateOrder = () => {
+    router.push('/pages/orders/create-order');
+  };
+
   return (
-    <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 className="text-2xl m-0 mb-3">Sales Orders</h2>
-      <div className="mb-4">
+    <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+     <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
+      <h2 className="text-2xl m-0">Sales Orders</h2>
         <span className="p-input-icon-left w-full">
           <i className="pi pi-search" />
           <InputText 
@@ -146,6 +186,13 @@ const SalesOrder = () => {
             className="w-full"
           />
         </span>
+        <Button 
+            label="Create Order" 
+            icon="pi pi-plus" 
+            onClick={handleAddOrder}
+            className="w-full md:w-auto"
+            size="small"
+        />
       </div>
       
       <div className="grid">
@@ -216,6 +263,60 @@ const SalesOrder = () => {
           </div>
         )}
       </div>
+
+      <Dialog 
+        header="Create New Order" 
+        visible={showDialog} 
+        style={{ width: '50vw' }}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        onHide={() => {
+            setShowDialog(false);
+            setSelectedCustomer(null);
+            setSelectedGarments([]);
+        }}
+    >
+        <div className="p-fluid">
+            <div className="field mb-4">
+                <label htmlFor="customer">Customer</label>
+                <Dropdown
+                    id="customer"
+                    value={selectedCustomer}
+                    options={customers}
+                    onChange={(e: DropdownChangeEvent) => setSelectedCustomer(e.value)}
+                    optionLabel="name"
+                    placeholder="Select a Customer"
+                    className="w-full"
+                    filter
+                />
+            </div>
+
+            <div className="field">
+                <label htmlFor="garments">Select Outfit</label>
+                <MultiSelect
+                    id="garments"
+                    value={selectedGarments}
+                    options={garments}
+                    onChange={(e: MultiSelectChangeEvent) => setSelectedGarments(e.value)}
+                    optionLabel="name"
+                    placeholder="Select Outfits"
+                    className="w-full"
+                    display="chip"
+                    filter
+                />
+            </div>
+        </div>
+
+        <div className="flex justify-content-end gap-2 mt-4">
+            <Button 
+                label="Next" 
+                icon="pi pi-arrow-right" 
+                iconPos="right"
+                onClick={handleCreateOrder}
+                disabled={!selectedCustomer || selectedGarments.length === 0}
+            />
+        </div>
+      </Dialog>
 
       <Dialog 
         header={`Order Details - ${selectedOrder?.orderNumber}`} 

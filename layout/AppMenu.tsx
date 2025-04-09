@@ -10,21 +10,39 @@ const AppMenu = () => {
         {
             label: 'Home',
             items: [
-                { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
-                { label: 'Companies', icon: 'pi pi-fw pi-building', to: '/pages/companies'},
-                { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list'},
-                { label: 'Garments', icon: 'pi pi-fw pi-box', to: '/pages/garments'},
-                { label: 'Orders', icon: 'pi pi-fw pi-shopping-cart', to: '/pages/orders/pending-orders'},
-                { label: 'Job Order', icon: 'pi pi-fw pi-briefcase', to: '/pages/orders/job-order'},
-                { label: 'Sales Order', icon: 'pi pi-fw pi-money-bill', to: '/pages/orders/sales-order'}
+                { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }
             ]
         },
         {
-            label: 'Support',
+            label: 'Transactions',
             items: [
-                { label: 'Help Centre', icon: 'pi pi-fw pi-question-circle', to: '/help', disabled: true },
-                { label: 'VIP Customer Support', icon: 'pi pi-fw pi-star', to: '/vip-support', disabled: true },
-                { label: 'FAQs', icon: 'pi pi-fw pi-info-circle', to: '/faqs', disabled: true }
+                { label: 'Sales Order', icon: 'pi pi-fw pi-money-bill', to: '/pages/orders/sales-order' },
+                { label: 'Job Order', icon: 'pi pi-fw pi-briefcase', to: '/pages/orders/job-order' }
+            ]
+        },
+        {
+            label: 'Masters',
+            items: [
+                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/garments' },
+                { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list' },
+                { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' },
+                { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' },
+                // { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list'},
+            ]
+        },
+        {
+            label: 'Reports',
+            items: [
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true },
+                { label: 'Week Insights', icon: 'pi pi-fw pi-chart-line', to: '/pages/reports/weekly-insights', disabled: true }
+            ]
+        },
+        {
+            label: 'Settings',
+            items: [
+                { label: 'Users', icon: 'pi pi-fw pi-user', to: '/pages/settings/users', disabled: true },
+                { label: 'Configuration', icon: 'pi pi-fw pi-cog', to: '/pages/settings/configuration', disabled: true }
             ]
         }
     ];

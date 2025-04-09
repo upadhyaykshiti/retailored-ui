@@ -3,6 +3,7 @@
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
+import { InputText } from 'primereact/inputtext';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -17,6 +18,7 @@ interface Customer {
 
 const CustomerList = () => {
   const router = useRouter();
+  const [searchTerm, setSearchTerm] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([
     { id: 1, name: 'Nishant kumar', mobile: '+91 1234567890', status: 'active' },
   ]);
@@ -32,6 +34,15 @@ const CustomerList = () => {
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Customers</h2>
+        <span className="p-input-icon-left w-full">
+          <i className="pi pi-search" />
+          <InputText 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search"
+            className="w-full"
+          />
+        </span>
         <Button 
           label="Add Customer" 
           icon="pi pi-plus" 

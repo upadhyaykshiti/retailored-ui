@@ -6,6 +6,7 @@ import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
 import { Tag } from 'primereact/tag';
 import { useState } from 'react';
+import { InputText } from 'primereact/inputtext';
 
 interface JobOrder {
   id: number;
@@ -37,6 +38,7 @@ const JobOrder = () => {
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrder | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const jobOrders: JobOrder[] = [
     {
@@ -111,67 +113,85 @@ const JobOrder = () => {
 
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 className="text-2xl m-0 mb-3">Job Orders</h2>
+        <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
+            <h2 className="text-2xl m-0 mb-3">Job Orders</h2>
+            <span className="p-input-icon-left w-full">
+                <i className="pi pi-search" />
+                <InputText 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search"
+                    className="w-full"
+                />
+            </span>
+            <Button 
+                label="Create Job Order" 
+                icon="pi pi-plus" 
+                // onClick={handleAddOrder}
+                className="w-full md:w-auto"
+                size="small"
+            />
+        </div>
       
-      <div className="grid">
-        {jobOrders.map((jobOrder) => (
-          <div key={jobOrder.id} className="col-12 md:col-6 lg:col-4">
-            <Card className="h-full">
-              <div className="flex flex-column gap-2">
-              <div className="flex justify-content-between align-items-center">
-                  <span className="font-bold">{jobOrder.jobOrderNumber}</span>
-                  <Tag value={jobOrder.status} severity={getStatusSeverity(jobOrder.status)} />
+        <div className="grid">
+            {jobOrders.map((jobOrder) => (
+            <div key={jobOrder.id} className="col-12 md:col-6 lg:col-4">
+                <Card className="h-full">
+                <div className="flex flex-column gap-2">
+                    <div className="flex justify-content-between align-items-center">
+                    <span className="font-bold">{jobOrder.jobOrderNumber}</span>
+                    <Tag value={jobOrder.status} severity={getStatusSeverity(jobOrder.status)} />
+                    </div>
+                    
+                    <Divider className="my-2" />
+                    
+                    <div className="flex flex-column gap-1">
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Jobber:</span>
+                        <span>{jobOrder.jobberName}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Order Date:</span>
+                        <span>{formatDate(jobOrder.orderDate)}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Trial Date:</span>
+                        <span>{formatDate(jobOrder.trialDate)}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Total Qty:</span>
+                        <span>{jobOrder.totalQty}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Delivered:</span>
+                        <span>{jobOrder.deliveredQty}</span>
+                    </div>
+                    <div className="flex justify-content-between">
+                        <span className="text-600">Cancelled:</span>
+                        <span>{jobOrder.cancelledQty}</span>
+                    </div>
+                    </div>
+                    
+                    <Divider className="my-2" />
+                    
+                    <div className="flex flex-column gap-1">
+                    <span className="text-600">Notes:</span>
+                    <p className="m-0 text-sm">{jobOrder.notes || 'No notes'}</p>
+                    </div>
+                    
+                    <div className="mt-3">
+                    <Button 
+                        label="View Details" 
+                        icon="pi pi-eye" 
+                        onClick={() => openJobOrderDetails(jobOrder)}
+                        className="w-full p-button-sm"
+                    />
+                    </div>
                 </div>
-                
-                <Divider className="my-2" />
-                
-                <div className="flex flex-column gap-1">
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Jobber:</span>
-                    <span>{jobOrder.jobberName}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Order Date:</span>
-                    <span>{formatDate(jobOrder.orderDate)}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Trial Date:</span>
-                    <span>{formatDate(jobOrder.trialDate)}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Total Qty:</span>
-                    <span>{jobOrder.totalQty}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Delivered:</span>
-                    <span>{jobOrder.deliveredQty}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Cancelled:</span>
-                    <span>{jobOrder.cancelledQty}</span>
-                  </div>
-                </div>
-                
-                <Divider className="my-2" />
-                
-                <div className="flex flex-column gap-1">
-                  <span className="text-600">Notes:</span>
-                  <p className="m-0 text-sm">{jobOrder.notes || 'No notes'}</p>
-                </div>
-                
-                <div className="mt-3">
-                  <Button 
-                    label="View Details" 
-                    icon="pi pi-eye" 
-                    onClick={() => openJobOrderDetails(jobOrder)}
-                    className="w-full p-button-sm"
-                  />
-                </div>
-              </div>
-            </Card>
-          </div>
-        ))}
-      </div>
+                </Card>
+            </div>
+            ))}
+        </div>
 
       <Dialog 
         header={`Order Details - ${selectedJobOrder?.jobOrderNumber}`} 

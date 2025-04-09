@@ -52,6 +52,7 @@ const Garments = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [currentGarment, setCurrentGarment] = useState<Garment>({
     id: 0,
     name: '',
@@ -147,6 +148,15 @@ const Garments = () => {
       
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Garment Types</h2>
+        <span className="p-input-icon-left w-full">
+          <i className="pi pi-search" />
+          <InputText 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search"
+            className="w-full"
+          />
+        </span>
         <Button 
           label="Add Garment" 
           icon="pi pi-plus" 
