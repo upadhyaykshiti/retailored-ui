@@ -187,12 +187,11 @@ const Dashboard = () => {
 
     return (
         <div className="grid">
-            {/* Dashboard Tiles */}
             <div className="col-12 lg:col-6 xl:col-4">
                 <div className="card mb-0">
                     <div className="flex justify-content-between mb-3">
                         <div>
-                            <span className="block text-500 font-medium mb-3">This Week's Delivery (Qty)</span>
+                            <span className="block text-500 font-medium mb-3">This Week&apos;s Delivery (Qty)</span>
                             <div className="text-900 font-medium text-xl">{thisWeeksDelivery}</div>
                         </div>
                         <div className="flex align-items-center justify-content-center bg-green-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
