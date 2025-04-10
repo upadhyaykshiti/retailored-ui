@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ReTailored</string>
+    <string name="title_activity_main">ReTailored</string>
+    <string name="package_name">in.retailored.app</string>
+    <string name="custom_url_scheme">in.retailored.app</string>
+</resources>
