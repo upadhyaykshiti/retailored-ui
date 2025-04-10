@@ -6,6 +6,7 @@ import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
 import { useRouter } from 'next/navigation';
 import { Tag } from 'primereact/tag';
+import { Calendar } from 'primereact/calendar';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
 import { MultiSelect, MultiSelectChangeEvent } from 'primereact/multiselect';
@@ -28,8 +29,8 @@ interface Order {
   orderDate: Date;
   status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
   trialDate: Date | null;
+  deliveryDate: Date | null;
   notes: string;
-  totalQty: number;
   deliveredQty: number;
   cancelledQty: number;
   items: OrderItem[];
@@ -43,6 +44,7 @@ interface OrderItem {
   trialDate: Date | null;
   pendingQty: number;
   cancelledQty: number;
+  pendingAmount: number;
   notes: string;
   imageUrl?: string;
 }
@@ -53,6 +55,9 @@ const SalesOrder = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedGarments, setSelectedGarments] = useState<Garment[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null | undefined>(new Date());
+  const [receivePaymentDialog, setReceivePaymentDialog] = useState(false);
+  const [receiveAmount, setReceiveAmount] = useState('');
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,7 +77,7 @@ const SalesOrder = () => {
     { id: 5, name: 'Blazer' },
   ];
 
-  const orders: Order[] = [
+  const orders = useMemo<Order[]>(() => [
     {
       id: 1,
       orderNumber: 'ORD-2023-001',
@@ -80,8 +85,8 @@ const SalesOrder = () => {
       orderDate: new Date('2023-05-15'),
       status: 'In Progress',
       trialDate: new Date('2023-05-25'),
+      deliveryDate: new Date('2023-05-28'),
       notes: 'Urgent delivery required',
-      totalQty: 5,
       deliveredQty: 2,
       cancelledQty: 0,
       items: [
@@ -93,6 +98,7 @@ const SalesOrder = () => {
           trialDate: new Date('2023-05-20'),
           pendingQty: 3,
           cancelledQty: 0,
+          pendingAmount: 1200,
           notes: 'Need French cuffs',
           imageUrl: '/shirt.jpg'
         },
@@ -104,6 +110,7 @@ const SalesOrder = () => {
           trialDate: null,
           pendingQty: 2,
           cancelledQty: 0,
+          pendingAmount: 1000,
           notes: 'Slim fit required',
           imageUrl: '/shirt.jpg'
         }
@@ -116,8 +123,8 @@ const SalesOrder = () => {
       orderDate: new Date('2023-05-18'),
       status: 'Pending',
       trialDate: null,
+      deliveryDate: new Date('2023-05-20'),
       notes: 'Special fabric provided',
-      totalQty: 3,
       deliveredQty: 0,
       cancelledQty: 1,
       items: [
@@ -129,11 +136,12 @@ const SalesOrder = () => {
           trialDate: null,
           pendingQty: 2,
           cancelledQty: 1,
+          pendingAmount: 1100,
           notes: 'Hand embroidery needed'
         }
       ]
     }
-  ];
+  ], []);
 
   const getStatusSeverity = (status: string) => {
     switch (status) {
@@ -171,6 +179,17 @@ const SalesOrder = () => {
 
   const handleCreateOrder = () => {
     router.push('/pages/orders/create-order');
+  };
+
+  const getPendingAmountSummary = (order: Order) => {
+    const orderPendingAmount = order.items.reduce((sum, item) => sum + (item.pendingAmount || 0), 0);
+  
+    const totalPendingAmount = orders.reduce(
+      (total, ord) => total + ord.items.reduce((sum, item) => sum + (item.pendingAmount || 0), 0),
+      0
+    );
+  
+    return `₹${orderPendingAmount} (₹${totalPendingAmount})`;
   };
 
   return (
@@ -222,16 +241,16 @@ const SalesOrder = () => {
                       <span>{formatDate(order.trialDate)}</span>
                     </div>
                     <div className="flex justify-content-between">
-                      <span className="text-600">Total Qty:</span>
-                      <span>{order.totalQty}</span>
+                      <span className="text-600">Delivery Date:</span>
+                      <span>{formatDate(order.deliveryDate)}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Delivered:</span>
                       <span>{order.deliveredQty}</span>
                     </div>
                     <div className="flex justify-content-between">
-                      <span className="text-600">Cancelled:</span>
-                      <span>{order.cancelledQty}</span>
+                      <span className="text-600">Payment Pending:</span>
+                      <span>{getPendingAmountSummary(order)}</span>
                     </div>
                   </div>
                   
@@ -354,8 +373,16 @@ const SalesOrder = () => {
                   <p className="m-0 font-medium">{formatDate(selectedOrder.trialDate)}</p>
                 </div>
               </div>
+              <div className="col-12">
+                <Button
+                  label="Receive Payment"
+                  icon="pi pi-wallet"
+                  onClick={() => setReceivePaymentDialog(true)}
+                  className="mt-3"
+                />
+              </div>
             </div>
-            
+
             <Divider />
             
             <h5 className="m-0 mb-3">Order Items</h5>
@@ -422,6 +449,58 @@ const SalesOrder = () => {
             ))}
           </div>
         )}
+      </Dialog>
+
+      <Dialog 
+        header="Receive Payment"
+        visible={receivePaymentDialog} 
+        className="w-full"
+        onHide={() => {
+          setReceivePaymentDialog(false);
+          setReceiveAmount('');
+          setSelectedDate(new Date());
+        }}
+        footer={
+          <div className="flex justify-content-end gap-2">
+            <Button 
+              label="Cancel" 
+              icon="pi pi-times" 
+              className="p-button-text" 
+              onClick={() => setReceivePaymentDialog(false)} 
+            />
+            <Button 
+              label="Confirm" 
+              icon="pi pi-check" 
+              onClick={() => {
+                setReceivePaymentDialog(false);
+              }} 
+              disabled={!receiveAmount}
+            />
+          </div>
+        }
+      >
+        <div className="field">
+          <label htmlFor="date">Date</label>
+          <Calendar
+            id="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.value)}
+            dateFormat="dd-mm-yy"
+            showIcon
+            className="w-full"
+          />
+        </div>
+
+        <div className="field mt-3">
+          <label htmlFor="amount">Enter Amount</label>
+          <InputText
+            id="amount"
+            value={receiveAmount}
+            onChange={(e) => setReceiveAmount(e.target.value)}
+            placeholder="₹ Amount"
+            className="w-full"
+          />
+        </div>
       </Dialog>
     </div>
   );

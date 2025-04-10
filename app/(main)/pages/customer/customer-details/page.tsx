@@ -5,10 +5,11 @@ import { Card } from 'primereact/card';
 import { Avatar } from 'primereact/avatar';
 import { Divider } from 'primereact/divider';
 import { Tag } from 'primereact/tag';
-import { TabView, TabPanel } from 'primereact/tabview';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Dialog } from 'primereact/dialog';
 import { InputNumber } from 'primereact/inputnumber';
+import { TabView, TabPanel } from 'primereact/tabview';
 
 interface Customer {
     id: number;
@@ -73,6 +74,7 @@ const CustomerDetails = () => {
         return [];
       });
 
+    const router = useRouter();
     const [selectedGarmentId, setSelectedGarmentId] = useState<number | null>(null);
     const [visible, setVisible] = useState(false);
     const [isMaximized, setIsMaximized] = useState(true);
@@ -150,72 +152,81 @@ const CustomerDetails = () => {
 
     return (
         <div className="grid p-2">
+            <div className="col-12 flex align-items-center gap-2">
+                <Button 
+                    icon="pi pi-arrow-left" 
+                    severity="secondary"
+                    onClick={() => router.back()} 
+                    className="p-button-text"
+                />
+                <h2 className="m-0 text-2xl font-500">Customer Details</h2>
+            </div>
             <div className="col-12 md:col-3">
-            <Card className="h-full">
-                <div className="flex flex-column align-items-center gap-3 mb-2">
-                    <Avatar 
-                        image={customer.profileImage} 
-                        size="xlarge" 
-                        shape="circle" 
-                        className="shadow-4" 
-                    />
-                    <span className="text-2xl font-bold">{customer.name}</span>
-                    
-                    <div className="flex justify-content-center gap-4 mt-2">
-                        <Button 
-                            icon="pi pi-whatsapp" 
-                            rounded 
-                            severity="success"
-                            tooltip="WhatsApp"
-                            tooltipOptions={{ position: 'bottom' }}
+                <Card className="h-full">
+                    <div className="flex flex-column align-items-center gap-3 mb-2">
+                        <Avatar 
+                            image={customer.profileImage} 
+                            size="xlarge" 
+                            shape="circle" 
+                            className="shadow-4" 
                         />
-                        <Button 
-                            icon="pi pi-envelope" 
-                            rounded 
-                            tooltip="Send Email"
-                            tooltipOptions={{ position: 'bottom' }}
-                        />
-                        <Button 
-                            icon="pi pi-pencil" 
-                            rounded 
-                            severity="info"
-                            tooltip="Edit Profile"
-                            tooltipOptions={{ position: 'bottom' }}
-                        />
-                        <Button 
-                            icon="pi pi-trash" 
-                            rounded 
-                            severity="danger"
-                            tooltip="Delete Profile"
-                            tooltipOptions={{ position: 'bottom' }}
-                        />
-                    </div>
-                </div>
-
-                <Divider />
-
-                <div className="flex flex-column gap-3">
-                    <div className="flex align-items-center gap-3">
-                        <i className="pi pi-phone text-500" style={{ fontSize: '1.2rem' }}></i>
-                        <div>{customer.phone}</div>
-                    </div>
-
-                    <div className="flex align-items-center gap-3">
-                        <i className="pi pi-envelope text-500" style={{ fontSize: '1.2rem' }}></i>
-                        <div>{customer.email}</div>
+                        <span className="text-2xl font-bold">{customer.name}</span>
+                        
+                        <div className="flex justify-content-center gap-4 mt-2">
+                            <Button 
+                                icon="pi pi-whatsapp" 
+                                rounded 
+                                severity="success"
+                                tooltip="WhatsApp"
+                                tooltipOptions={{ position: 'bottom' }}
+                            />
+                            <Button 
+                                icon="pi pi-envelope" 
+                                rounded 
+                                tooltip="Send Email"
+                                tooltipOptions={{ position: 'bottom' }}
+                            />
+                            <Button 
+                                icon="pi pi-pencil" 
+                                rounded 
+                                severity="info"
+                                tooltip="Edit Profile"
+                                tooltipOptions={{ position: 'bottom' }}
+                            />
+                            <Button 
+                                icon="pi pi-trash" 
+                                rounded 
+                                severity="danger"
+                                tooltip="Delete Profile"
+                                tooltipOptions={{ position: 'bottom' }}
+                            />
+                        </div>
                     </div>
 
-                    <div className="flex align-items-center gap-3">
-                        <i className="pi pi-calendar text-500" style={{ fontSize: '1.2rem' }}></i>
-                        <div>{customer.dob}</div>
-                    </div>
+                    <Divider />
 
-                    <div className="flex align-items-center gap-3">
-                        <i className="pi pi-map-marker text-500" style={{ fontSize: '1.2rem' }}></i>
-                        <div>{customer.address}</div>
+                    <div className="flex flex-column gap-3">
+                        <div className="flex align-items-center gap-3">
+                            <i className="pi pi-phone text-500" style={{ fontSize: '1.2rem' }}></i>
+                            <div>{customer.phone}</div>
+                        </div>
+
+                        <div className="flex align-items-center gap-3">
+                            <i className="pi pi-envelope text-500" style={{ fontSize: '1.2rem' }}></i>
+                            <div>{customer.email}</div>
+                        </div>
+
+                        <div className="flex align-items-center gap-3">
+                            <i className="pi pi-calendar text-500" style={{ fontSize: '1.2rem' }}></i>
+                            <div>{customer.dob}</div>
+                        </div>
+
+                        <div className="flex align-items-center gap-3">
+                            <i className="pi pi-map-marker text-500" style={{ fontSize: '1.2rem' }}></i>
+                            <div>{customer.address}</div>
+                        </div>
                     </div>
-                </div>
-            </Card>
+                </Card>
             </div>
 
             <div className="col-12 md:col-9">
