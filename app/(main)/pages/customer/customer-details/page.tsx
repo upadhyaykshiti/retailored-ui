@@ -6,7 +6,6 @@ import { Avatar } from 'primereact/avatar';
 import { Divider } from 'primereact/divider';
 import { Tag } from 'primereact/tag';
 import { TabView, TabPanel } from 'primereact/tabview';
-import { Badge } from 'primereact/badge';
 import { useState, useEffect } from 'react';
 import { Dialog } from 'primereact/dialog';
 import { InputNumber } from 'primereact/inputnumber';
@@ -23,6 +22,7 @@ interface Customer {
 
 interface Order {
     id: number;
+    cName: string;
     orderType: string;
     trialDate: string;
     deliveryDate: string;
@@ -44,7 +44,7 @@ interface MeasurementValues {
     };
 }  
 
-const Orders = () => {
+const CustomerDetails = () => {
     const customer: Customer = {
         id: 1,
         name: 'Nishant Kumar',
@@ -52,13 +52,13 @@ const Orders = () => {
         phone: '+911234567890',
         dob: '2000-03-01',
         address: 'Address not available',
-        profileImage: '/demo/images/avatar/bernardodominic.png'
+        profileImage: '/demo/images/avatar.png'
     };
 
     const orders: Order[] = [
-        { id: 1001, orderType: 'Shirt', trialDate: '2023-05-15', deliveryDate: '2023-05-20', status: 'In Progress', amount: 1200, type: 'Active' },
-        { id: 1002, orderType: 'Pant', trialDate: '2023-06-20', deliveryDate: '2023-06-25', status: 'Completed', amount: 800, type: 'Delivered' },
-        { id: 1003, orderType: 'Kurta Pajama', trialDate: '', deliveryDate: '', status: 'Pending', amount: 1500, type: 'Draft' },
+        { id: 1001, cName: 'Nishant Kumar', orderType: 'Shirt', trialDate: '2023-05-15', deliveryDate: '2023-05-20', status: 'In Progress', amount: 1200, type: 'Active' },
+        { id: 1002, cName: 'Nishant Kumar', orderType: 'Pant', trialDate: '2023-06-20', deliveryDate: '2023-06-25', status: 'Completed', amount: 800, type: 'Delivered' },
+        { id: 1003, cName: 'Nishant Kumar', orderType: 'Kurta Pajama', trialDate: '', deliveryDate: '', status: 'Pending', amount: 1500, type: 'Draft' },
     ];
 
     const [garments, setGarments] = useState<Garment[]>(() => {
@@ -100,26 +100,6 @@ const Orders = () => {
         }
     }, [allMeasurements]);
 
-    const statusBodyTemplate = (rowData: Order) => {
-        const getSeverity = (status: string) => {
-            switch (status) {
-                case 'Completed': return 'success';
-                case 'In Progress': return 'info';
-                case 'Pending': return 'warning';
-                default: return null;
-            }
-        };
-        return <Tag value={rowData.status} severity={getSeverity(rowData.status)} />;
-    };
-
-    const amountBodyTemplate = (rowData: Order) => {
-        return `₹${rowData.amount.toLocaleString('en-IN')}`;
-    };
-
-    const orderTypeTemplate = (rowData: Order) => {
-        return <Badge value={rowData.type} severity={rowData.type === 'Active' ? 'info' : 'success'} />;
-    };
-
     const openMeasurementDialog = (garmentId: number) => {
         const selectedGarment = garments.find(g => g.id === garmentId);
         if (selectedGarment) {
@@ -160,15 +140,9 @@ const Orders = () => {
     const measurementFooter = (
         <div>
           <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
-          <Button label="Save" icon="pi pi-check" onClick={() => {
-            setVisible(false);
-          }} autoFocus />
+          <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus />
         </div>
     );
-
-    const getSavedMeasurement = (garmentId: number, measurement: string) => {
-        return allMeasurements[garmentId]?.[measurement] || null;
-    };
 
     const getSelectedGarmentName = () => {
         return garments.find(g => g.id === selectedGarmentId)?.name || '';
@@ -260,46 +234,46 @@ const Orders = () => {
                                     <Card className="shadow-1 hover:shadow-3 transition-shadow transition-duration-200">
                                     <div className="flex flex-column gap-2">
                                         <div className="flex justify-content-between align-items-center">
-                                        <span className="font-bold">Order #{order.id}</span>
+                                            <div>
+                                                <span className="font-bold block">Order #{order.id}</span>
+                                                <span className="text-sm text-500">{order.cName}</span>
+                                            </div>
                                         <Tag 
                                             value={order.status} 
                                             severity={
                                             order.status === 'Completed' ? 'success' : 
                                             order.status === 'In Progress' ? 'info' : 'warning'
-                                            } 
+                                            }
                                         />
                                         </div>
-                                        
-                                        <div className="flex flex-column gap-1">
-                                        <div className="flex justify-content-between">
-                                            <span className="text-500">Order Type</span>
-                                            <span>{order.orderType}</span>
-                                        </div>
-                                        
-                                        <div className="flex justify-content-between">
-                                            <span className="text-500">Trial Date:</span>
-                                            <span>{order.trialDate || '-'}</span>
-                                        </div>
-                                        
-                                        <div className="flex justify-content-between">
-                                            <span className="text-500">Delivery Date:</span>
-                                            <span>{order.deliveryDate || '-'}</span>
-                                        </div>
-                                        
-                                        <div className="flex justify-content-between">
-                                            <span className="text-500">Amount:</span>
-                                            <span className="font-bold">₹{order.amount.toLocaleString('en-IN')}</span>
-                                        </div>
-                                        </div>
-                                        
+
                                         <Divider className="my-2" />
                                         
-                                        <div className="flex justify-content-end gap-2">
-                                        <Button 
-                                            icon="pi pi-eye" 
-                                            rounded 
-                                            text 
-                                        />
+                                        <div className="flex flex-column gap-1">
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Customer</span>
+                                                <span>{order.cName}</span>
+                                            </div>
+
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Order Type</span>
+                                                <span>{order.orderType}</span>
+                                            </div>
+                                            
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Trial Date:</span>
+                                                <span>{order.trialDate || '-'}</span>
+                                            </div>
+                                            
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Delivery Date:</span>
+                                                <span>{order.deliveryDate || '-'}</span>
+                                            </div>
+                                            
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Amount:</span>
+                                                <span className="font-bold text-primary">₹{order.amount.toLocaleString('en-IN')}</span>
+                                            </div>
                                         </div>
                                     </div>
                                     </Card>
@@ -313,36 +287,36 @@ const Orders = () => {
                                 <h4 className="mb-4">Measurements</h4>
                                 
                                 <div className="mb-5">
-                                <label className="block text-500 font-medium mb-2">Select Outfit Type:</label>
-                                <div className="grid">
-                                    {garments.filter(g => g.status === 'active').map((garment) => (
-                                    <div key={garment.id} className="col-6 sm:col-4 md:col-3 lg:col-2 text-center mb-4">
-                                        <div 
-                                        className="p-3 border-round cursor-pointer transition-all transition-duration-200 bg-surface border-1 border-transparent hover:bg-gray-100"
-                                        onClick={() => openMeasurementDialog(garment.id)}
-                                        >
-                                        <div className="flex flex-column align-items-center gap-3">
-                                            <img 
-                                            src={`https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/${garment.name.toLowerCase().replace(/\s+/g, '_')}.png`}
-                                            alt={garment.name}
-                                            className="w-8rem h-8rem shadow-2"
-                                            style={{ 
-                                                borderRadius: '4px',
-                                                padding: '8px',
-                                                boxSizing: 'border-box',
-                                                objectFit: 'cover'
-                                            }}
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                target.src = 'https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/kurta_pajama.png';
-                                            }}
-                                            />
-                                            <span className="font-medium">{garment.name}</span>
+                                    <label className="block text-500 font-medium mb-2">Select Outfit Type:</label>
+                                    <div className="grid">
+                                        {garments.filter(g => g.status === 'active').map((garment) => (
+                                        <div key={garment.id} className="col-6 sm:col-4 md:col-3 lg:col-2 text-center mb-4">
+                                            <div 
+                                            className="p-3 border-round cursor-pointer transition-all transition-duration-200 bg-surface border-1 border-transparent hover:bg-gray-100"
+                                            onClick={() => openMeasurementDialog(garment.id)}
+                                            >
+                                            <div className="flex flex-column align-items-center gap-3">
+                                                <img 
+                                                src={`https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/${garment.name.toLowerCase().replace(/\s+/g, '_')}.png`}
+                                                alt={garment.name}
+                                                className="w-8rem h-8rem shadow-2"
+                                                style={{ 
+                                                    borderRadius: '4px',
+                                                    padding: '8px',
+                                                    boxSizing: 'border-box',
+                                                    objectFit: 'cover'
+                                                }}
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.src = 'https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/kurta_pajama.png';
+                                                }}
+                                                />
+                                                <span className="font-medium">{garment.name}</span>
+                                            </div>
+                                            </div>
                                         </div>
-                                        </div>
+                                        ))}
                                     </div>
-                                    ))}
-                                </div>
                                 </div>
                             </div>
 
@@ -380,4 +354,4 @@ const Orders = () => {
     );
 };
 
-export default Orders;
+export default CustomerDetails;
