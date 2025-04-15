@@ -10,6 +10,7 @@ import { Calendar } from 'primereact/calendar';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 import { Checkbox } from 'primereact/checkbox';
+import { Galleria } from 'primereact/galleria';
 import { useState } from 'react';
 
 interface Customer {
@@ -54,6 +55,8 @@ const CreateOrder = () => {
     const [sleeveOption, setSleeveOption] = useState<string | null>(null);
     const [bottomOption, setBottomOption] = useState<string | null>(null);
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [visibleGalleria, setVisibleGalleria] = useState(false);
+    const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [imageUploadRef, setImageUploadRef] = useState<HTMLInputElement | null>(null);
     const [pocketOption, setPocketOption] = useState('');
     const [pocketSquareOption, setPocketSquareOption] = useState('');
@@ -156,7 +159,27 @@ const CreateOrder = () => {
       
     const removeImage = (index: number) => {
         setUploadedImages(prev => prev.filter((_, i) => i !== index));
-    };      
+    };     
+    
+    const itemTemplate = (item: string) => {
+        return (
+            <img 
+                src={item} 
+                alt="Uploaded reference" 
+                style={{ width: '100%', display: 'block' }}
+            />
+        );
+    };
+    
+    const thumbnailTemplate = (item: string) => {
+        return (
+            <img 
+                src={item} 
+                alt="Uploaded reference thumbnail" 
+                style={{ width: '100%', display: 'block' }}
+            />
+        );
+    };
 
     const dialogFooter = (
         <div className="mt-3">
@@ -354,26 +377,63 @@ const CreateOrder = () => {
                             />
                         </div>
                         
-                        {uploadedImages.length > 0 && (
+                        {/* {uploadedImages.length > 0 && (
                             <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
                             {uploadedImages.map((image, index) => (
                                 <div key={index} className="relative flex-shrink-0" style={{ width: '120px' }}>
-                                <div className="border-1 surface-border border-round p-2 h-full">
-                                    <img 
-                                    src={image} 
-                                    alt={`Uploaded ${index + 1}`} 
-                                    className="w-full border-round" 
-                                    style={{ height: '80px', objectFit: 'cover' }}
-                                    />
-                                    <Button 
-                                    icon="pi pi-trash" 
-                                    className="p-button-rounded p-button-danger p-button-text absolute" 
-                                    style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
-                                    onClick={() => removeImage(index)}
-                                    />
-                                </div>
+                                    <div className="border-1 surface-border border-round p-2 h-full">
+                                        <img 
+                                            src={image} 
+                                            alt={`Uploaded ${index + 1}`} 
+                                            className="w-full border-round cursor-pointer"
+                                            style={{ height: '80px', objectFit: 'cover' }}
+                                            onClick={() => {
+                                                setActiveIndex(index);
+                                                setVisibleGalleria(true);
+                                            }}
+                                        />
+                                        <Button 
+                                            icon="pi pi-trash" 
+                                            className="p-button-rounded p-button-danger p-button-text absolute" 
+                                            style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeImage(index);
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             ))}
+                            </div>
+                        )} */}
+
+                        {uploadedImages.length > 0 && (
+                            <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
+                                {uploadedImages.map((image, index) => (
+                                    <div key={index} className="relative flex-shrink-0" style={{ width: '120px' }}>
+                                        <div className="border-1 surface-border border-round p-2 h-full">
+                                            <img 
+                                                src={image} 
+                                                alt={`Uploaded ${index + 1}`} 
+                                                className="w-full border-round cursor-pointer" 
+                                                style={{ height: '80px', objectFit: 'cover' }}
+                                                onClick={() => {
+                                                    setActiveIndex(index);
+                                                    setVisibleGalleria(true);
+                                                }}
+                                            />
+                                            <Button 
+                                                icon="pi pi-trash" 
+                                                className="p-button-rounded p-button-danger p-button-text absolute" 
+                                                style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    removeImage(index);
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
@@ -559,7 +619,7 @@ const CreateOrder = () => {
                                 <div className="flex align-items-center">
                                     <RadioButton 
                                         inputId="collar3" 
-                                        name="collar" 
+                                        name="collar"
                                         value="Classic" 
                                         onChange={(e) => setCollarOption(e.value)} 
                                         checked={collarOption === 'Classic'} 
@@ -749,6 +809,26 @@ const CreateOrder = () => {
                     />
                 </div>
             </div>
+
+            <Dialog
+                header="Preview"
+                visible={activeIndex !== null}
+                style={{ width: '90vw', maxWidth: '800px' }}
+                onHide={() => setActiveIndex(null)}
+                modal
+            >
+                <Galleria
+                    value={uploadedImages}
+                    activeIndex={activeIndex ?? 0}
+                    onItemChange={(e) => setActiveIndex(e.index)}
+                    showThumbnails={false}
+                    showIndicators
+                    item={itemTemplate}
+                    thumbnail={thumbnailTemplate}
+                    circular
+                    autoPlay={false}
+                />
+            </Dialog>
         </div>
     );
 };
