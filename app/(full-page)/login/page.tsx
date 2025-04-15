@@ -286,7 +286,7 @@ const LoginPage = () => {
                         />
 
                         <div className="flex justify-content-center gap-2">
-                            <span className="text-600">Didn't receive code?</span>
+                            <span className="text-600">Didn&apos;t receive code?</span>
                             <Button 
                                 label="Resend" 
                                 className="p-button-text p-0" 
