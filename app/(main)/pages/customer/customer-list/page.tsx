@@ -6,92 +6,151 @@ import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
 import { Dialog } from 'primereact/dialog';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ToggleButton } from 'primereact/togglebutton';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
-
-type CustomerStatus = 'active' | 'inactive';
-
-interface Customer {
-  id: number;
-  name: string;
-  mobile: string;
-  status: CustomerStatus;
-  email?: string;
-  address?: string;
-}
+import { UserService } from '@/demo/service/user.service';
+import { Skeleton } from 'primereact/skeleton';
+import { Toast } from 'primereact/toast';
+import { useRef } from 'react';
+import { Calendar } from 'primereact/calendar';
+import { RadioButton } from 'primereact/radiobutton';
+import { Demo } from '@/types';
 
 const CustomerList = () => {
   const router = useRouter();
+  const toast = useRef<Toast>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [customers, setCustomers] = useState<Customer[]>([
-    { 
-      id: 1, 
-      name: 'Nishant Kumar', 
-      mobile: '+91 1234567890', 
-      email: 'nishant@example.com',
-      status: 'active'
-    },
-    { 
-      id: 2, 
-      name: 'Rahul Sharma', 
-      mobile: '+91 9876543210', 
-      email: 'rahul@example.com',
-      status: 'active' 
-    },
-    { 
-      id: 3, 
-      name: 'Priya Patel', 
-      mobile: '+91 8765432109', 
-      email: 'priya@example.com',
-      status: 'inactive' 
-    }
-  ]);
-
+  const [customers, setCustomers] = useState<Demo.User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
-  const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
+  const [currentCustomer, setCurrentCustomer] = useState<Demo.User | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(true);
 
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        setLoading(true);
+        const users = await UserService.getUsers();
+        
+        const transformedCustomers = users.map((user) => ({
+          id: user.id,
+          fname: user.fname,
+          mobileNumber: user.mobileNumber,
+          email: user.email,
+          dob: user.dob,
+          sex: user.sex,
+          status: user.status,
+        }));
+        
+        setCustomers(transformedCustomers);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch customers:', err);
+        setError('Failed to load customers. Please try again.');
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load customers',
+          life: 3000
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, []);
 
   const filteredCustomers = customers.filter(customer => 
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.mobile.includes(searchTerm)
+    customer.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.mobileNumber.includes(searchTerm) ||
+    (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleCardClick = (customerId: number) => {
+  const handleCardClick = (customerId: string) => {
     router.push(`/pages/customer/customer-details?id=${customerId}`);
   };
 
   const showAddDialog = () => {
     setCurrentCustomer({
-      id: customers.length + 1,
-      name: '',
-      mobile: '',
+      id: Date.now().toString(),
+      fname: '',
+      mobileNumber: '',
+      email: '',
+      dob: '',
+      sex: 'M',
       status: 'active'
     });
     setIsEditMode(false);
     setVisible(true);
   };
 
-  const showEditDialog = (customer: Customer) => {
+  const showEditDialog = (customer: Demo.User) => {
     setCurrentCustomer({ ...customer });
     setIsEditMode(true);
     setVisible(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!currentCustomer) return;
 
-    if (isEditMode) {
-      setCustomers(customers.map(c => c.id === currentCustomer.id ? currentCustomer : c));
-    } else {
-      setCustomers([...customers, currentCustomer]);
+    try {
+      if (isEditMode) {
+        const updatedUser = await UserService.updateUser(currentCustomer.id, {
+          fname: currentCustomer.fname,
+          email: currentCustomer.email || '',
+          mobileNumber: currentCustomer.mobileNumber,
+          dob: currentCustomer.dob || '',
+          sex: currentCustomer.sex,
+          status: currentCustomer.status
+        });
+        
+        setCustomers(customers.map(c => c.id === updatedUser.id ? updatedUser : c));
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Customer updated successfully',
+          life: 3000
+        });
+      } else {
+        const newCustomer = await UserService.createUser({
+          fname: currentCustomer.fname,
+          email: currentCustomer.email || '',
+          mobileNumber: currentCustomer.mobileNumber,
+          dob: currentCustomer.dob || '',
+          sex: currentCustomer.sex,
+          isCustomer: "Y",
+          rlcode: 1,
+          cmpcode: 1,
+          admsite_code: 1,
+          user_type: "1",
+          status: "active"
+        });
+        
+        setCustomers([...customers, newCustomer]);
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Customer created successfully',
+          life: 3000
+        });
+      }
+      setVisible(false);
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to save customer',
+        life: 3000
+      });
     }
-    setVisible(false);
   };
 
-  const toggleCustomerStatus = (customerId: number) => {
+  const toggleCustomerStatus = (customerId: string) => {
     setCustomers(customers.map(customer => 
       customer.id === customerId 
         ? { ...customer, status: customer.status === 'active' ? 'inactive' : 'active' } 
@@ -99,7 +158,7 @@ const CustomerList = () => {
     ));
   };
 
-  const confirmStatusChange = (customerId: number) => {
+  const confirmStatusChange = (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     const isActive = customer?.status === 'active';
     
@@ -108,7 +167,25 @@ const CustomerList = () => {
       header: 'Confirm Status Change',
       icon: 'pi pi-info-circle',
       acceptClassName: isActive ? 'p-button-danger' : 'p-button-success',
-      accept: () => toggleCustomerStatus(customerId)
+      accept: () => {
+        toggleCustomerStatus(customerId);
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Status Updated',
+          detail: `Customer marked as ${isActive ? 'inactive' : 'active'}`,
+          life: 3000
+        });
+      }
+    });
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -118,9 +195,55 @@ const CustomerList = () => {
       <Button label="Save" icon="pi pi-check" onClick={handleSave} autoFocus />
     </div>
   );
+  
+  if (loading) {
+    return (
+      <div className="grid p-2">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="col-12 md:col-6 lg:col-4 p-3">
+            <Card>
+              <div className="flex justify-content-between mb-3">
+                <Skeleton width="10rem" height="1.5rem" />
+                <Skeleton width="4rem" height="1.5rem" />
+              </div>
+              <div className="flex flex-column gap-2">
+                <Skeleton width="100%" height="1rem" />
+                <Skeleton width="100%" height="1rem" />
+                <Skeleton width="100%" height="1rem" />
+                <div className="flex justify-content-end gap-2 mt-3">
+                  <Skeleton shape="circle" size="2rem" />
+                  <Skeleton shape="circle" size="2rem" />
+                </div>
+              </div>
+            </Card>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-content-center align-items-center" style={{ height: '50vh' }}>
+        <div className="p-4 border-round surface-card">
+          <div className="flex flex-column align-items-center gap-3">
+            <i className="pi pi-exclamation-triangle text-4xl text-red-500" />
+            <span className="text-lg">{error}</span>
+            <Button 
+              label="Retry"
+              icon="pi pi-refresh"
+              onClick={() => window.location.reload()}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <Toast ref={toast} />
+      
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Customers</h2>
         <span className="p-input-icon-left w-full">
@@ -128,7 +251,7 @@ const CustomerList = () => {
           <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search"
+            placeholder="Search by name, phone or email"
             className="w-full"
           />
         </span>
@@ -151,15 +274,21 @@ const CustomerList = () => {
             >
               <div className="flex justify-content-between align-items-start mb-3">
                 <div>
-                  <h3 className="text-xl m-0">{customer.name}</h3>
+                  <h3 className="text-xl m-0">{customer.fname}</h3>
                   <div className="text-sm text-500 flex align-items-center gap-2 mt-2">
-                    <i className="pi pi-phone" /> {customer.mobile}
+                    <i className="pi pi-phone" /> {customer.mobileNumber}
                   </div>
                   {customer.email && (
                     <div className="text-sm text-500 flex align-items-center gap-2 mt-2">
                       <i className="pi pi-envelope" /> {customer.email}
                     </div>
                   )}
+                  <div className="text-sm text-500 flex align-items-center gap-2 mt-2">
+                    <i className="pi pi-calendar" /> {formatDate(customer.dob)}
+                  </div>
+                  <div className="text-sm text-500 flex align-items-center gap-2 mt-2">
+                    <i className="pi pi-user" /> {customer.sex === 'M' ? 'Male' : 'Female'}
+                  </div>
                 </div>
                 <Tag 
                   value={customer.status === 'active' ? 'Active' : 'Inactive'}
@@ -196,6 +325,14 @@ const CustomerList = () => {
           <div className="w-full p-4 text-center surface-100 border-round">
             <i className="pi pi-search text-4xl mb-2" />
             <h3>No customers found</h3>
+            {searchTerm && (
+              <Button 
+                label="Clear search" 
+                className="mt-3" 
+                onClick={() => setSearchTerm('')}
+                size="small"
+              />
+            )}
           </div>
         )}
       </div>
@@ -213,19 +350,21 @@ const CustomerList = () => {
         {currentCustomer && (
           <div className="p-fluid grid">
             <div className="field col-12 md:col-6">
-              <label htmlFor="name">Name</label>
+              <label htmlFor="fname">Name</label>
               <InputText 
-                id="name" 
-                value={currentCustomer.name} 
-                onChange={(e) => setCurrentCustomer({...currentCustomer, name: e.target.value})} 
+                id="fname" 
+                value={currentCustomer.fname} 
+                onChange={(e) => setCurrentCustomer({...currentCustomer, fname: e.target.value})}
+                required
               />
             </div>
             <div className="field col-12 md:col-6">
-              <label htmlFor="mobile">Mobile</label>
+              <label htmlFor="mobileNumber">Mobile Number</label>
               <InputText 
-                id="mobile" 
-                value={currentCustomer.mobile} 
-                onChange={(e) => setCurrentCustomer({...currentCustomer, mobile: e.target.value})} 
+                id="mobileNumber" 
+                value={currentCustomer.mobileNumber} 
+                onChange={(e) => setCurrentCustomer({...currentCustomer, mobileNumber: e.target.value})}
+                required
               />
             </div>
             <div className="field col-12 md:col-6">
@@ -235,6 +374,44 @@ const CustomerList = () => {
                 value={currentCustomer.email || ''} 
                 onChange={(e) => setCurrentCustomer({...currentCustomer, email: e.target.value})} 
               />
+            </div>
+            <div className="field col-12 md:col-6">
+              <label htmlFor="dob">Date of Birth</label>
+              <Calendar
+                id="dob"
+                value={currentCustomer.dob ? new Date(currentCustomer.dob) : null}
+                onChange={(e) => setCurrentCustomer({
+                  ...currentCustomer,
+                  dob: e.value?.toISOString().split('T')[0] || ''
+                })}
+                dateFormat="dd/mm/yy"
+                showIcon
+              />
+            </div>
+            <div className="field col-12 md:col-6">
+              <label>Gender</label>
+              <div className="flex align-items-center gap-3 mt-2">
+                <div className="flex align-items-center">
+                  <RadioButton
+                    inputId="male"
+                    name="gender"
+                    value="M"
+                    onChange={(e) => setCurrentCustomer({...currentCustomer, sex: e.value})}
+                    checked={currentCustomer.sex === 'M'}
+                  />
+                  <label htmlFor="male" className="ml-2">Male</label>
+                </div>
+                <div className="flex align-items-center">
+                  <RadioButton
+                    inputId="female"
+                    name="gender"
+                    value="F"
+                    onChange={(e) => setCurrentCustomer({...currentCustomer, sex: e.value})}
+                    checked={currentCustomer.sex === 'F'}
+                  />
+                  <label htmlFor="female" className="ml-2">Female</label>
+                </div>
+              </div>
             </div>
             <div className="field col-12">
               <label htmlFor="status">Status</label>
@@ -246,7 +423,7 @@ const CustomerList = () => {
                 offIcon="pi pi-times"
                 checked={currentCustomer.status === 'active'}
                 onChange={(e) => setCurrentCustomer({
-                  ...currentCustomer, 
+                  ...currentCustomer,
                   status: e.value ? 'active' : 'inactive'
                 })}
                 className="w-full md:w-10rem"
