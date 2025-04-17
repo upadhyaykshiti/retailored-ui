@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://dbe4-49-36-232-74.ngrok-free.app/graphql';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL as string;
 
 export const GraphQLService = {
   async query<T = any>(query: string, variables?: Record<string, any>, token?: string): Promise<T> {

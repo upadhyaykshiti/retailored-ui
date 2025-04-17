@@ -5,15 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
-import { Dropdown } from 'primereact/dropdown';
 import { Toast } from 'primereact/toast';
-import { classNames } from 'primereact/utils';
 
 const LoginPage = () => {
     const router = useRouter();
     const toast = useRef<Toast>(null);
     const [step, setStep] = useState<'login' | 'otp'>('login');
-    const [selectedRole, setSelectedRole] = useState<string>('');
     const [mobileNumber, setMobileNumber] = useState('');
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [isLoading, setIsLoading] = useState(false);
@@ -23,13 +20,6 @@ const LoginPage = () => {
     const [resendAttempts, setResendAttempts] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const MAX_RESEND_ATTEMPTS = 3;
-
-    const roles = [
-        { label: 'Admin', value: 'admin' },
-        { label: 'Jobber', value: 'jobber' },
-        { label: 'Vendor', value: 'vendor' },
-        { label: 'Customer', value: 'customer' }
-    ];
 
     useEffect(() => {
         return () => {
@@ -76,17 +66,7 @@ const LoginPage = () => {
         }
     };
 
-    const handleSubmitMobile = () => {
-        if (!selectedRole) {
-            toast.current?.show({ severity: 'warn', summary: 'Role Required', detail: 'Please select your role', life: 3000 });
-            return;
-        }
-        
-        if (mobileNumber.length !== 10) {
-            toast.current?.show({ severity: 'warn', summary: 'Invalid Number', detail: 'Please enter a valid 10-digit mobile number', life: 3000 });
-            return;
-        }
-        
+    const handleSubmitMobile = () => {        
         setIsLoading(true);
         setTimeout(() => {
             setIsLoading(false);
@@ -203,22 +183,6 @@ const LoginPage = () => {
 
                 {step === 'login' && (
                     <div className="flex flex-column gap-4">
-                        <div className="flex flex-column gap-3">
-                            <label htmlFor="role" className="text-600 font-medium">
-                                Select Role
-                            </label>
-                            <Dropdown
-                                id="role"
-                                value={selectedRole}
-                                onChange={(e) => setSelectedRole(e.value)}
-                                options={roles}
-                                optionLabel="label"
-                                placeholder="Select your role"
-                                className="w-full"
-                                dropdownIcon="pi pi-chevron-down"
-                            />
-                        </div>
-
                         <div className="flex flex-column gap-2">
                             <label htmlFor="mobile" className="text-600 font-medium">
                                 Mobile Number
@@ -241,7 +205,7 @@ const LoginPage = () => {
                             label="Send OTP" 
                             className="w-full p-3" 
                             loading={isLoading}
-                            disabled={!selectedRole || mobileNumber.length !== 10}
+                            disabled={mobileNumber.length !== 10}
                             onClick={handleSubmitMobile}
                         />
                     </div>

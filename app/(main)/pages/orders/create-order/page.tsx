@@ -276,12 +276,12 @@ const CreateOrder = () => {
                 onHide={() => { setShowCreateDialog(false); resetDialog(); }}
                 maximized={isMaximized}
                 onMaximize={(e) => setIsMaximized(e.maximized)}
-                className="w-full"
+                className={isMaximized ? 'maximized-dialog' : ''}
                 blockScroll
                 footer={dialogFooter}
             >
                 <div className="p-fluid">
-                    <div className="field mb-4">
+                    <div className="field my-4">
                         <h4 className="m-0 text-900 font-medium">{currentGarment?.name}</h4>
                     </div>
 
@@ -585,6 +585,7 @@ const CreateOrder = () => {
                 onMaximize={(e) => setIsMaximized(e.maximized)}
                 footer={stitchFooter}
                 onHide={() => setShowStitchOptionsDialog(false)}
+                className={isMaximized ? 'maximized-dialog' : ''}
                 blockScroll
             >
                 <div className="p-fluid">
