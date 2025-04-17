@@ -286,9 +286,9 @@ const SalesOrder = () => {
       <Dialog 
         header="Create New Order" 
         visible={showDialog} 
-        style={{ width: '50vw' }}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
         onHide={() => {
             setShowDialog(false);
             setSelectedCustomer(null);
@@ -296,7 +296,7 @@ const SalesOrder = () => {
         }}
     >
         <div className="p-fluid">
-            <div className="field mb-4">
+            <div className="field my-4">
                 <label htmlFor="customer">Customer</label>
                 <Dropdown
                     id="customer"
@@ -343,11 +343,11 @@ const SalesOrder = () => {
         onHide={() => setVisible(false)}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
-        className="w-full"
+        className={isMaximized ? 'maximized-dialog' : ''}
         blockScroll
       >
         {selectedOrder && (
-          <div className="p-fluid">
+          <div className="p-fluid mt-3">
             <div className="grid">
               <div className="col-6">
                 <div className="field">

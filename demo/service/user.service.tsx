@@ -2,70 +2,89 @@ import { GraphQLService } from './graphql.service';
 import { Demo } from '@/types';
 
 export const UserService = {
-  async getUsers(): Promise<Demo.User[]> {
+  async getUsers(token?: string): Promise<Demo.User[]> {
     const query = `
       query findUsers {
         users {
           id
           fname
+          lname
           email
           mobileNumber
+          username
+          alternateContact
           dob
           sex
+          anniversary
           isCustomer
-          status
+          active
         }
       }
     `;
-
-    const data = await GraphQLService.query<{ users: Demo.User[] }>(query);
+  
+    const data = await GraphQLService.query<{ users: Demo.User[] }>(query, {}, token);
     return data.users;
   },
-
+  
   async createUser(input: Demo.CreateUserInput, token?: string): Promise<Demo.User> {
     const mutation = `
-      mutation CreateUser($input: CreateUserInput!) {
-        createUser(input: $input) {
+      mutation CreateCustomer($input: CreateCustomerInput!) {
+        createCustomer(input: $input) {
           id
           fname
+          lname
           email
           mobileNumber
+          username
+          alternateContact
           dob
           sex
+          anniversary
           isCustomer
-          user_type
+          active
           rlcode
           cmpcode
           admsite_code
-          status
+          user_type
+          ext
         }
       }
     `;
 
-    const data = await GraphQLService.query<{ createUser: Demo.User }>(mutation, { input });
-    return data.createUser;
+    const data = await GraphQLService.query<{ createCustomer: Demo.User }>(mutation, { input }, token);
+    return data.createCustomer;
   },
 
   async updateUser(id: string, input: Demo.UpdateUserInput, token?: string): Promise<Demo.User> {
     const mutation = `
-      mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
-        updateUser(id: $id, input: $input) {
+      mutation UpdateCustomer($id: ID!, $input: UpdateUserInput!) {
+        updateCustomer(id: $id, input: $input) {
           id
           fname
+          lname
           email
           mobileNumber
+          username
+          alternateContact
           dob
           sex
-          status
+          anniversary
+          isCustomer
+          active
+          rlcode
+          cmpcode
+          admsite_code
+          user_type
+          ext
         }
       }
     `;
 
-    const data = await GraphQLService.query<{ updateUser: Demo.User }>(
+    const data = await GraphQLService.query<{ updateCustomer: Demo.User }>(
       mutation,
       { id, input },
       token
     );
-    return data.updateUser;
+    return data.updateCustomer;
   },
 };
