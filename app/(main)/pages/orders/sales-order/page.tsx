@@ -7,143 +7,121 @@ import { Dialog } from 'primereact/dialog';
 import { useRouter } from 'next/navigation';
 import { Tag } from 'primereact/tag';
 import { Calendar } from 'primereact/calendar';
+import { Skeleton } from 'primereact/skeleton';
 import { InputText } from 'primereact/inputtext';
-import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
-import { MultiSelect, MultiSelectChangeEvent } from 'primereact/multiselect';
-import { useState, useMemo } from 'react';
-
-interface Customer {
-  id: number;
-  name: string;
-}
-
-interface Garment {
-  id: number;
-  name: string;
-}
+import { Sidebar } from 'primereact/sidebar';
+import { SalesOrderService } from '@/demo/service/sales-order.service';
+import { useState, useEffect } from 'react';
+import { Toast } from '@capacitor/toast';
 
 interface Order {
-  id: number;
-  orderNumber: string;
-  customerName: string;
-  orderDate: Date;
-  status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
-  trialDate: Date | null;
-  deliveryDate: Date | null;
-  notes: string;
-  deliveredQty: number;
-  cancelledQty: number;
-  items: OrderItem[];
-}
-
-interface OrderItem {
-  id: number;
-  name: string;
-  jobOrderNo: string;
-  jobberName: string;
-  trialDate: Date | null;
-  pendingQty: number;
-  cancelledQty: number;
-  pendingAmount: number;
-  notes: string;
-  imageUrl?: string;
+  id: string;
+  user_id: string;
+  docno: string;
+  order_date: string;
+  customer: string;
+  ord_amt: number;
+  amt_paid: number;
+  amt_due: number;
+  ord_qty: number;
+  delivered_qty: number;
+  cancelled_qty: number;
+  tentitive_delivery_date: string;
+  delivery_date: string;
+  desc1: string | null;
+  ext: string;
+  orderStatus: {
+    id: string;
+    status_name: string;
+  };
+  orderDetails: {
+    id: string;
+    order_id: string;
+    measurement_main_id: string;
+    image_url: string | null;
+    material_master_id: string;
+    trial_date: string;
+    delivery_date: string;
+    item_amt: number;
+    ord_qty: number;
+    delivered_qty: number;
+    cancelled_qty: number;
+    desc1: string | null;
+    ext: string;
+  }[];
 }
 
 const SalesOrder = () => {
   const router = useRouter();
-  const [showDialog, setShowDialog] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [selectedGarments, setSelectedGarments] = useState<Garment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null | undefined>(new Date());
   const [receivePaymentDialog, setReceivePaymentDialog] = useState(false);
   const [receiveAmount, setReceiveAmount] = useState('');
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
+  const [availableStatuses, setAvailableStatuses] = useState([
+    { id: '1', name: 'Pending' },
+    { id: '2', name: 'In Progress' },
+    { id: '3', name: 'Ready for Trial' },
+    { id: '4', name: 'Completed' },
+    { id: '5', name: 'Cancelled' }
+  ]);
 
-  const customers: Customer[] = [
-    { id: 1, name: 'Nishant Kumar' },
-    { id: 2, name: 'Rahul Sharma' },
-    { id: 3, name: 'Priya Mehta' },
-    { id: 4, name: 'Amit Singh' },
-  ];
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setLoading(true);
+        const response = await SalesOrderService.getSalesOrders();
+        const salesOrders: Order[] = response.map((res: any) => res);
+        setOrders(salesOrders);
+        await Toast.show({
+          text: `Successfully fetched ${salesOrders.length} orders`,
+          duration: 'long',
+          position: 'top'
+        });
+      } catch (error) {
+        console.error('Error fetching sales orders:', error);
+        setError('Failed to fetch orders');
+        await Toast.show({
+          text: 'Failed to load orders',
+          duration: 'long',
+          position: 'top'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const garments: Garment[] = [
-    { id: 1, name: 'Shirt' },
-    { id: 2, name: 'Pant' },
-    { id: 3, name: 'Kurta Pajama' },
-    { id: 4, name: 'Sherwani' },
-    { id: 5, name: 'Blazer' },
-  ];
+    fetchOrders();
+  }, []);
 
-  const orders = useMemo<Order[]>(() => [
-    {
-      id: 1,
-      orderNumber: 'ORD-2023-001',
-      customerName: 'Nishant Kumar',
-      orderDate: new Date('2023-05-15'),
-      status: 'In Progress',
-      trialDate: new Date('2023-05-25'),
-      deliveryDate: new Date('2023-05-28'),
-      notes: 'Urgent delivery required',
-      deliveredQty: 2,
-      cancelledQty: 0,
-      items: [
-        {
-          id: 1,
-          name: 'Formal Shirt',
-          jobOrderNo: 'JOB-001',
-          jobberName: 'Tailor Master',
-          trialDate: new Date('2023-05-20'),
-          pendingQty: 3,
-          cancelledQty: 0,
-          pendingAmount: 1200,
-          notes: 'Need French cuffs',
-          imageUrl: '/shirt.jpg'
-        },
-        {
-          id: 2,
-          name: 'Formal Pants',
-          jobOrderNo: 'JOB-002',
-          jobberName: 'Stitch Well',
-          trialDate: null,
-          pendingQty: 2,
-          cancelledQty: 0,
-          pendingAmount: 1000,
-          notes: 'Slim fit required',
-          imageUrl: '/shirt.jpg'
-        }
-      ]
-    },
-    {
-      id: 2,
-      orderNumber: 'ORD-2023-002',
-      customerName: 'Rahul Sharma',
-      orderDate: new Date('2023-05-18'),
-      status: 'Pending',
-      trialDate: null,
-      deliveryDate: new Date('2023-05-20'),
-      notes: 'Special fabric provided',
-      deliveredQty: 0,
-      cancelledQty: 1,
-      items: [
-        {
-          id: 3,
-          name: 'Kurta',
-          jobOrderNo: 'JOB-003',
-          jobberName: 'Ethnic Stitches',
-          trialDate: null,
-          pendingQty: 2,
-          cancelledQty: 1,
-          pendingAmount: 1100,
-          notes: 'Hand embroidery needed'
-        }
-      ]
+  const fetchOrderDetails = async (orderId: string) => {
+    try {
+      setListLoading(true);
+      const res = await SalesOrderService.getSalesOrderById(orderId);
+    
+      if (res && res.orderDetails) {
+        const detailedOrder: Order = res;
+        setSelectedOrder(detailedOrder);
+        setVisible(true);
+      } else {
+        throw new Error('Order details are missing from the response');
+      }
+    } catch (err) {
+      console.error('Failed to fetch order details:', err);
+      setError('Failed to fetch order details');
+    } finally {
+      setListLoading(false);
     }
-  ], []);
+  };
 
-  const getStatusSeverity = (status: string) => {
+  const getStatusSeverity = (status?: string): 'success' | 'info' | 'warning' | 'danger' | null | undefined => {
     switch (status) {
       case 'Completed': return 'success';
       case 'In Progress': return 'info';
@@ -154,6 +132,7 @@ const SalesOrder = () => {
   };
 
   const openOrderDetails = (order: Order) => {
+    fetchOrderDetails(order.id)
     setSelectedOrder(order);
     setVisible(true);
   };
@@ -162,35 +141,118 @@ const SalesOrder = () => {
     return date ? date.toLocaleDateString('en-IN') : 'Not scheduled';
   };
 
-  const filteredOrders = useMemo(() => {
-    if (!searchTerm) return orders;
-    
-    const term = searchTerm.toLowerCase();
-    return orders.filter(order => 
-      order.orderNumber.toLowerCase().includes(term) ||
-      order.customerName.toLowerCase().includes(term) ||
-      order.status.toLowerCase().includes(term)
-    );
-  }, [orders, searchTerm]);
-
   const handleAddOrder = () => {
-    setShowDialog(true);
-  };
-
-  const handleCreateOrder = () => {
     router.push('/pages/orders/create-order');
   };
 
+  const filteredOrders = orders.filter((order) =>
+    order.docno.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const getPendingAmountSummary = (order: Order) => {
-    const orderPendingAmount = order.items.reduce((sum, item) => sum + (item.pendingAmount || 0), 0);
-  
-    const totalPendingAmount = orders.reduce(
-      (total, ord) => total + ord.items.reduce((sum, item) => sum + (item.pendingAmount || 0), 0),
-      0
-    );
-  
-    return `₹${orderPendingAmount} (₹${totalPendingAmount})`;
+    return `₹${order.amt_due} (₹${order.ord_amt})`;
   };
+
+  const handleStatusUpdate = async (newStatus: string) => {
+    try {
+      if (!selectedOrder) return;
+
+      setOrders(orders.map(order => 
+        order.id === selectedOrder.id 
+          ? { 
+              ...order, 
+              orderStatus: { 
+                ...order.orderStatus, 
+                status_name: newStatus 
+              } 
+            } 
+          : order
+      ));
+      
+      setSelectedOrder({
+        ...selectedOrder,
+        orderStatus: {
+          ...selectedOrder.orderStatus,
+          status_name: newStatus
+        }
+      });
+      
+      await Toast.show({
+        text: `Status updated to ${newStatus}`,
+        duration: 'long'
+      });
+      
+    } catch (error) {
+      console.error('Error updating status:', error);
+      await Toast.show({
+        text: 'Failed to update status',
+        duration: 'short'
+      });
+    } finally {
+      setStatusSidebarVisible(false);
+    }
+  };
+
+  if (loading || error) {
+    return (
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
+          <Skeleton width="10rem" height="2rem" />
+          <Skeleton width="100%" height="2.5rem" className="md:w-20rem" />
+          <Skeleton width="10rem" height="2.5rem" />
+        </div>
+  
+        <div className="grid">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="col-12 md:col-6 lg:col-4">
+              <Card className="h-full">
+                <div className="flex flex-column gap-2">
+                  <div className="flex justify-content-between align-items-center">
+                    <Skeleton width="8rem" height="1.25rem" />
+                    <Skeleton width="5rem" height="1.25rem" />
+                  </div>
+  
+                  <Divider className="my-2" />
+  
+                  <div className="flex flex-column gap-1">
+                    <div className="flex justify-content-between">
+                      <Skeleton width="6rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                    <div className="flex justify-content-between">
+                      <Skeleton width="6rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                    <div className="flex justify-content-between">
+                      <Skeleton width="6rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                    <div className="flex justify-content-between">
+                      <Skeleton width="6rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                    <div className="flex justify-content-between">
+                      <Skeleton width="8rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                    <div className="flex justify-content-between">
+                      <Skeleton width="8rem" height="1rem" />
+                      <Skeleton width="7rem" height="1rem" />
+                    </div>
+                  </div>
+  
+                  <Divider className="my-2" />
+  
+                  <Skeleton width="5rem" height="1rem" />
+                  <Skeleton width="100%" height="2rem" className="mt-2" />
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }  
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -221,8 +283,8 @@ const SalesOrder = () => {
               <Card className="h-full">
                 <div className="flex flex-column gap-2">
                   <div className="flex justify-content-between align-items-center">
-                    <span className="font-bold">{order.orderNumber}</span>
-                    <Tag value={order.status} severity={getStatusSeverity(order.status)} />
+                    <span className="font-bold">{order.docno}</span>
+                    <Tag value={order.orderStatus?.status_name} severity={getStatusSeverity(order.orderStatus?.status_name)} />
                   </div>
                   
                   <Divider className="my-2" />
@@ -230,23 +292,23 @@ const SalesOrder = () => {
                   <div className="flex flex-column gap-1">
                     <div className="flex justify-content-between">
                       <span className="text-600">Customer:</span>
-                      <span>{order.customerName}</span>
+                      <span>{order.customer}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Order Date:</span>
-                      <span>{formatDate(order.orderDate)}</span>
+                      <span>{formatDate(new Date(order.order_date))}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Trial Date:</span>
-                      <span>{formatDate(order.trialDate)}</span>
+                      <span>{formatDate(new Date(order.tentitive_delivery_date))}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Delivery Date:</span>
-                      <span>{formatDate(order.deliveryDate)}</span>
+                      <span>{formatDate(new Date(order.delivery_date))}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Delivered:</span>
-                      <span>{order.deliveredQty}</span>
+                      <span>{order.delivered_qty}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Payment Pending:</span>
@@ -258,7 +320,7 @@ const SalesOrder = () => {
                   
                   <div className="flex flex-column gap-1">
                     <span className="text-600">Notes:</span>
-                    <p className="m-0 text-sm">{order.notes || 'No notes'}</p>
+                    <p className="m-0 text-sm">{order.desc1 || 'No notes'}</p>
                   </div>
                   
                   <div className="mt-3">
@@ -284,61 +346,7 @@ const SalesOrder = () => {
       </div>
 
       <Dialog 
-        header="Create New Order" 
-        visible={showDialog} 
-        maximized={isMaximized}
-        onMaximize={(e) => setIsMaximized(e.maximized)}
-        className={isMaximized ? 'maximized-dialog' : ''}
-        onHide={() => {
-            setShowDialog(false);
-            setSelectedCustomer(null);
-            setSelectedGarments([]);
-        }}
-    >
-        <div className="p-fluid">
-            <div className="field my-4">
-                <label htmlFor="customer">Customer</label>
-                <Dropdown
-                    id="customer"
-                    value={selectedCustomer}
-                    options={customers}
-                    onChange={(e: DropdownChangeEvent) => setSelectedCustomer(e.value)}
-                    optionLabel="name"
-                    placeholder="Select a Customer"
-                    className="w-full"
-                    filter
-                />
-            </div>
-
-            <div className="field">
-                <label htmlFor="garments">Select Outfit</label>
-                <MultiSelect
-                    id="garments"
-                    value={selectedGarments}
-                    options={garments}
-                    onChange={(e: MultiSelectChangeEvent) => setSelectedGarments(e.value)}
-                    optionLabel="name"
-                    placeholder="Select Outfits"
-                    className="w-full"
-                    display="chip"
-                    filter
-                />
-            </div>
-        </div>
-
-        <div className="flex justify-content-end gap-2 mt-4">
-            <Button 
-                label="Next" 
-                icon="pi pi-arrow-right" 
-                iconPos="right"
-                onClick={handleCreateOrder}
-                disabled={!selectedCustomer || selectedGarments.length === 0}
-            />
-        </div>
-      </Dialog>
-
-      <Dialog 
-        header={`Order Details - ${selectedOrder?.orderNumber}`} 
+        header={`Order Details - ${selectedOrder?.docno}`} 
         visible={visible} 
         onHide={() => setVisible(false)}
         maximized={isMaximized}
@@ -352,25 +360,30 @@ const SalesOrder = () => {
               <div className="col-6">
                 <div className="field">
                   <label>Customer</label>
-                  <p className="m-0 font-medium">{selectedOrder.customerName}</p>
+                  <p className="m-0 font-medium">{selectedOrder.customer}</p>
                 </div>
               </div>
               <div className="col-6">
                 <div className="field">
                   <label>Order Date</label>
-                  <p className="m-0 font-medium">{formatDate(selectedOrder.orderDate)}</p>
+                  <p className="m-0 font-medium">{formatDate(new Date(selectedOrder.order_date))}</p>
                 </div>
               </div>
               <div className="col-6">
                 <div className="field">
                   <label>Status</label>
-                  <Tag value={selectedOrder.status} severity={getStatusSeverity(selectedOrder.status)} />
+                  <Tag 
+                    value={selectedOrder.orderStatus?.status_name || 'N/A'}
+                    severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
+                    className="text-sm font-semibold"
+                    style={{ minWidth: '6rem', textAlign: 'center' }}
+                  />
                 </div>
               </div>
               <div className="col-6">
                 <div className="field">
                   <label>Trial Date</label>
-                  <p className="m-0 font-medium">{formatDate(selectedOrder.trialDate)}</p>
+                  <p className="m-0 font-medium">{formatDate(new Date(selectedOrder.order_date))}</p>
                 </div>
               </div>
               <div className="col-12">
@@ -386,63 +399,83 @@ const SalesOrder = () => {
             <Divider />
             
             <h5 className="m-0 mb-3">Order Items</h5>
-            
-            {selectedOrder.items.map((item) => (
+
+            {selectedOrder.orderDetails?.map((item) => (
               <div key={item.id} className="mb-4 surface-50 p-3 border-round">
                 <div className="grid">
                   <div className="col-6">
                     <div className="field">
                       <label>Item Name</label>
-                      <p className="m-0 font-medium">{item.name}</p>
+                      <p className="m-0 font-medium">Kurta</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Job Order No</label>
-                      <p className="m-0 font-medium">{item.jobOrderNo}</p>
+                      <p className="m-0 font-medium">{item.order_id}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Jobber Name</label>
-                      <p className="m-0 font-medium">{item.jobberName}</p>
+                      <p className="m-0 font-medium">Amit Kumar</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Trial Date</label>
-                      <p className="m-0 font-medium">{formatDate(item.trialDate)}</p>
+                      <p className="m-0 font-medium">{formatDate(new Date(selectedOrder.order_date))}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Pending Qty</label>
-                      <p className="m-0 font-medium">{item.pendingQty}</p>
+                      <p className="m-0 font-medium">{item.delivered_qty}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Cancelled Qty</label>
-                      <p className="m-0 font-medium">{item.cancelledQty}</p>
+                      <p className="m-0 font-medium">{item.cancelled_qty}</p>
                     </div>
                   </div>
                   <div className="col-12">
                     <div className="field">
                       <label>Notes</label>
-                      <p className="m-0 font-medium">{item.notes || 'No notes'}</p>
+                      <p className="m-0 font-medium">{item.desc1 || 'No Notes Available'}</p>
                     </div>
                   </div>
-                  
-                  {item.imageUrl && (
-                    <div className="col-12 mt-3">
+
+                  <div className="col-12 mt-2">
+                    <Button
+                      label={`Status (${selectedOrder.orderStatus?.status_name || 'N/A'})`}
+                      icon="pi pi-sync"
+                      onClick={() => setStatusSidebarVisible(true)}
+                      severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
+                    />
+                  </div>
+
+                  {/* {item?.image_url && ( */}
+                    <div className="col-12 mt-2">
                       <Button 
                         label="View Image" 
                         icon="pi pi-image" 
-                        onClick={() => window.open(item.imageUrl, '_blank')}
                         className="p-button-outlined"
                       />
                     </div>
-                  )}
+                  {/* )} */}
+
+                  <div className="col-12 mt-2">
+                    <Button 
+                      label="View Measurement Details" 
+                      icon="pi pi-eye" 
+                      className="p-button-outlined"
+                      onClick={() => {
+                        setSelectedOrder(selectedOrder);
+                        setVisible(true);
+                      }}
+                    />
+                  </div>
                   <Divider />
                 </div>
               </div>
@@ -502,6 +535,48 @@ const SalesOrder = () => {
           />
         </div>
       </Dialog>
+
+      <Sidebar 
+        visible={statusSidebarVisible} 
+        onHide={() => setStatusSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '62vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        header={
+          <div className="sticky top-0 bg-white z-1 p-3 border-bottom-1 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-xl">Update Order Status</span>
+          </div>
+        }
+        className="p-0"
+      >
+        <div className="p-3">
+          <div className="grid">
+            {availableStatuses.map(status => (
+              <div key={status.id} className="col-12 md:col-6 lg:col-4 p-2">
+                <Button
+                  label={status.name}
+                  onClick={() => handleStatusUpdate(status.name)}
+                  severity={getStatusSeverity(status.name) || undefined}
+                  className="w-full p-3 text-lg justify-content-start p-button-outlined"
+                  icon={
+                    status.name === 'Completed' ? 'pi pi-check-circle' :
+                    status.name === 'In Progress' ? 'pi pi-spinner' :
+                    status.name === 'Pending' ? 'pi pi-clock' :
+                    status.name === 'Cancelled' ? 'pi pi-times-circle' :
+                    'pi pi-info-circle'
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sidebar>
     </div>
   );
 };
