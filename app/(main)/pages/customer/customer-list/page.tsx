@@ -16,14 +16,16 @@ import { useRef } from 'react';
 import { Calendar } from 'primereact/calendar';
 import { RadioButton } from 'primereact/radiobutton';
 import FullPageLoader from '@/demo/components/FullPageLoader';
+import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { useDebounce } from 'use-debounce';
 import { Demo } from '@/types';
 
 const CustomerList = () => {
   const router = useRouter();
   const toast = useRef<Toast>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [customers, setCustomers] = useState<Demo.User[]>([]);
-  const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
@@ -31,13 +33,28 @@ const CustomerList = () => {
   const [currentCustomer, setCurrentCustomer] = useState<Demo.User | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(true);
+  const [paginatorInfo, setPaginatorInfo] = useState<Demo.PaginatorInfo | null>(null);
+  const [hasMorePages, setHasMorePages] = useState(true);
+  const [page, setPage] = useState(1);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (loadMore = false) => {
     try {
-      setLoading(true);
-      const users = await UserService.getUsers();
-  
-      const mappedCustomers = users
+      if (loadMore) {
+        setIsLoadingMore(true);
+      } else if (!searchTerm) {
+        setIsInitialLoading(true);
+      }
+      
+      const { data, paginatorInfo } = await UserService.getUsers(
+        debouncedSearchTerm,
+        2,
+        loadMore ? page + 1 : 1
+      );
+
+      const mappedCustomers = data
         .filter(user => user.isCustomer === 'Y')
         .map((user) => ({
           id: user.id,
@@ -51,8 +68,12 @@ const CustomerList = () => {
           sex: user.sex,
           active: user.active,
         }));
-  
-      setCustomers(mappedCustomers);
+
+      setCustomers(prev => loadMore ? [...prev, ...mappedCustomers] : mappedCustomers);
+      setPaginatorInfo(paginatorInfo);
+      setHasMorePages(paginatorInfo.hasMorePages);
+      if (loadMore) setPage(prev => prev + 1);
+      
       setError(null);
     } catch (err) {
       console.error('Failed to fetch customers:', err);
@@ -64,13 +85,28 @@ const CustomerList = () => {
         life: 3000
       });
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      setListLoading(false);
     }
-  };  
+  };
 
   useEffect(() => {
+    setPage(1);
     fetchCustomers();
-  }, []);
+  }, [debouncedSearchTerm]);
+
+  useInfiniteObserver({
+    targetRef: observerTarget,
+    hasMorePages,
+    isLoading: isLoadingMore,
+    onIntersect: () => {
+      if (hasMorePages) {
+        fetchCustomers(true);
+      }
+    },
+    deps: [hasMorePages, searchTerm]
+  });
 
   const filteredCustomers = customers.filter(customer => 
     customer.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -238,7 +274,7 @@ const CustomerList = () => {
     </div>
   );
   
-  if (loading || error) {
+  if (isInitialLoading || error) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -300,77 +336,87 @@ const CustomerList = () => {
 
         <div className="flex flex-wrap gap-3 lg:justify-content-start">
           {filteredCustomers.length > 0 ? (
-            filteredCustomers.map((customer) => (
-              <Card 
-                key={customer.id} 
-                className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
-                onClick={() => handleCardClick(customer.id)}
-              >
-                <div className="flex justify-content-between align-items-start mb-3">
-                  <div>
-                    <h3 className="text-xl m-0">{customer.fname} {customer.lname}</h3>
+            <>
+              {filteredCustomers.map((customer) => (
+                <Card 
+                  key={customer.id} 
+                  className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
+                  onClick={() => handleCardClick(customer.id)}
+                >
+                  <div className="flex justify-content-between align-items-start mb-3">
+                    <div>
+                      <h3 className="text-xl m-0">{customer.fname} {customer.lname}</h3>
 
-                    <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                      <i className="pi pi-phone" /> {customer.mobileNumber}
-                      {customer.alternateContact && (
-                        <span className="text-sm text-500 flex align-items-center gap-2">
-                          (Alt: {customer.alternateContact})
-                        </span>
+                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                        <i className="pi pi-phone" /> {customer.mobileNumber}
+                        {customer.alternateContact && (
+                          <span className="text-sm text-500 flex align-items-center gap-2">
+                            (Alt: {customer.alternateContact})
+                          </span>
+                        )}
+                      </div>
+
+                      {customer.email && (
+                        <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                          <i className="pi pi-envelope" /> {customer.email}
+                        </div>
                       )}
-                    </div>
 
-                    {customer.email && (
                       <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-envelope" /> {customer.email}
+                        <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
                       </div>
-                    )}
 
-                    <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                      <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
-                    </div>
+                      {customer.anniversary && (
+                        <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                          <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                        </div>
+                      )}
 
-                    {customer.anniversary && (
                       <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                        <i className="pi pi-user" /> {customer.sex === 'M' ? 'Male' : 'Female'}
                       </div>
-                    )}
-
-                    <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                      <i className="pi pi-user" /> {customer.sex === 'M' ? 'Male' : 'Female'}
                     </div>
+
+                    <Tag 
+                      value={customer.active === 1 ? 'Active' : 'Inactive'}
+                      severity={customer.active === 1 ? 'success' : 'danger'}
+                      className="align-self-start"
+                    />
                   </div>
 
-                  <Tag 
-                    value={customer.active === 1 ? 'Active' : 'Inactive'}
-                    severity={customer.active === 1 ? 'success' : 'danger'}
-                    className="align-self-start"
-                  />
-                </div>
-
-                <div className="flex justify-content-end gap-1">
-                  <Button 
-                    icon="pi pi-pencil" 
-                    rounded 
-                    text 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      showEditDialog(customer);
-                    }}
-                    severity="secondary"
-                  />
-                  <Button 
-                    icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
-                    rounded 
-                    text 
-                    severity={customer.active === 1 ? 'danger' : 'success'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmStatusChange(customer.id);
-                    }}
-                  />
-                </div>
-              </Card>
-            ))
+                  <div className="flex justify-content-end gap-1">
+                    <Button 
+                      icon="pi pi-pencil" 
+                      rounded 
+                      text 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showEditDialog(customer);
+                      }}
+                      severity="secondary"
+                    />
+                    <Button 
+                      icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
+                      rounded 
+                      text 
+                      severity={customer.active === 1 ? 'danger' : 'success'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmStatusChange(customer.id);
+                      }}
+                    />
+                  </div>
+                </Card>
+              ))}
+              <div ref={observerTarget} className="w-full flex justify-content-center p-3">
+                {isLoadingMore && (
+                  <div className="flex align-items-center gap-2">
+                    <i className="pi pi-spinner pi-spin" />
+                    <span>Loading more data...</span>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <div className="w-full p-4 text-center surface-100 border-round">
               <i className="pi pi-search text-4xl mb-2" />

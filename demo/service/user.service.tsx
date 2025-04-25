@@ -2,28 +2,55 @@ import { GraphQLService } from './graphql.service';
 import { Demo } from '@/types';
 
 export const UserService = {
-  async getUsers(token?: string): Promise<Demo.User[]> {
+  async getUsers(
+    search: string | null = null,
+    first: number = 10,
+    page: number = 1,
+    token?: string
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
-      query findUsers {
-        users {
-          id
-          fname
-          lname
-          email
-          mobileNumber
-          username
-          alternateContact
-          dob
-          sex
-          anniversary
-          isCustomer
-          active
+      query Users($search: String, $first: Int!, $page: Int) {
+        users(search: $search, first: $first, page: $page) {
+          paginatorInfo {
+            count
+            currentPage
+            firstItem
+            hasMorePages
+            lastItem
+            lastPage
+            perPage
+            total
+          }
+          data {
+            id
+            fname
+            lname
+            email
+            mobileNumber
+            username
+            alternateContact
+            dob
+            sex
+            anniversary
+            isCustomer
+            active
+          }
         }
       }
     `;
   
-    const data = await GraphQLService.query<{ users: Demo.User[] }>(query, {}, token);
-    return data.users;
+    const variables = { search, first, page };
+    const data = await GraphQLService.query<{ 
+      users: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables, token);
+    
+    return {
+      data: data.users.data,
+      paginatorInfo: data.users.paginatorInfo
+    };
   },
   
   async createUser(input: Demo.CreateUserInput, token?: string): Promise<Demo.User> {

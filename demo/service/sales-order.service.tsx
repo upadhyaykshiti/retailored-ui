@@ -235,6 +235,43 @@ export const SalesOrderService = {
     return data.orderMain;
   },
 
+  async getOrderMeasurements(orderId: string, token?: string): Promise<any> {
+    const query = `
+      query OrderMain($id: ID!) {
+        orderMain(id: $id) {
+          orderDetails {
+            measurementMain {
+              measurement_date
+              measurementDetails {
+                measurement_val
+                measurementMaster {
+                  id
+                  measurement_name
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+  
+    const variables = {
+      id: orderId
+    };
+  
+    const response = await GraphQLService.query<any>(query, variables, token);
+    
+    return {
+      data: {
+        orderMain: {
+          orderDetails: response.orderMain.orderDetails.map((detail: any) => ({
+            measurementMain: detail.measurementMain
+          }))
+        }
+      }
+    };
+  },
+
   async createOrderWithDetails(
     input: {
       user_id: number;

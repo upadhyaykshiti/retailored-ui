@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
@@ -13,6 +14,9 @@ import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 import { Toast } from 'primereact/toast';
+import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { useDebounce } from 'use-debounce';
+import { Demo } from '@/types';
 
 type Measurement = {
   id?: number;
@@ -47,11 +51,16 @@ const Garments = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [isMaximized, setIsMaximized] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editMeasurementIndex, setEditMeasurementIndex] = useState<number | null>(null);
+  const [paginatorInfo, setPaginatorInfo] = useState<Demo.PaginatorInfo | null>(null);
+  const [hasMorePages, setHasMorePages] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
   const toast = useRef<Toast>(null);
   const [currentGarment, setCurrentGarment] = useState<Garment>({
     id: 0,
@@ -65,13 +74,23 @@ const Garments = () => {
     measurement_name: '',
     data_type: 'number',
   });
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  const fetchMaterials = async () => {
+  const fetchMaterials = async (loadMore = false) => {
     try {
-      setLoading(true);
+      if (loadMore) {
+        setIsLoadingMore(true);
+      } else if (!searchTerm) {
+        setIsInitialLoading(true);
+      }
 
-      const materials = await MaterialService.getMaterialMasters();
-      const mappedGarments = materials.map((material: { id: any; name: any; img_url: any; measurements: Measurement[]; ext: string; }) => ({
+      const { data, paginatorInfo } = await MaterialService.getMaterialMasters(
+        debouncedSearchTerm,
+        3,
+        loadMore ? page + 1 : 1
+      );
+
+      const mappedGarments = data.map((material: any) => ({
         id: Number(material.id),
         name: material.name,
         img_url: material.img_url,
@@ -83,7 +102,12 @@ const Garments = () => {
         })),
         ext: material.ext as Ext
       }));
-      setGarments(mappedGarments);
+
+      setGarments(prev => loadMore ? [...prev, ...mappedGarments] : mappedGarments);
+      setPaginatorInfo(paginatorInfo);
+      setHasMorePages(paginatorInfo.hasMorePages);
+      if (loadMore) setPage(prev => prev + 1);
+      
       setError(null);
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -95,13 +119,35 @@ const Garments = () => {
         life: 3000
       });
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      setListLoading(false);
     }
   };
 
   useEffect(() => {
+    setPage(1);
     fetchMaterials();
-  }, []);
+  }, [debouncedSearchTerm]);
+
+  const handleSearch = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setPage(1);
+      fetchMaterials();
+    }
+  };
+
+  useInfiniteObserver({
+    targetRef: observerTarget,
+    hasMorePages,
+    isLoading: isLoadingMore,
+    onIntersect: () => {
+      if (hasMorePages) {
+        fetchMaterials(true);
+      }
+    },
+    deps: [hasMorePages, searchTerm]
+  });
 
   const handleAdd = () => {
     setCurrentGarment({
@@ -304,7 +350,7 @@ const Garments = () => {
     );
   };
 
-  if (loading || error) {
+  if (isInitialLoading || error) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -353,6 +399,7 @@ const Garments = () => {
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearch}
               placeholder="Search"
               className="w-full"
             />
@@ -367,49 +414,74 @@ const Garments = () => {
         </div>
 
         <div className="flex flex-wrap gap-3 justify-content-start">
-          {garments.map((garment) => (
-            <Card key={garment.id} className="flex flex-column w-full sm:w-20rem lg:w-22rem transition-all transition-duration-200 hover:shadow-4">
-              <div className="flex justify-content-between align-items-start">
-                <h3 className="text-xl m-0">{garment.name}</h3>
-                <Tag 
-                  value={garment.ext === 'N' ? 'Active' : 'Inactive'}
-                  severity={garment.ext === 'N' ? 'success' : 'danger'}
-                  className="align-self-start"
-                />
-              </div>
-
-              <Divider className="my-2" />
-
-              <div className="flex flex-wrap gap-2">
-                {garment.measurements
-                  ?.sort((a, b) => a.seq - b.seq)
-                  .map((measurement, index) => (
+          {garments.length > 0 ? (
+            <>
+              {garments.map((garment) => (
+                <Card key={garment.id} className="flex flex-column w-full sm:w-20rem lg:w-22rem transition-all transition-duration-200 hover:shadow-4">
+                  <div className="flex justify-content-between align-items-start">
+                    <h3 className="text-xl m-0">{garment.name}</h3>
                     <Tag 
-                      key={index}
-                      value={measurement.measurement_name}
-                      className="capitalize"
+                      value={garment.ext === 'N' ? 'Active' : 'Inactive'}
+                      severity={garment.ext === 'N' ? 'success' : 'danger'}
+                      className="align-self-start"
                     />
-                ))}
-              </div>
+                  </div>
 
-              <div className="flex justify-content-end gap-1 mt-3">
-                <Button 
-                  icon="pi pi-pencil" 
-                  rounded 
-                  text 
-                  onClick={() => handleEdit(garment)}
-                  severity="secondary"
-                />
-                <Button 
-                  icon={garment.ext === 'N' ? 'pi pi-trash' : 'pi pi-replay'} 
-                  rounded 
-                  text 
-                  severity={garment.ext === 'N' ? 'danger' : 'warning'}
-                  onClick={() => confirmStatusChange(garment.id, garment.ext === 'N' ? 'Y' : 'N')}
-                />
+                  <Divider className="my-2" />
+
+                  <div className="flex flex-wrap gap-2">
+                    {garment.measurements
+                      ?.sort((a, b) => a.seq - b.seq)
+                      .map((measurement, index) => (
+                        <Tag 
+                          key={index}
+                          value={measurement.measurement_name}
+                          className="capitalize"
+                        />
+                    ))}
+                  </div>
+
+                  <div className="flex justify-content-end gap-1 mt-3">
+                    <Button 
+                      icon="pi pi-pencil" 
+                      rounded 
+                      text 
+                      onClick={() => handleEdit(garment)}
+                      severity="secondary"
+                    />
+                    <Button 
+                      icon={garment.ext === 'N' ? 'pi pi-trash' : 'pi pi-replay'} 
+                      rounded 
+                      text 
+                      severity={garment.ext === 'N' ? 'danger' : 'warning'}
+                      onClick={() => confirmStatusChange(garment.id, garment.ext === 'N' ? 'Y' : 'N')}
+                    />
+                  </div>
+                </Card>
+              ))}
+              <div ref={observerTarget} className="w-full flex justify-content-center p-3">
+                {isLoadingMore && (
+                  <div className="flex align-items-center gap-2">
+                    <i className="pi pi-spinner pi-spin" />
+                    <span>Loading more data...</span>
+                  </div>
+                )}
               </div>
-            </Card>
-          ))}
+            </>
+          ) : (
+            <div className="w-full p-4 text-center surface-100 border-round">
+              <i className="pi pi-search text-4xl mb-2" />
+              <h3>No garments found</h3>
+              {searchTerm && (
+                <Button 
+                  label="Clear search" 
+                  className="mt-3" 
+                  onClick={() => setSearchTerm('')}
+                  size="small"
+                />
+              )}
+            </div>
+          )}
         </div>
 
         <Dialog 

@@ -1,32 +1,59 @@
 import { GraphQLService } from './graphql.service';
-import { Demo } from '@/types';
 
 export const MaterialService = {
-  async getMaterialMasters(token?: string): Promise<Demo.MaterialMaster[]> {
+  async getMaterialMasters(
+    search: string | null = null,
+    first: number = 10,
+    page: number = 1,
+    token?: string
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
-      query MaterialMasters {
-        materialMasters {
-          id
-          name
-          img_url
-          material_type
-          isSaleable
-          wsp
-          mrp
-          vendor_id
-          measurements {
-            id
-            material_master_id
-            measurement_name
-            data_type
-            seq
+      query MaterialMasters($search: String, $first: Int!, $page: Int) {
+        materialMasters(search: $search, first: $first, page: $page) {
+          paginatorInfo {
+            count
+            currentPage
+            firstItem
+            hasMorePages
+            lastItem
+            lastPage
+            perPage
+            total
           }
-          ext
+          data {
+            id
+            name
+            img_url
+            material_type
+            isSaleable
+            wsp
+            mrp
+            vendor_id
+            measurements {
+              id
+              material_master_id
+              measurement_name
+              data_type
+              seq
+            }
+            ext
+          }
         }
       }
     `;
-    const data = await GraphQLService.query<{ materialMasters: Demo.MaterialMaster[] }>(query, {}, token);
-    return data.materialMasters;
+
+    const variables = { search, first, page };
+    const data = await GraphQLService.query<{ 
+      materialMasters: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables, token);
+    
+    return {
+      data: data.materialMasters.data,
+      paginatorInfo: data.materialMasters.paginatorInfo
+    };
   },
 
   async createMaterialWithMeasurements(input: {

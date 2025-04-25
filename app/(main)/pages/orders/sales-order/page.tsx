@@ -55,6 +55,17 @@ interface Order {
   }[];
 }
 
+interface MeasurementData {
+  measurement_date: string;
+  measurementDetails: {
+    measurement_val: string;
+    measurementMaster: {
+      id: string;
+      measurement_name: string;
+    };
+  }[];
+}
+
 const SalesOrder = () => {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -68,6 +79,8 @@ const SalesOrder = () => {
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [measurementData, setMeasurementData] = useState<MeasurementData | null>(null);
+  const [loadingMeasurements, setLoadingMeasurements] = useState(false);
   const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
@@ -190,6 +203,25 @@ const SalesOrder = () => {
     }
   };
 
+  const fetchMeasurements = async (measurementMainId: string) => {
+    setLoadingMeasurements(true);
+    try {
+      const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
+      const measurementData = response.data?.orderMain?.orderDetails?.[0]?.measurementMain;
+      
+      if (measurementData) {
+        setMeasurementData(measurementData);
+      } else {
+        setMeasurementData(null);
+      }
+    } catch (error) {
+      console.error('Failed to load measurements:', error);
+      setMeasurementData(null);
+    } finally {
+      setLoadingMeasurements(false);
+    }
+  };
+
   const getStatusSeverity = (status?: string): 'success' | 'info' | 'warning' | 'danger' | null | undefined => {
     switch (status) {
       case 'Completed': return 'success';
@@ -275,7 +307,10 @@ const SalesOrder = () => {
   const handleViewMeasurement = (item: Order['orderDetails'][0]) => {
     setSelectedItem(item);
     setMeasurementDialogVisible(true);
-  };
+    if (item.id) {
+      fetchMeasurements(item.id);
+    }
+  };  
 
   if (loading && !isFetchingMore) {
     return (
@@ -700,84 +735,118 @@ const SalesOrder = () => {
       </Sidebar>
 
       <Dialog 
-        header="Measurement Details" 
-        visible={measurementDialogVisible} 
-        onHide={() => setMeasurementDialogVisible(false)}
-        maximized={isMaximized}
-        onMaximize={(e) => setIsMaximized(e.maximized)}
-        className={isMaximized ? 'maximized-dialog' : ''}
-        blockScroll
-      >
-        {selectedItem && (
-          <div className="p-fluid">
-            <div className="grid my-2">
-              <div className="col-6 font-bold text-600">Customer Name:</div>
-              <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
-              
-              <div className="col-6 font-bold text-600">Delivery Date:</div>
-              <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem?.delivery_date))}
-              </div>
-              
-              <div className="col-6 font-bold text-600">Trial Date:</div>
-              <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem.trial_date))}
-              </div>
-              
-              <div className="col-6 font-bold text-600">Type:</div>
-              <div className="col-6 font-medium text-right">Stitching</div>
-            </div>
-
-            <div className="surface-100 p-3 border-round my-4">
-              <h4 className="m-0">Shirt</h4>
-            </div>
-
-            <div className="grid mb-4">
-              <div className="col-12 md:col-6">
-                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
-                  <span className="font-medium">Length</span>
-                  <span className="font-bold">12.0</span>
-                </div>
-              </div>
-              <div className="col-12 md:col-6">
-                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
-                  <span className="font-medium">Shoulder</span>
-                  <span className="font-bold">12.0</span>
-                </div>
-              </div>
-              <div className="col-12 md:col-6">
-                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
-                  <span className="font-medium">Chest</span>
-                  <span className="font-bold">38.0</span>
-                </div>
-              </div>
-              <div className="col-12 md:col-6">
-                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
-                  <span className="font-medium">Sleeve</span>
-                  <span className="font-bold">24.0</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="surface-50 p-3 border-round">
-              <h5 className="mt-0 mb-3">Stitch Options</h5>
-              <div className="grid">
-                <div className="col-6 font-bold text-600">Collar:</div>
-                <div className="col-6 font-medium text-right">Classic</div>
+          header="Measurement Details" 
+          visible={measurementDialogVisible} 
+          onHide={() => {
+            setMeasurementDialogVisible(false);
+            setMeasurementData(null);
+          }}
+          maximized={isMaximized}
+          onMaximize={(e) => setIsMaximized(e.maximized)}
+          className={isMaximized ? 'maximized-dialog' : ''}
+          blockScroll
+        >
+          {selectedItem && (
+            <div className="p-fluid">
+              <div className="grid my-2">
+                <div className="col-6 font-bold text-600">Customer Name:</div>
+                <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
                 
-                <div className="col-6 font-bold text-600">Sleeve:</div>
-                <div className="col-6 font-medium text-right">Full</div>
+                <div className="col-6 font-bold text-600">Delivery Date:</div>
+                <div className="col-6 font-medium text-right">
+                  {formatDate(new Date(selectedItem?.delivery_date))}
+                </div>
                 
-                <div className="col-6 font-bold text-600">Cuffs:</div>
-                <div className="col-6 font-medium text-right">Squared</div>
-                
-                <div className="col-6 font-bold text-600">Pocket Type:</div>
-                <div className="col-6 font-medium text-right">Classic</div>
+                <div className="col-6 font-bold text-600">Trial Date:</div>
+                <div className="col-6 font-medium text-right">
+                  {formatDate(new Date(selectedItem.trial_date))}
+                </div>
+              </div>
+
+              {loadingMeasurements ? (
+                <div className="surface-100 p-3 border-round my-4">
+                  <div className="flex align-items-center gap-3">
+                    <Skeleton shape="circle" size="2rem" />
+                    <div className="flex flex-column gap-2 w-full">
+                      <Skeleton width="100%" height="1.5rem" />
+                      <Skeleton width="50%" height="1rem" />
+                    </div>
+                  </div>
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="grid my-3">
+                      <div className="col-6">
+                        <Skeleton width="80%" height="1.5rem" />
+                      </div>
+                      <div className="col-6">
+                        <Skeleton width="60%" height="1.5rem" className="float-right" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : measurementData ? (
+                <>
+                  <div className="surface-100 p-3 border-round my-4">
+                    <h4 className="m-0">Measurements</h4>
+                    <p className="text-sm mt-1">
+                      Taken on: {new Date(measurementData.measurement_date).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="grid mb-4">
+                    {measurementData.measurementDetails.map((detail, index) => (
+                      <div key={index} className="col-12 md:col-6">
+                        <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                          <span className="font-medium">{detail.measurementMaster.measurement_name}</span>
+                          <span className="font-bold">{detail.measurement_val}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="surface-100 p-3 border-round my-4 text-center">
+                  <i className="pi pi-info-circle text-2xl mb-2" />
+                  <p className="m-0">No measurement details available</p>
+                </div>
+              )}
+
+              <div className="surface-50 p-3 border-round">
+                <h5 className="mt-0 mb-3">Stitch Options</h5>
+                {loadingMeasurements ? (
+                  <div className="grid">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="col-6">
+                        <Skeleton width="80%" height="1.5rem" className="mb-2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid">
+                    <div className="col-6 font-bold text-600">Collar:</div>
+                    <div className="col-6 font-medium text-right">
+                      {measurementData ? 'Classic' : 'No details available'}
+                    </div>
+                    
+                    <div className="col-6 font-bold text-600">Sleeve:</div>
+                    <div className="col-6 font-medium text-right">
+                      {measurementData ? 'Full' : 'No details available'}
+                    </div>
+                    
+                    <div className="col-6 font-bold text-600">Cuffs:</div>
+                    <div className="col-6 font-medium text-right">
+                      {measurementData ? 'Squared' : 'No details available'}
+                    </div>
+                    
+                    <div className="col-6 font-bold text-600">Pocket Type:</div>
+                    <div className="col-6 font-medium text-right">
+                      {measurementData ? 'Classic' : 'No details available'}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
-      </Dialog>
+          )}
+        </Dialog>
     </div>
   );
 };

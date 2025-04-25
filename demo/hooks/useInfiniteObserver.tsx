@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 type InfiniteObserverProps = {
     targetRef: React.RefObject<Element>;
     hasMorePages: boolean;
     isLoading: boolean;
     onIntersect: () => void;
-    deps: any[];
+    deps?: any[];
 };
 
 export const useInfiniteObserver = ({
@@ -15,24 +15,37 @@ export const useInfiniteObserver = ({
     onIntersect,
     deps = [],
 }: InfiniteObserverProps) => {
-    useEffect(() => {
-        const observer = new IntersectionObserver(
-            entries => {
-                if (entries[0].isIntersecting && hasMorePages && !isLoading) {
-                    onIntersect();
-                }
-            },
-            { threshold: 1.0 }
-        );
+    const observerRef = useRef<IntersectionObserver | null>(null);
 
-        if (targetRef.current) {
-            observer.observe(targetRef.current);
+    useEffect(() => {
+        if (isLoading || !hasMorePages) return;
+
+        const handleIntersect = (entries: IntersectionObserverEntry[]) => {
+            const [entry] = entries;
+            if (entry?.isIntersecting && hasMorePages && !isLoading) {
+                onIntersect();
+            }
+        };
+
+        if (observerRef.current) {
+            observerRef.current.disconnect();
+        }
+
+        observerRef.current = new IntersectionObserver(handleIntersect, {
+            root: null,
+            rootMargin: '100px',
+            threshold: 0.1,
+        });
+
+        const currentTarget = targetRef.current;
+        if (currentTarget) {
+            observerRef.current.observe(currentTarget);
         }
 
         return () => {
-            if (targetRef.current) {
-                observer.unobserve(targetRef.current);
+            if (observerRef.current) {
+                observerRef.current.disconnect();
             }
         };
-    }, [targetRef, hasMorePages, isLoading, ...deps]);
+    }, [targetRef, hasMorePages, isLoading, onIntersect, ...deps]);
 };
