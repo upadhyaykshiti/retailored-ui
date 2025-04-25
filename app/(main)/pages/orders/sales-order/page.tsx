@@ -11,7 +11,7 @@ import { Skeleton } from 'primereact/skeleton';
 import { InputText } from 'primereact/inputtext';
 import { Sidebar } from 'primereact/sidebar';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Toast } from '@capacitor/toast';
 
 interface Order {
@@ -30,10 +30,14 @@ interface Order {
   delivery_date: string;
   desc1: string | null;
   ext: string;
+  user: {
+    id: string;
+    fname: string;
+  }
   orderStatus: {
     id: string;
     status_name: string;
-  };
+  } | null;
   orderDetails: {
     id: string;
     order_id: string;
@@ -65,41 +69,106 @@ const SalesOrder = () => {
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
-  const [availableStatuses, setAvailableStatuses] = useState([
+  const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    perPage: 2,
+    total: 0,
+    hasMorePages: true
+  });
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastOrderRef = useRef<HTMLDivElement>(null);
+
+  const availableStatuses = [
     { id: '1', name: 'Pending' },
     { id: '2', name: 'In Progress' },
     { id: '3', name: 'Ready for Trial' },
     { id: '4', name: 'Completed' },
     { id: '5', name: 'Cancelled' }
-  ]);
+  ];
+
+  const fetchOrders = useCallback(async (page: number, perPage: number, loadMore = false) => {
+    try {
+      if (loadMore) {
+        setIsFetchingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const response = await SalesOrderService.getSalesOrders(page, perPage);
+      const newOrders = response.data.map((res: any) => ({
+        ...res,
+        customer: res.user.fname,
+        delivery_date: res.tentitive_delivery_date,
+        orderDetails: []
+      }));
+
+      if (loadMore) {
+        setOrders(prev => [...prev, ...newOrders]);
+      } else {
+        setOrders(newOrders);
+      }
+
+      setPagination({
+        currentPage: response.pagination.currentPage,
+        perPage: response.pagination.perPage,
+        total: response.pagination.total,
+        hasMorePages: response.pagination.hasMorePages
+      });
+
+      await Toast.show({
+        text: `Loaded ${newOrders.length} orders`,
+        duration: 'short',
+        position: 'top'
+      });
+    } catch (error) {
+      console.error('Error fetching sales orders:', error);
+      setError('Failed to fetch orders');
+      await Toast.show({
+        text: 'Failed to load orders',
+        duration: 'long',
+        position: 'top'
+      });
+    } finally {
+      if (loadMore) {
+        setIsFetchingMore(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
-        const response = await SalesOrderService.getSalesOrders();
-        const salesOrders: Order[] = response.map((res: any) => res);
-        setOrders(salesOrders);
-        await Toast.show({
-          text: `Successfully fetched ${salesOrders.length} orders`,
-          duration: 'long',
-          position: 'top'
-        });
-      } catch (error) {
-        console.error('Error fetching sales orders:', error);
-        setError('Failed to fetch orders');
-        await Toast.show({
-          text: 'Failed to load orders',
-          duration: 'long',
-          position: 'top'
-        });
-      } finally {
-        setLoading(false);
+    fetchOrders(1, pagination.perPage);
+  }, [fetchOrders, pagination.perPage]);
+
+  useEffect(() => {
+    if (!pagination.hasMorePages || loading || isFetchingMore) return;
+
+    const observerCallback = (entries: IntersectionObserverEntry[]) => {
+      if (entries[0].isIntersecting) {
+        fetchOrders(pagination.currentPage + 1, pagination.perPage, true);
       }
     };
 
-    fetchOrders();
-  }, []);
+    if (lastOrderRef.current) {
+      observer.current = new IntersectionObserver(observerCallback, {
+        root: null,
+        rootMargin: '20px',
+        threshold: 1.0
+      });
+
+      observer.current.observe(lastOrderRef.current);
+    }
+
+    return () => {
+      if (observer.current) {
+        observer.current.disconnect();
+      }
+    };
+  }, [pagination, loading, isFetchingMore, fetchOrders]);
 
   const fetchOrderDetails = async (orderId: string) => {
     try {
@@ -132,7 +201,7 @@ const SalesOrder = () => {
   };
 
   const openOrderDetails = (order: Order) => {
-    fetchOrderDetails(order.id)
+    fetchOrderDetails(order.id);
     setSelectedOrder(order);
     setVisible(true);
   };
@@ -156,25 +225,35 @@ const SalesOrder = () => {
   const handleStatusUpdate = async (newStatus: string) => {
     try {
       if (!selectedOrder) return;
-
+  
       setOrders(orders.map(order => 
         order.id === selectedOrder.id 
           ? { 
               ...order, 
-              orderStatus: { 
-                ...order.orderStatus, 
-                status_name: newStatus 
-              } 
+              orderStatus: order.orderStatus 
+                ? { 
+                    ...order.orderStatus, 
+                    status_name: newStatus 
+                  } 
+                : { 
+                    id: availableStatuses.find(s => s.name === newStatus)?.id || '', 
+                    status_name: newStatus 
+                  }
             } 
           : order
       ));
       
       setSelectedOrder({
         ...selectedOrder,
-        orderStatus: {
-          ...selectedOrder.orderStatus,
-          status_name: newStatus
-        }
+        orderStatus: selectedOrder.orderStatus
+          ? {
+              ...selectedOrder.orderStatus,
+              status_name: newStatus
+            }
+          : {
+              id: availableStatuses.find(s => s.name === newStatus)?.id || '',
+              status_name: newStatus
+            }
       });
       
       await Toast.show({
@@ -193,7 +272,12 @@ const SalesOrder = () => {
     }
   };
 
-  if (loading || error) {
+  const handleViewMeasurement = (item: Order['orderDetails'][0]) => {
+    setSelectedItem(item);
+    setMeasurementDialogVisible(true);
+  };
+
+  if (loading && !isFetchingMore) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -256,8 +340,8 @@ const SalesOrder = () => {
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-     <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
-      <h2 className="text-2xl m-0">Sales Orders</h2>
+      <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
+        <h2 className="text-2xl m-0">Sales Orders</h2>
         <span className="p-input-icon-left w-full">
           <i className="pi pi-search" />
           <InputText 
@@ -268,23 +352,30 @@ const SalesOrder = () => {
           />
         </span>
         <Button 
-            label="Create Order" 
-            icon="pi pi-plus" 
-            onClick={handleAddOrder}
-            className="w-full md:w-auto"
-            size="small"
+          label="Create Order" 
+          icon="pi pi-plus" 
+          onClick={handleAddOrder}
+          className="w-full md:w-auto"
+          size="small"
         />
       </div>
       
       <div className="grid">
         {filteredOrders.length > 0 ? (
-          filteredOrders.map((order) => (
-            <div key={order.id} className="col-12 md:col-6 lg:col-4">
+          filteredOrders.map((order, index) => (
+            <div 
+              key={order.id} 
+              className="col-12 md:col-6 lg:col-4"
+              ref={index === filteredOrders.length - 1 ? lastOrderRef : null}
+            >
               <Card className="h-full">
                 <div className="flex flex-column gap-2">
                   <div className="flex justify-content-between align-items-center">
                     <span className="font-bold">{order.docno}</span>
-                    <Tag value={order.orderStatus?.status_name} severity={getStatusSeverity(order.orderStatus?.status_name)} />
+                    <Tag 
+                      value={order.orderStatus?.status_name || 'Unknown'} 
+                      severity={getStatusSeverity(order.orderStatus?.status_name)} 
+                    />
                   </div>
                   
                   <Divider className="my-2" />
@@ -345,6 +436,15 @@ const SalesOrder = () => {
         )}
       </div>
 
+      {isFetchingMore && (
+        <div className="flex justify-content-center mt-3">
+          <div className="flex align-items-center gap-2">
+            <i className="pi pi-spinner pi-spin" />
+            <span>Loading more orders...</span>
+          </div>
+        </div>
+      )}
+
       <Dialog 
         header={`Order Details - ${selectedOrder?.docno}`} 
         visible={visible} 
@@ -354,13 +454,33 @@ const SalesOrder = () => {
         className={isMaximized ? 'maximized-dialog' : ''}
         blockScroll
       >
-        {selectedOrder && (
+        {listLoading ? (
+          <div className="p-fluid mt-3">
+            <div className="mb-4">
+              <Skeleton width="100%" height="10rem" borderRadius="6px" className="mb-5" />
+              <Skeleton width="100%" height="2.5rem" borderRadius="6px" className="mb-5" />
+              <Skeleton width="100%" height="20rem" className="mb-1" />
+            </div>
+
+            <div className="grid">
+              <div className="col-12 md:col-4 mb-2">
+                <Skeleton width="100%" height="2.5rem" borderRadius="6px" />
+              </div>
+              <div className="col-12 md:col-4 mb-2">
+                <Skeleton width="100%" height="2.5rem" borderRadius="6px" />
+              </div>
+              <div className="col-12 md:col-4 mb-2">
+                <Skeleton width="100%" height="2.5rem" borderRadius="6px" />
+              </div>
+            </div>
+          </div>
+        ) : selectedOrder ? (
           <div className="p-fluid mt-3">
             <div className="grid">
               <div className="col-6">
                 <div className="field">
                   <label>Customer</label>
-                  <p className="m-0 font-medium">{selectedOrder.customer}</p>
+                  <p className="m-0 font-medium">{selectedOrder?.user?.fname}</p>
                 </div>
               </div>
               <div className="col-6">
@@ -371,9 +491,9 @@ const SalesOrder = () => {
               </div>
               <div className="col-6">
                 <div className="field">
-                  <label>Status</label>
+                  <label>Status</label>&nbsp;
                   <Tag 
-                    value={selectedOrder.orderStatus?.status_name || 'N/A'}
+                    value={selectedOrder.orderStatus?.status_name || 'Unknown'}
                     severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
                     className="text-sm font-semibold"
                     style={{ minWidth: '6rem', textAlign: 'center' }}
@@ -448,7 +568,7 @@ const SalesOrder = () => {
 
                   <div className="col-12 mt-2">
                     <Button
-                      label={`Status (${selectedOrder.orderStatus?.status_name || 'N/A'})`}
+                      label={`Status (${selectedOrder.orderStatus?.status_name || 'Unknown'})`}
                       icon="pi pi-sync"
                       onClick={() => setStatusSidebarVisible(true)}
                       severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
@@ -470,16 +590,17 @@ const SalesOrder = () => {
                       label="View Measurement Details" 
                       icon="pi pi-eye" 
                       className="p-button-outlined"
-                      onClick={() => {
-                        setSelectedOrder(selectedOrder);
-                        setVisible(true);
-                      }}
+                      onClick={() => handleViewMeasurement(item)}
                     />
                   </div>
                   <Divider />
                 </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="flex justify-content-center align-items-center" style={{ height: '200px' }}>
+            <p>No order details available</p>
           </div>
         )}
       </Dialog>
@@ -577,6 +698,86 @@ const SalesOrder = () => {
           </div>
         </div>
       </Sidebar>
+
+      <Dialog 
+        header="Measurement Details" 
+        visible={measurementDialogVisible} 
+        onHide={() => setMeasurementDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+      >
+        {selectedItem && (
+          <div className="p-fluid">
+            <div className="grid my-2">
+              <div className="col-6 font-bold text-600">Customer Name:</div>
+              <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
+              
+              <div className="col-6 font-bold text-600">Delivery Date:</div>
+              <div className="col-6 font-medium text-right">
+                {formatDate(new Date(selectedItem?.delivery_date))}
+              </div>
+              
+              <div className="col-6 font-bold text-600">Trial Date:</div>
+              <div className="col-6 font-medium text-right">
+                {formatDate(new Date(selectedItem.trial_date))}
+              </div>
+              
+              <div className="col-6 font-bold text-600">Type:</div>
+              <div className="col-6 font-medium text-right">Stitching</div>
+            </div>
+
+            <div className="surface-100 p-3 border-round my-4">
+              <h4 className="m-0">Shirt</h4>
+            </div>
+
+            <div className="grid mb-4">
+              <div className="col-12 md:col-6">
+                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                  <span className="font-medium">Length</span>
+                  <span className="font-bold">12.0</span>
+                </div>
+              </div>
+              <div className="col-12 md:col-6">
+                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                  <span className="font-medium">Shoulder</span>
+                  <span className="font-bold">12.0</span>
+                </div>
+              </div>
+              <div className="col-12 md:col-6">
+                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                  <span className="font-medium">Chest</span>
+                  <span className="font-bold">38.0</span>
+                </div>
+              </div>
+              <div className="col-12 md:col-6">
+                <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                  <span className="font-medium">Sleeve</span>
+                  <span className="font-bold">24.0</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="surface-50 p-3 border-round">
+              <h5 className="mt-0 mb-3">Stitch Options</h5>
+              <div className="grid">
+                <div className="col-6 font-bold text-600">Collar:</div>
+                <div className="col-6 font-medium text-right">Classic</div>
+                
+                <div className="col-6 font-bold text-600">Sleeve:</div>
+                <div className="col-6 font-medium text-right">Full</div>
+                
+                <div className="col-6 font-bold text-600">Cuffs:</div>
+                <div className="col-6 font-medium text-right">Squared</div>
+                
+                <div className="col-6 font-bold text-600">Pocket Type:</div>
+                <div className="col-6 font-medium text-right">Classic</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 };

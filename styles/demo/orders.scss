@@ -6,6 +6,13 @@
     padding: 0rem;
 }
 
+.custom-selector-sidebar .p-sidebar-content {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
 .maximized-dialog {
     max-height: calc(96vh - 35px) !important;
     top: 35px !important;
