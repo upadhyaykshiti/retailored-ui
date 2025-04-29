@@ -31,22 +31,77 @@ interface JobOrderMain {
     status_name: string;
   };
 }
-interface SalesOrder {
-  id: number;
-  orderId: string;
-  customerName: string;
-  items: OrderItem[];
-  date: Date;
+
+interface MeasurementDetail {
+  measurement_master_id: string;
+  measurement_val: string;
+  measurementMaster: {
+    id: string;
+    measurement_name: string;
+  };
+}
+
+interface JobOrderDetail {
+  image_url: string | null;
+  trial_date: string | null;
+  delivery_date: string | null;
+  item_cost: number;
+  item_discount: number;
+  ord_qty: number;
+  delivered_qty: number;
+  cancelled_qty: number;
+  desc1: string | null;
+  orderDetail: {
+    material: {
+      name: string;
+      id: string;
+    };
+    measurementMain: {
+      id: string;
+      docno: string;
+      user: {
+        fname: string;
+      };
+      measurementDetails: MeasurementDetail[];
+    };
+  };
+}
+interface OrdersList {
+  id: string;
+  order_id: string;
+  orderMain: {
+    docno: string;
+    user: {
+      id: string;
+      fname: string;
+    };
+    orderDetails: {
+      material: {
+        id: string;
+        name: string;
+      };
+    }[];
+  };
 }
 
 interface OrderItem {
-  id: number;
+  id: string;
+  materialId: string;
   name: string;
   selected: boolean;
+  orderId?: string;
+  customerName?: string;
+  orderUniqueId?: string;
 }
 
 const JobOrder = () => {
   const [jobOrders, setJobOrders] = useState<JobOrderMain[]>([]);
+  const [jobOrderDetails, setJobOrderDetails] = useState<JobOrderDetail[]>([]);
+  const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
+  const [selectedMeasurements, setSelectedMeasurements] = useState<MeasurementDetail[]>([]);
+  const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
+  const [selectedJobOrderForPayment, setSelectedJobOrderForPayment] = useState<JobOrderMain | null>(null);
+  const [selectedMaterialName, setSelectedMaterialName] = useState('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrderMain | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
@@ -55,9 +110,11 @@ const JobOrder = () => {
   const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [jobbers, setJobbers] = useState<any[]>([]);
   const [selectedJobber, setSelectedJobber] = useState<any>(null);
-  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [ordersList, setOrdersList] = useState<OrdersList[]>([]);
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderSidebarVisible, setOrderSidebarVisible] = useState(false);
+  const [loadingOrdersButton, setLoadingOrdersButton] = useState(false);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [loadingJobbers, setLoadingJobbers] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -68,45 +125,16 @@ const JobOrder = () => {
     perPage: 10,
     total: 0
   });
+  const [ordersPagination, setOrdersPagination] = useState({
+    currentPage: 1,
+    hasMorePages: false,
+    lastPage: 1,
+    perPage: 10,
+    total: 0
+  });
   const toast = useRef<Toast>(null);
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
-
-  const initializeSalesOrders = () => {
-    const orders: SalesOrder[] = [
-      { 
-        id: 1, 
-        orderId: 'ORD-2023-05-16-1430', 
-        customerName: 'Nishant Kumar', 
-        items: [
-          { id: 101, name: 'Formal Shirt', selected: false },
-          { id: 102, name: 'Designer Kurta', selected: false }
-        ],
-        date: new Date('2023-05-16')
-      },
-      { 
-        id: 2, 
-        orderId: 'ORD-2023-05-18-1100', 
-        customerName: 'Rahul Sharma', 
-        items: [
-          { id: 201, name: 'Silk Kurta', selected: false },
-          { id: 202, name: 'Cotton Pants', selected: false }
-        ],
-        date: new Date('2023-05-18')
-      },
-      { 
-        id: 3, 
-        orderId: 'ORD-2023-05-20-1600', 
-        customerName: 'Priya Singh', 
-        items: [
-          { id: 301, name: 'Designer Saree', selected: false },
-          { id: 302, name: 'Blouse', selected: false }
-        ],
-        date: new Date('2023-05-20')
-      },
-    ];
-    setSalesOrders(orders);
-  };
 
   const fetchJobOrders = useCallback(async (page: number = 1, search: string = '') => {
     try {
@@ -141,6 +169,20 @@ const JobOrder = () => {
     fetchJobOrders(1, searchTerm);
   }, [searchTerm, fetchJobOrders]);
 
+  const fetchJobOrderDetails = async (jobOrderId: string) => {
+    try {
+      const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
+      setJobOrderDetails(response.jobOrderDetails);
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to fetch job order details',
+        life: 3000
+      });
+    }
+  };
+
   useEffect(() => {
     setLoadingJobbers(true);
     const fetchJobbers = async () => {
@@ -165,6 +207,35 @@ const JobOrder = () => {
     };
 
     fetchJobbers();
+  }, []);
+
+  const fetchOrdersList = useCallback(async (page: number = 1, search: string = '') => {
+    try {
+      setLoadingOrders(true);
+      const { data, pagination } = await JobOrderService.getOrdersList(
+        page,
+        10,
+        search || null
+      );
+  
+      setOrdersList(prev => page === 1 ? data : [...prev, ...data]);
+      setOrdersPagination({
+        currentPage: pagination.currentPage,
+        hasMorePages: pagination.hasMorePages,
+        lastPage: pagination.lastPage,
+        perPage: pagination.perPage,
+        total: pagination.total
+      });
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to fetch orders',
+        life: 3000
+      });
+    } finally {
+      setLoadingOrders(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -196,9 +267,16 @@ const JobOrder = () => {
     }
   };
 
-  const openJobOrderDetails = (jobOrder: JobOrderMain) => {
+  const openJobOrderDetails = async (jobOrder: JobOrderMain) => {
     setSelectedJobOrder(jobOrder);
+    await fetchJobOrderDetails(jobOrder.id);
     setVisible(true);
+  };
+
+  const showMeasurements = (measurements: MeasurementDetail[], materialName: string) => {
+    setSelectedMeasurements(measurements);
+    setSelectedMaterialName(materialName);
+    setMeasurementDialogVisible(true);
   };
 
   const formatDate = (dateString: string | null) => {
@@ -207,87 +285,120 @@ const JobOrder = () => {
     return date.toLocaleDateString('en-IN');
   };
 
-  const handleItemSelection = (orderId: number, itemId: number) => {
-    const updatedOrders = salesOrders.map(order => {
-      if (order.id === orderId) {
-        const updatedItems = order.items.map(item => {
-          if (item.id === itemId) {
-            return { ...item, selected: !item.selected };
-          }
-          return item;
-        });
-        return { ...order, items: updatedItems };
+  const handleItemSelection = (order: OrdersList, material: { id: string; name: string }) => {
+    setSelectedItems(prev => {
+      // Create a unique key combining order.id and material.id
+      const itemKey = `${order.id}-${material.id}`;
+      const existingIndex = prev.findIndex(item => item.id === itemKey);
+      
+      if (existingIndex >= 0) {
+        return prev.filter(item => item.id !== itemKey);
+      } else {
+        return [...prev, {
+          id: itemKey, // Use the combined key as ID
+          materialId: material.id, // Store material ID separately
+          name: material.name,
+          selected: true,
+          orderId: order.orderMain.docno,
+          customerName: order.orderMain.user.fname,
+          orderUniqueId: order.id // Store the order's unique ID
+        }];
       }
-      return order;
     });
-    
-    setSalesOrders(updatedOrders);
-    
-    const selected = updatedOrders
-      .flatMap(order => order.items)
-      .filter(item => item.selected);
-    setSelectedItems(selected);
   };
-
-  const handleSelectAllInOrder = (orderId: number, selectAll: boolean) => {
-    const updatedOrders = salesOrders.map(order => {
-      if (order.id === orderId) {
-        const updatedItems = order.items.map(item => ({
-          ...item,
-          selected: selectAll
-        }));
-        return { ...order, items: updatedItems };
+  
+  const handleSelectAllInOrder = (order: OrdersList, selectAll: boolean) => {
+    setSelectedItems(prev => {
+      const orderItems = order.orderMain.orderDetails.map(item => ({
+        id: `${order.id}-${item.material.id}`, // Combined key
+        materialId: item.material.id,
+        name: item.material.name,
+        selected: true,
+        orderId: order.orderMain.docno,
+        customerName: order.orderMain.user.fname,
+        orderUniqueId: order.id
+      }));
+  
+      if (selectAll) {
+        const newItems = orderItems.filter(item => 
+          !prev.some(selected => selected.id === item.id)
+        );
+        return [...prev, ...newItems];
+      } else {
+        return prev.filter(item => 
+          !orderItems.some(orderItem => orderItem.id === item.id)
+        );
       }
-      return order;
     });
-    
-    setSalesOrders(updatedOrders);
-    
-    const selected = updatedOrders
-      .flatMap(order => order.items)
-      .filter(item => item.selected);
-    setSelectedItems(selected);
   };
 
   const handleCreateOrder = () => {
-    console.log('Creating order with:', {
-      jobber: selectedJobber,
-      items: selectedItems
-    });
     setCreateOrderVisible(false);
     setSelectedJobber(null);
     setSelectedItems([]);
-    initializeSalesOrders();
+  };
+
+  const handleSelectOrdersClick = async () => {
+    try {
+      setLoadingOrdersButton(true);
+      await fetchOrdersList(1);
+      setOrderSidebarVisible(true);
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to load orders',
+        life: 3000
+      });
+    } finally {
+      setLoadingOrdersButton(false);
+    }
   };
 
   const openCreateOrderDialog = async () => {
     try {
-      const response = await JobOrderService.getJobberList();
-      const formattedJobbers = response.map(jobber => ({
+      const jobbersResponse = await JobOrderService.getJobberList();
+      const formattedJobbers = jobbersResponse.map(jobber => ({
         label: jobber.sitename,
         value: jobber.code,
         ...jobber
       }));
-      setJobbers(formattedJobbers);
+      setJobbers(formattedJobbers);      
+      setCreateOrderVisible(true);
     } catch (error) {
-      console.error('Error fetching jobbers:', error);
+      console.error('Error:', error);
       toast.current?.show({
         severity: 'error',
         summary: 'Error',
-        detail: 'Failed to fetch jobbers',
+        detail: 'Failed to initialize order creation',
         life: 3000
       });
     }
-    
-    initializeSalesOrders();
-    setCreateOrderVisible(true);
   };
 
-  const filteredOrders = salesOrders.filter(order => 
-    order.orderId.toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
-    order.customerName.toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
-    order.items.some(item => item.name.toLowerCase().includes(orderSearchTerm.toLowerCase()))
-  );
+  const handleJobberPayment = (jobOrder: JobOrderMain) => {
+    setSelectedJobOrderForPayment(jobOrder);
+    setPaymentDialogVisible(true);
+  };
+  
+  const submitJobberPayment = async (paymentData: any) => {
+    try {      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Payment recorded successfully',
+        life: 3000
+      });
+      setPaymentDialogVisible(false);
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to record payment',
+        life: 3000
+      });
+    }
+  };
 
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -441,7 +552,10 @@ const JobOrder = () => {
                   <i className="pi pi-search" />
                   <InputText
                       value={orderSearchTerm}
-                      onChange={(e) => setOrderSearchTerm(e.target.value)}
+                      onChange={(e) => {
+                        setOrderSearchTerm(e.target.value);
+                        fetchOrdersList(1, e.target.value);
+                      }}
                       placeholder="Search"
                       className="w-full"
                   />
@@ -449,40 +563,53 @@ const JobOrder = () => {
           </div>
           
           <ScrollPanel style={{ height: 'calc(74vh - 166px)' }}>
-            {filteredOrders.map((order) => (
-              <div key={order.id} className="mb-3 p-3 border-round surface-card">
-                <div className="flex align-items-center justify-content-between mb-2">
-                  <div>
-                    <span className="font-bold">{order.orderId}</span>
-                    <span className="ml-2 text-sm">({order.customerName})</span>
-                  </div>
-                  <div className="flex align-items-center">
-                    <Checkbox 
-                      inputId={`select-all-${order.id}`}
-                      checked={order.items.every(item => item.selected)}
-                      onChange={(e) => handleSelectAllInOrder(order.id, e.checked ?? false)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid">
-                  {order.items.map((item) => (
-                    <div key={item.id} className="col-12 md:col-6">
-                      <div className="flex align-items-center p-2 border-round surface-50">
-                        <Checkbox 
-                          inputId={`item-${item.id}`}
-                          checked={item.selected}
-                          onChange={() => handleItemSelection(order.id, item.id)}
-                        />
-                        <label htmlFor={`item-${item.id}`} className="ml-2">
-                          {item.name}
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {loadingOrders ? (
+              <div className="flex justify-content-center p-4">
+                <ProgressSpinner style={{width: '50px', height: '50px'}} strokeWidth="6" />
               </div>
-            ))}
+            ) : ordersList.length > 0 ? (
+              ordersList.map((order) => (
+                <div key={order.id} className="mb-3 p-3 border-round surface-card">
+                  <div className="flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <span className="font-bold">{order.orderMain.docno}</span>
+                      <span className="ml-2 text-sm">({order.orderMain.user.fname})</span>
+                    </div>
+                    <div className="flex align-items-center">
+                      <Checkbox 
+                        inputId={`select-all-${order.id}`}
+                        checked={order.orderMain.orderDetails.every(item => 
+                          selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)
+                        )}
+                        onChange={(e) => handleSelectAllInOrder(order, e.checked ?? false)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid">
+                    {order.orderMain.orderDetails.map((item) => (
+                      <div key={`${order.id}-${item.material.id}`} className="col-12 md:col-6">
+                        <div className="flex align-items-center p-2 border-round surface-50">
+                          <Checkbox 
+                            inputId={`item-${order.id}-${item.material.id}`}
+                            checked={selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)}
+                            onChange={() => handleItemSelection(order, item.material)}
+                          />
+                          <label htmlFor={`item-${order.id}-${item.material.id}`} className="ml-2">
+                            {item.material.name}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="w-full p-4 text-center surface-100 border-round">
+                <i className="pi pi-search text-3xl mb-2" />
+                <h4>No orders found</h4>
+              </div>
+            )}
           </ScrollPanel>
           
           <div className="flex justify-content-between align-items-center mt-auto p-3 border-top-1 surface-border">
@@ -497,7 +624,6 @@ const JobOrder = () => {
                 onClick={() => {
                   setOrderSidebarVisible(false);
                   setSelectedItems([]);
-                  initializeSalesOrders();
                 }}
                 className="p-button-text"
               />
@@ -570,8 +696,10 @@ const JobOrder = () => {
             <Button 
               label="Select Orders" 
               icon="pi pi-list" 
-              onClick={() => setOrderSidebarVisible(true)}
+              onClick={handleSelectOrdersClick}
               className="w-full p-button-outlined"
+              loading={loadingOrdersButton}
+              disabled={loadingOrdersButton}
             />
           </div>
 
@@ -602,7 +730,7 @@ const JobOrder = () => {
         blockScroll
       >
         {selectedJobOrder && (
-          <div className="p-fluid">
+          <div className="p-fluid my-4">
             <div className="grid">
               <div className="col-6">
                 <div className="field">
@@ -618,7 +746,7 @@ const JobOrder = () => {
               </div>
               <div className="col-6">
                 <div className="field">
-                  <label>Status</label>
+                  <label>Status &nbsp;</label>
                   <Tag 
                     value={selectedJobOrder.status.status_name} 
                     severity={getStatusSeverity(selectedJobOrder.status.status_name)} 
@@ -634,70 +762,257 @@ const JobOrder = () => {
             </div>
             
             <Divider />
-            
-            <h5 className="m-0 mb-3">Job Items</h5>
-            
-            {/* {selectedJobOrderDetails.items.map((item) => (
-              <div key={item.id} className="mb-4 surface-50 p-3 border-round">
+
+            <h5 className="m-0 mb-3">Job Order Details</h5>
+
+            {jobOrderDetails.map((detail, index) => (
+              <div key={index} className="mb-4 surface-50 p-3 border-round">
                 <div className="grid">
                   <div className="col-6">
                     <div className="field">
                       <label>Item Name</label>
-                      <p className="m-0 font-medium">{item.name}</p>
+                      <p className="m-0 font-medium">{detail.orderDetail.material.name}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Sales Order No</label>
-                      <p className="m-0 font-medium">{item.salesOrderNo}</p>
+                      <p className="m-0 font-medium">{detail.orderDetail.measurementMain.docno}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Customer Name</label>
-                      <p className="m-0 font-medium">{item.customerName}</p>
+                      <p className="m-0 font-medium">{detail.orderDetail.measurementMain.user.fname}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Trial Date</label>
-                      <p className="m-0 font-medium">{formatDate(item.trialDate)}</p>
+                      <p className="m-0 font-medium">{formatDate(detail.trial_date)}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
-                      <label>Pending Qty</label>
-                      <p className="m-0 font-medium">{item.pendingQty}</p>
+                      <label>Delivered Qty</label>
+                      <p className="m-0 font-medium">{detail.delivered_qty}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Cancelled Qty</label>
-                      <p className="m-0 font-medium">{item.cancelledQty}</p>
+                      <p className="m-0 font-medium">{detail.cancelled_qty}</p>
                     </div>
                   </div>
                   <div className="col-12">
                     <div className="field">
                       <label>Notes</label>
-                      <p className="m-0 font-medium">{item.notes || 'No notes'}</p>
+                      <p className="m-0 font-medium">{detail?.desc1 || 'No notes'}</p>
                     </div>
                   </div>
                   
-                  {item.imageUrl && (
+                  {detail.image_url && (
                     <div className="col-12 mt-3">
                       <Button 
                         label="View Image" 
                         icon="pi pi-image" 
-                        onClick={() => window.open(item.imageUrl, '_blank')}
+                        onClick={() => window.open(detail.image_url || '', '_blank')}
                         className="p-button-outlined"
                       />
                     </div>
                   )}
+                  <div className="col-12 mt-3">
+                    <Button 
+                      label="View Measurements" 
+                      icon="pi pi-ruler" 
+                      onClick={() => showMeasurements(
+                        detail.orderDetail.measurementMain.measurementDetails,
+                        detail.orderDetail.material.name
+                      )}
+                      className="p-button-outlined mb-3"
+                    />
+                     <Button 
+                      label="Record Payment" 
+                      icon="pi pi-money-bill" 
+                      onClick={() => handleJobberPayment(selectedJobOrder!)}
+                      className="p-button-success"
+                    />
+                  </div>
                 </div>
               </div>
-            ))} */}
+            ))}
           </div>
         )}
+      </Dialog>
+
+      <Dialog 
+        header={`Measurement Details for ${selectedMaterialName}`} 
+        visible={measurementDialogVisible} 
+        onHide={() => {
+          setMeasurementDialogVisible(false);
+          setSelectedMeasurements([]);
+        }}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+      >
+        <div className="p-fluid">
+          <div className="grid my-2">
+            <div className="col-6 font-bold text-600">Customer Name:</div>
+            <div className="col-6 font-medium text-right">
+              {selectedMeasurements.length > 0 ? 
+                jobOrderDetails.find(d => 
+                  d.orderDetail.measurementMain.measurementDetails.some(m => 
+                    m.measurement_master_id === selectedMeasurements[0].measurement_master_id
+                  )
+                )?.orderDetail.measurementMain.user.fname || 'N/A' : 'N/A'}
+            </div>
+            
+            <div className="col-6 font-bold text-600">Item Name:</div>
+            <div className="col-6 font-medium text-right">
+              {selectedMaterialName}
+            </div>
+          </div>
+
+          {selectedMeasurements.length > 0 ? (
+            <>
+              <div className="surface-100 p-3 border-round my-4">
+                <h4 className="m-0">Measurements</h4>
+              </div>
+
+              <div className="grid mb-4">
+                {selectedMeasurements.map((detail, index) => (
+                  <div key={index} className="col-12 md:col-6">
+                    <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                      <span className="font-medium">{detail.measurementMaster.measurement_name}</span>
+                      <span className="font-bold">{detail.measurement_val}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="surface-100 p-3 border-round my-4 text-center">
+              <i className="pi pi-info-circle text-2xl mb-2" />
+              <p className="m-0">No measurement details available</p>
+            </div>
+          )}
+
+          <div className="surface-50 p-3 border-round">
+            <h5 className="mt-0 mb-3">Stitch Options</h5>
+            <div className="grid">
+              <div className="col-6 font-bold text-600">Collar:</div>
+              <div className="col-6 font-medium text-right">
+                Classic
+              </div>
+              
+              <div className="col-6 font-bold text-600">Sleeve:</div>
+              <div className="col-6 font-medium text-right">
+                Full
+              </div>
+              
+              <div className="col-6 font-bold text-600">Cuffs:</div>
+              <div className="col-6 font-medium text-right">
+                Squared
+              </div>
+              
+              <div className="col-6 font-bold text-600">Pocket Type:</div>
+              <div className="col-6 font-medium text-right">
+                Classic
+              </div>
+              
+              <div className="col-6 font-bold text-600">Back Style:</div>
+              <div className="col-6 font-medium text-right">
+                Plain
+              </div>
+              
+              <div className="col-6 font-bold text-600">Button Style:</div>
+              <div className="col-6 font-medium text-right">
+                Standard
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog 
+        header={`Record Payment for ${selectedJobOrderForPayment?.docno || `JOB-${selectedJobOrderForPayment?.id}`}`}
+        visible={paymentDialogVisible}
+        onHide={() => setPaymentDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+      >
+        <div className="p-fluid">
+          <div className="field my-4">
+            <label htmlFor="amount" className="font-bold block mb-2">
+              Payment Amount (₹)
+            </label>
+            <InputText 
+              id="amount" 
+              type="number" 
+              className="w-full" 
+              placeholder="Enter amount"
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="paymentDate" className="font-bold block mb-2">
+              Payment Date
+            </label>
+            <InputText 
+              id="paymentDate" 
+              type="date" 
+              className="w-full" 
+              defaultValue={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="paymentMethod" className="font-bold block mb-2">
+              Payment Method
+            </label>
+            <Dropdown 
+              id="paymentMethod"
+              options={[
+                { label: 'Cash', value: 'cash' },
+                { label: 'Bank Transfer', value: 'bank' },
+                { label: 'UPI', value: 'upi' },
+                { label: 'Cheque', value: 'cheque' }
+              ]}
+              optionLabel="label"
+              placeholder="Select payment method"
+              className="w-full"
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="reference" className="font-bold block mb-2">
+              Reference/Note
+            </label>
+            <InputText 
+              id="reference" 
+              className="w-full" 
+              placeholder="Enter reference or note"
+            />
+          </div>
+
+          <div className="flex justify-content-end gap-2 mt-4">
+            <Button 
+              label="Submit" 
+              icon="pi pi-check" 
+              onClick={() => submitJobberPayment({
+                amount: 0,
+                date: new Date().toISOString(),
+                method: 'cash',
+                reference: ''
+              })}
+              className="p-button-success"
+            />
+          </div>
+        </div>
       </Dialog>
     </div>
   );
