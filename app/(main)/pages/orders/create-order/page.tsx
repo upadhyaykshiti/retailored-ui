@@ -669,7 +669,7 @@ const CreateOrder = () => {
                             <InputText
                                 value={customerSearch}
                                 onChange={handleCustomerSearch}
-                                placeholder="Search customers..."
+                                placeholder="Search"
                                 className="w-full"
                             />
                         </span>
