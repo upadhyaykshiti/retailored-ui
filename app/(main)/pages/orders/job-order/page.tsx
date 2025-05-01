@@ -69,6 +69,7 @@ interface JobOrderDetail {
 interface OrdersList {
   id: string;
   order_id: string;
+  measurement_main_id: string;
   orderMain: {
     docno: string;
     user: {
@@ -76,6 +77,8 @@ interface OrdersList {
       fname: string;
     };
     orderDetails: {
+      id: string;
+      ord_qty: number;
       material: {
         id: string;
         name: string;
@@ -87,11 +90,20 @@ interface OrdersList {
 interface OrderItem {
   id: string;
   materialId: string;
+  measurementMainID: string;
   name: string;
   selected: boolean;
+  quantity: number;
+  maxQuantity: number;
   orderId?: string;
   customerName?: string;
   orderUniqueId?: string;
+}
+
+interface OrderItemDetails {
+  quantity: number;
+  makingCharge: number;
+  image: File | null;
 }
 
 const JobOrder = () => {
@@ -100,9 +112,17 @@ const JobOrder = () => {
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
   const [selectedMeasurements, setSelectedMeasurements] = useState<MeasurementDetail[]>([]);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
+  const [itemDetails, setItemDetails] = useState<{[key: string]: OrderItemDetails}>({});
   const [selectedJobOrderForPayment, setSelectedJobOrderForPayment] = useState<JobOrderMain | null>(null);
+  const [itemManagementSidebarVisible, setItemManagementSidebarVisible] = useState(false);
+  const [currentlyEditingItem, setCurrentlyEditingItem] = useState<OrderItem | null>(null);
+  const [makingCharges, setMakingCharges] = useState<{[key: string]: number}>({});
+  const [uploadingImages, setUploadingImages] = useState<{[key: string]: File | null}>({});
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [selectedMaterialName, setSelectedMaterialName] = useState('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrderMain | null>(null);
+  const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [createOrderVisible, setCreateOrderVisible] = useState(false);
@@ -118,6 +138,12 @@ const JobOrder = () => {
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [loadingJobbers, setLoadingJobbers] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: '',
+    reference: ''
+  });
   const [pagination, setPagination] = useState({
     currentPage: 1,
     hasMorePages: false,
@@ -193,6 +219,7 @@ const JobOrder = () => {
           value: jobber.code
         }));
         setJobbers(formattedJobbers);
+        console.log(formattedJobbers);
       } catch (error) {
         console.error('Error fetching jobbers:', error);
         toast.current?.show({
@@ -238,6 +265,21 @@ const JobOrder = () => {
     }
   }, []);
 
+  const fetchPaymentModes = useCallback(async () => {
+    try {
+      const modes = await JobOrderService.getPaymentModes();
+      setPaymentModes(modes);
+    } catch (error) {
+      console.error('Error fetching payment modes:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to fetch payment methods',
+        life: 3000
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (loading || !pagination.hasMorePages) return;
 
@@ -263,6 +305,7 @@ const JobOrder = () => {
       case 'In Progress': return 'info';
       case 'Pending': return 'warning';
       case 'Cancelled': return 'danger';
+      case 'Unknown': return 'info';
       default: return null;
     }
   };
@@ -279,15 +322,56 @@ const JobOrder = () => {
     setMeasurementDialogVisible(true);
   };
 
+  const openItemManagement = (item: OrderItem) => {
+    setCurrentlyEditingItem(item);
+    setItemManagementSidebarVisible(true);
+  };
+  
+  const handleQuantityChange = (newQuantity: number) => {
+    if (!currentlyEditingItem) return;
+    
+    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
+    const clampedQty = Math.min(Math.max(1, newQuantity), maxQty);
+    
+    setItemDetails(prev => ({
+      ...prev,
+      [currentlyEditingItem.id]: {
+        ...prev[currentlyEditingItem.id],
+        quantity: clampedQty
+      }
+    }));
+  };
+  
+  const handleMakingChargeChange = (value: number) => {
+    if (!currentlyEditingItem) return;
+    setItemDetails(prev => ({
+      ...prev,
+      [currentlyEditingItem.id]: {
+        ...(prev[currentlyEditingItem.id] || {quantity: 1, image: null}),
+        makingCharge: value
+      }
+    }));
+  };
+  
+  const handleItemImageUpload = (file: File | null) => {
+    if (!currentlyEditingItem) return;
+    setItemDetails(prev => ({
+      ...prev,
+      [currentlyEditingItem.id]: {
+        ...(prev[currentlyEditingItem.id] || {quantity: 1, makingCharge: 0}),
+        image: file
+      }
+    }));
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Not scheduled';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN');
   };
 
-  const handleItemSelection = (order: OrdersList, material: { id: string; name: string }) => {
+  const handleItemSelection = (order: OrdersList, material: { id: string; name: string }, ord_qty: number) => {
     setSelectedItems(prev => {
-      // Create a unique key combining order.id and material.id
       const itemKey = `${order.id}-${material.id}`;
       const existingIndex = prev.findIndex(item => item.id === itemKey);
       
@@ -295,13 +379,16 @@ const JobOrder = () => {
         return prev.filter(item => item.id !== itemKey);
       } else {
         return [...prev, {
-          id: itemKey, // Use the combined key as ID
-          materialId: material.id, // Store material ID separately
+          id: itemKey,
+          materialId: material.id,
+          measurementMainID: order.measurement_main_id,
           name: material.name,
           selected: true,
+          quantity: 1,
+          maxQuantity: ord_qty,
           orderId: order.orderMain.docno,
           customerName: order.orderMain.user.fname,
-          orderUniqueId: order.id // Store the order's unique ID
+          orderUniqueId: order.id
         }];
       }
     });
@@ -310,10 +397,13 @@ const JobOrder = () => {
   const handleSelectAllInOrder = (order: OrdersList, selectAll: boolean) => {
     setSelectedItems(prev => {
       const orderItems = order.orderMain.orderDetails.map(item => ({
-        id: `${order.id}-${item.material.id}`, // Combined key
+        id: `${order.id}-${item.material.id}`,
         materialId: item.material.id,
+        measurementMainID: order.measurement_main_id,
         name: item.material.name,
         selected: true,
+        quantity: 1,
+        maxQuantity: item.ord_qty,
         orderId: order.orderMain.docno,
         customerName: order.orderMain.user.fname,
         orderUniqueId: order.id
@@ -332,10 +422,55 @@ const JobOrder = () => {
     });
   };
 
-  const handleCreateOrder = () => {
-    setCreateOrderVisible(false);
-    setSelectedJobber(null);
-    setSelectedItems([]);
+  const handleCreateOrder = async () => {
+    if (!selectedJobber || selectedItems.length === 0) return;
+  
+    setCreatingOrder(true);
+    try {
+      const now = new Date();
+      const docno = `JOB-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  
+      const jobDetails = selectedItems.map(item => ({
+        admsite_code: selectedJobber.value,
+        order_details_id: item.orderUniqueId || null,
+        material_master_id: item.materialId,
+        measurement_main_id: item.measurementMainID,
+        image_url: itemDetails[item.id]?.image ? URL.createObjectURL(itemDetails[item.id].image!) : null,
+        item_cost: itemDetails[item.id]?.makingCharge || 0,
+        ord_qty: itemDetails[item.id]?.quantity || 1
+      }));
+  
+      await JobOrderService.createJobOrderwithInput({
+        job_date: new Date().toISOString().split('T')[0],
+        status_id: null,
+        docno: docno,
+        job_details: jobDetails
+      });
+  
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Job order created successfully',
+        life: 3000
+      });
+  
+      setCreateOrderVisible(false);
+      setSelectedJobber(null);
+      setSelectedItems([]);
+      setItemDetails({});
+      
+      fetchJobOrders(1, searchTerm);
+    } catch (error) {
+      console.error('Error creating job order:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to create job order',
+        life: 3000
+      });
+    } finally {
+      setCreatingOrder(false);
+    }
   };
 
   const handleSelectOrdersClick = async () => {
@@ -376,21 +511,56 @@ const JobOrder = () => {
     }
   };
 
-  const handleJobberPayment = (jobOrder: JobOrderMain) => {
+  const handleJobberPayment = async (jobOrder: JobOrderMain) => {
     setSelectedJobOrderForPayment(jobOrder);
+    await fetchPaymentModes();
     setPaymentDialogVisible(true);
   };
   
-  const submitJobberPayment = async (paymentData: any) => {
-    try {      
+  
+  const handlePaymentSubmit = async () => {
+    if (!selectedJobOrderForPayment || !paymentForm.amount || !paymentForm.paymentDate || !selectedPaymentMode) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Please fill all required fields',
+        life: 3000
+      });
+      return;
+    }
+  
+    try {
+      const paymentData = {
+        docno: selectedJobOrderForPayment.docno || `JOB-${selectedJobOrderForPayment.id}`,
+        payment_date: paymentForm.paymentDate,
+        payment_mode: selectedPaymentMode,
+        payment_ref: paymentForm.reference || null,
+        payment_amt: parseFloat(paymentForm.amount)
+      };
+  
+      await JobOrderService.createPaymentMain(paymentData);
+      
       toast.current?.show({
         severity: 'success',
         summary: 'Success',
         detail: 'Payment recorded successfully',
         life: 3000
       });
+  
+      setPaymentForm({
+        amount: '',
+        paymentDate: new Date().toISOString().split('T')[0],
+        paymentMethod: '',
+        reference: ''
+      });
+      setSelectedPaymentMode(null);
       setPaymentDialogVisible(false);
+      if (selectedJobOrder) {
+        await fetchJobOrderDetails(selectedJobOrder.id);
+      }
+  
     } catch (error) {
+      console.error('Error recording payment:', error);
       toast.current?.show({
         severity: 'error',
         summary: 'Error',
@@ -399,6 +569,36 @@ const JobOrder = () => {
       });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
+          <Skeleton width="10rem" height="2rem" />
+          <Skeleton width="100%" height="2.5rem" className="md:w-20rem" />
+          <Skeleton width="100%" height="2.5rem" />
+        </div>
+  
+        <div className="grid">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="col-12 md:col-6 lg:col-4">
+              <Card className="h-full">
+                <Skeleton width="100%" height="2rem" className="mb-2" />
+                <Divider className="my-2" />
+                <Skeleton width="100%" height="1rem" className="mb-2" />
+                <Skeleton width="100%" height="1rem" className="mb-2" />
+                <Skeleton width="100%" height="1rem" className="mb-2" />
+                <Skeleton width="100%" height="1rem" className="mb-2" />
+                <Divider className="my-2" />
+                <Skeleton width="100%" height="4rem" className="mb-2" />
+                <Skeleton width="100%" height="2.5rem" className="mt-3" />
+              </Card>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  } 
 
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -435,8 +635,8 @@ const JobOrder = () => {
                 <div className="flex justify-content-between align-items-center">
                   <span className="font-bold">{jobOrder.docno || `JOB-${jobOrder.id}`}</span>
                   <Tag 
-                    value={jobOrder.status.status_name} 
-                    severity={getStatusSeverity(jobOrder.status.status_name)} 
+                    value={jobOrder.status?.status_name || "Unknown"} 
+                    severity={getStatusSeverity(jobOrder.status?.status_name)} 
                   />
                 </div>
                 
@@ -488,22 +688,6 @@ const JobOrder = () => {
             </Card>
           </div>
         ))}
-
-        {loading && Array.from({ length: 3 }).map((_, index) => (
-          <div key={`skeleton-${index}`} className="col-12 md:col-6 lg:col-4">
-            <Card className="h-full">
-              <Skeleton width="100%" height="2rem" className="mb-2" />
-              <Divider className="my-2" />
-              <Skeleton width="100%" height="1rem" className="mb-2" />
-              <Skeleton width="100%" height="1rem" className="mb-2" />
-              <Skeleton width="100%" height="1rem" className="mb-2" />
-              <Skeleton width="100%" height="1rem" className="mb-2" />
-              <Divider className="my-2" />
-              <Skeleton width="100%" height="4rem" className="mb-2" />
-              <Skeleton width="100%" height="2.5rem" className="mt-3" />
-            </Card>
-          </div>
-        ))}
       </div>
 
       {!loading && jobOrders.length === 0 && (
@@ -526,117 +710,6 @@ const JobOrder = () => {
         {loading && pagination.currentPage > 1 && <ProgressSpinner style={{width: '50px', height: '50px'}} strokeWidth="8" />}
       </div>
 
-      <Sidebar 
-        visible={orderSidebarVisible} 
-        onHide={() => setOrderSidebarVisible(false)}
-        position="bottom"
-        style={{ 
-          width: '100%',
-          height: 'auto',
-          maxHeight: '80vh',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
-        }}
-        className="custom-selector-sidebar"
-        header={
-          <div className="sticky top-0 bg-white z-1 p-2 surface-border flex justify-content-between align-items-center">
-              <span className="font-bold text-2xl">Select Orders</span>
-          </div>
-        }
-        blockScroll
-      >
-        <div className="flex flex-column h-full">
-          <div className="p-3 border-bottom-1 surface-border">
-              <span className="p-input-icon-left w-full">
-                  <i className="pi pi-search" />
-                  <InputText
-                      value={orderSearchTerm}
-                      onChange={(e) => {
-                        setOrderSearchTerm(e.target.value);
-                        fetchOrdersList(1, e.target.value);
-                      }}
-                      placeholder="Search"
-                      className="w-full"
-                  />
-              </span>
-          </div>
-          
-          <ScrollPanel style={{ height: 'calc(74vh - 166px)' }}>
-            {loadingOrders ? (
-              <div className="flex justify-content-center p-4">
-                <ProgressSpinner style={{width: '50px', height: '50px'}} strokeWidth="6" />
-              </div>
-            ) : ordersList.length > 0 ? (
-              ordersList.map((order) => (
-                <div key={order.id} className="mb-3 p-3 border-round surface-card">
-                  <div className="flex align-items-center justify-content-between mb-2">
-                    <div>
-                      <span className="font-bold">{order.orderMain.docno}</span>
-                      <span className="ml-2 text-sm">({order.orderMain.user.fname})</span>
-                    </div>
-                    <div className="flex align-items-center">
-                      <Checkbox 
-                        inputId={`select-all-${order.id}`}
-                        checked={order.orderMain.orderDetails.every(item => 
-                          selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)
-                        )}
-                        onChange={(e) => handleSelectAllInOrder(order, e.checked ?? false)}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid">
-                    {order.orderMain.orderDetails.map((item) => (
-                      <div key={`${order.id}-${item.material.id}`} className="col-12 md:col-6">
-                        <div className="flex align-items-center p-2 border-round surface-50">
-                          <Checkbox 
-                            inputId={`item-${order.id}-${item.material.id}`}
-                            checked={selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)}
-                            onChange={() => handleItemSelection(order, item.material)}
-                          />
-                          <label htmlFor={`item-${order.id}-${item.material.id}`} className="ml-2">
-                            {item.material.name}
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="w-full p-4 text-center surface-100 border-round">
-                <i className="pi pi-search text-3xl mb-2" />
-                <h4>No orders found</h4>
-              </div>
-            )}
-          </ScrollPanel>
-          
-          <div className="flex justify-content-between align-items-center mt-auto p-3 border-top-1 surface-border">
-            <div>
-              <span className="font-bold">Selected Items: </span>
-              <span>{selectedItems.length}</span>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                label="Cancel" 
-                icon="pi pi-times" 
-                onClick={() => {
-                  setOrderSidebarVisible(false);
-                  setSelectedItems([]);
-                }}
-                className="p-button-text"
-              />
-              <Button 
-                label="Confirm" 
-                icon="pi pi-check" 
-                onClick={() => setOrderSidebarVisible(false)}
-              />
-            </div>
-          </div>
-        </div>
-      </Sidebar>
-
       <Dialog 
         header="Create New Job Order" 
         visible={createOrderVisible} 
@@ -650,7 +723,7 @@ const JobOrder = () => {
         className={isMaximized ? 'maximized-dialog' : ''}
         blockScroll
         footer={
-          <div className="flex justify-content-end gap-2 w-full p-3 border-top-1 surface-border bg-white">
+          <div className="flex justify-content-end gap-2 w-full p-2 border-top-1 surface-border bg-white">
             <Button 
               label="Cancel" 
               icon="pi pi-times" 
@@ -658,14 +731,16 @@ const JobOrder = () => {
                 setCreateOrderVisible(false);
                 setSelectedJobber(null);
                 setSelectedItems([]);
+                setUploadingImages({});
               }}
               className="p-button-text"
+              disabled={creatingOrder}
             />
             <Button 
-              label="Create Order" 
-              icon="pi pi-check" 
+              label={creatingOrder ? 'Creating...' : 'Create Order'} 
+              icon={creatingOrder ? 'pi pi-spinner pi-spin' : 'pi pi-check'} 
               onClick={handleCreateOrder}
-              disabled={!selectedJobber || selectedItems.length === 0}
+              disabled={!selectedJobber || selectedItems.length === 0 || creatingOrder}
             />
           </div>
         }
@@ -705,20 +780,356 @@ const JobOrder = () => {
 
           {selectedItems.length > 0 && (
             <div className="mb-4">
-              <h5>Selected Items ({selectedItems.length})</h5>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex align-items-center mb-3 p-3 bg-primary-100 border-round">
+                <i className="pi pi-list-check text-primary-600 mr-2"></i>
+                <h5 className="text-lg font-semibold m-0 text-primary-800">
+                  Selected Items ({selectedItems.length})
+                </h5>
+              </div>
+              
+              <div className="flex flex-column gap-3">
                 {selectedItems.map(item => (
-                  <Tag 
-                    key={item.id} 
-                    value={item.name} 
-                    className="mr-2 mb-2" 
-                  />
+                  <div key={item.id} className="p-3 border-round surface-card shadow-2 hover:shadow-3 transition-all transition-duration-200">
+                    <div className="flex justify-content-between align-items-start mb-3">
+                      <div className="flex align-items-start gap-2 w-full">
+                        <div className="bg-primary-100 p-2 border-round">
+                          <i className="pi pi-box text-primary-600"></i>
+                        </div>
+                        
+                        <div className="flex-grow-1">
+                          <div className="text-lg font-semibold mb-1 text-900 line-clamp-1">
+                            {item.name}
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-2">
+                            <span className="flex align-items-center gap-1 text-sm bg-gray-100 p-1 px-2 border-round">
+                              <i className="pi pi-file-edit text-primary-500"></i>
+                              <span className="text-700">{item.orderId}</span>
+                            </span>
+                            
+                            <span className="flex align-items-center gap-1 text-sm bg-gray-100 p-1 px-2 border-round">
+                              <i className="pi pi-user text-primary-500"></i>
+                              <span className="text-700">{item.customerName}</span>
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <Button 
+                          icon="pi pi-pencil" 
+                          onClick={() => openItemManagement(item)}
+                          className="p-button-rounded p-button-outlined p-button-sm"
+                          aria-label="Edit item"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid mt-2">
+                      <div className="col-6">
+                        <div className="text-sm text-600 mb-1">Quantity</div>
+                        <div className="font-medium text-900">
+                          {itemDetails[item.id]?.quantity || 1}
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <div className="text-sm text-600 mb-1">Making Charges</div>
+                        <div className="font-medium text-900">
+                          ₹{itemDetails[item.id]?.makingCharge || 0}
+                        </div>
+                      </div>
+                    </div>
+
+                    {itemDetails[item.id]?.image && (
+                      <div className="mt-3">
+                        <div className="text-sm text-600 mb-1">Image Preview</div>
+                        <div className="border-1 border-round surface-border overflow-hidden">
+                          <img 
+                            src={URL.createObjectURL(itemDetails[item.id].image!)} 
+                            alt="Preview" 
+                            className="w-full" 
+                            style={{ 
+                              height: '120px',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
           )}
         </div>
       </Dialog>
+      
+      <Sidebar 
+        visible={orderSidebarVisible} 
+        onHide={() => setOrderSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '80vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-selector-sidebar"
+        header={
+          <div className="sticky top-0 bg-white z-1 p-2 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-2xl">Select Orders</span>
+          </div>
+        }
+        blockScroll
+      >
+        <div className="flex flex-column h-full">
+          <div className="p-3 border-bottom-1 surface-border">
+            <span className="p-input-icon-left w-full">
+              <i className="pi pi-search" />
+              <InputText
+                value={orderSearchTerm}
+                onChange={(e) => {
+                  setOrderSearchTerm(e.target.value);
+                  fetchOrdersList(1, e.target.value);
+                }}
+                placeholder="Search"
+                className="w-full"
+              />
+            </span>
+          </div>
+          
+          <ScrollPanel style={{ height: 'calc(74vh - 166px)' }}>
+            {loadingOrders ? (
+              <div className="flex justify-content-center p-4">
+                <ProgressSpinner style={{width: '50px', height: '50px'}} strokeWidth="4" />
+              </div>
+            ) : ordersList.length > 0 ? (
+              ordersList.map((order) => (
+                <div key={order.id} className="mb-3 p-3 border-round surface-card">
+                  <div className="flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <span className="font-bold">{order.orderMain.docno}</span>
+                      <span className="ml-2 text-sm">({order.orderMain.user.fname})</span>
+                    </div>
+                    <div className="flex align-items-center">
+                      <Checkbox 
+                        inputId={`select-all-${order.id}`}
+                        checked={order.orderMain.orderDetails.every(item => 
+                          selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)
+                        )}
+                        onChange={(e) => handleSelectAllInOrder(order, e.checked ?? false)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid">
+                    {order.orderMain.orderDetails.map((item) => (
+                      <div key={`${order.id}-${item.material.id}`} className="col-12 md:col-6">
+                        <div className="flex align-items-center justify-content-between p-2 border-round surface-50">
+                          <div className="flex align-items-center p-2">
+                            <Checkbox 
+                              inputId={`item-${order.id}-${item.material.id}`}
+                              checked={selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)}
+                              onChange={() => handleItemSelection(order, item.material, item.ord_qty)}
+                            />
+                            <label htmlFor={`item-${order.id}-${item.material.id}`} className="ml-2">
+                              {item.material.name}
+                            </label>
+                          </div>
+                          
+                          {selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`) && (
+                            <Button 
+                              icon="pi pi-plus" 
+                              onClick={() => openItemManagement({
+                                id: `${order.id}-${item.material.id}`,
+                                materialId: item.material.id,
+                                measurementMainID: order.measurement_main_id,
+                                name: item.material.name,
+                                selected: true,
+                                quantity: 1,
+                                maxQuantity: item.ord_qty,
+                                orderId: order.orderMain.docno,
+                                customerName: order.orderMain.user.fname,
+                                orderUniqueId: order.id
+                              })}
+                              className="p-button-rounded p-button-text p-button-sm"
+                              aria-label="Add item"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="w-full p-4 text-center surface-100 border-round">
+                <i className="pi pi-search text-3xl mb-2" />
+                <h4>No orders found</h4>
+              </div>
+            )}
+          </ScrollPanel>
+          
+          <div className="flex justify-content-between align-items-center p-3 border-top-1 surface-border sticky bottom-0 bg-white">
+            <div>
+              <span className="font-bold">Selected Items: </span>
+              <span>{selectedItems.length}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                label="Cancel" 
+                icon="pi pi-times" 
+                onClick={() => {
+                  setOrderSidebarVisible(false);
+                  setSelectedItems([]);
+                }}
+                className="p-button-text"
+              />
+              <Button 
+                label="Confirm" 
+                icon="pi pi-check" 
+                onClick={() => setOrderSidebarVisible(false)}
+              />
+            </div>
+          </div>
+        </div>
+      </Sidebar>
+
+      <Sidebar 
+        visible={itemManagementSidebarVisible}
+        onHide={() => setItemManagementSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '80vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-item-management-sidebar"
+        header={
+          <div className="sticky top-0 bg-white z-1 p-3 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-xl">
+              {currentlyEditingItem?.name || 'Item Details'}
+            </span>
+          </div>
+        }
+        blockScroll
+      >
+        {currentlyEditingItem && (
+          <div className="p-3">
+            <div className="field mb-4">
+              <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-sort-amount-up mr-2"></i>
+                Quantity
+              </label>
+              <div className="flex align-items-center justify-content-between bg-gray-100 p-2 border-round">
+                <Button
+                  icon="pi pi-minus" 
+                  onClick={() => handleQuantityChange(Math.max(1, (itemDetails[currentlyEditingItem.id]?.quantity || 1) - 1))}
+                  className="p-button-rounded p-button-text"
+                  disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) <= 1}
+                />
+                <InputText 
+                  value={String(itemDetails[currentlyEditingItem.id]?.quantity || 1)}
+                  onChange={(e) => {
+                    const newValue = Math.max(1, parseInt(e.target.value) || 1);
+                    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
+                    handleQuantityChange(Math.min(newValue, maxQty));
+                  }}
+                  className="text-center mx-2 bg-white"
+                  style={{ width: '60px' }}
+                  keyfilter="int"
+                />
+                <Button 
+                  icon="pi pi-plus" 
+                  onClick={() => {
+                    const currentQty = itemDetails[currentlyEditingItem.id]?.quantity || 1;
+                    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
+                    handleQuantityChange(Math.min(currentQty + 1, maxQty));
+                  }}
+                  className="p-button-rounded p-button-text"
+                  disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) >= 
+                            (selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity)}
+                />
+              </div>
+            </div>
+
+            <div className="field mb-4">
+              <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-money-bill mr-2"></i>
+                Making Charges (₹)
+              </label>
+              <InputText 
+                value={String(itemDetails[currentlyEditingItem.id]?.makingCharge || 0)}
+                onChange={(e) => handleMakingChargeChange(parseFloat(e.target.value) || 0)}
+                className="w-full"
+                keyfilter="money"
+              />
+            </div>
+
+            <div className="field">
+              <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-image mr-2"></i>
+                  Image
+              </label>
+              
+              {itemDetails[currentlyEditingItem.id]?.image ? (
+                <div className="border-1 surface-border border-round p-3">
+                  <div className="flex justify-content-between align-items-center mb-3">
+                    <span className="font-medium">Image:</span>
+                    <Button 
+                      icon="pi pi-trash" 
+                      onClick={() => handleItemImageUpload(null)}
+                      className="p-button-sm"
+                      severity="danger"
+                      text
+                    />
+                  </div>
+                  <div className="flex justify-content-center">
+                    <img 
+                      src={URL.createObjectURL(itemDetails[currentlyEditingItem.id].image!)} 
+                      alt="Item preview" 
+                      className="border-round w-full max-h-20rem"
+                      style={{ 
+                        objectFit: 'cover',
+                        aspectRatio: '1/1'
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-column gap-2">
+                  <input
+                    id={`item-image-${currentlyEditingItem.id}`}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleItemImageUpload(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                  <label 
+                    htmlFor={`item-image-${currentlyEditingItem.id}`}
+                    className="p-button p-component p-button-outlined w-full flex justify-content-center align-items-center gap-2"
+                  >
+                    <i className="pi pi-upload"></i>
+                    <span>Upload Image</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white pt-3 pb-1 border-top-1 surface-border w-full">
+              <Button 
+                label="Done"
+                icon="pi pi-check" 
+                onClick={() => setItemManagementSidebarVisible(false)}
+                className="w-full p-button-sm"
+              />
+            </div>
+          </div>
+        )}
+      </Sidebar>
 
       <Dialog 
         header={`Order Details - ${selectedJobOrder?.docno || `JOB-${selectedJobOrder?.id}`}`} 
@@ -748,8 +1159,8 @@ const JobOrder = () => {
                 <div className="field">
                   <label>Status &nbsp;</label>
                   <Tag 
-                    value={selectedJobOrder.status.status_name} 
-                    severity={getStatusSeverity(selectedJobOrder.status.status_name)} 
+                    value={selectedJobOrder.status?.status_name || "Unknown"}
+                    severity={getStatusSeverity(selectedJobOrder.status?.status_name)} 
                   />
                 </div>
               </div>
@@ -800,8 +1211,8 @@ const JobOrder = () => {
                   </div>
                   <div className="col-6">
                     <div className="field">
-                      <label>Cancelled Qty</label>
-                      <p className="m-0 font-medium">{detail.cancelled_qty}</p>
+                      <label>Pending Amount</label>
+                      <p className="m-0 font-medium">{detail.item_cost}</p>
                     </div>
                   </div>
                   <div className="col-12">
@@ -821,22 +1232,24 @@ const JobOrder = () => {
                       />
                     </div>
                   )}
-                  <div className="col-12 mt-3">
-                    <Button 
+                  <div className="col-12 mt-2">
+                    <Button
                       label="View Measurements" 
-                      icon="pi pi-ruler" 
+                      icon="pi pi-eye" 
                       onClick={() => showMeasurements(
                         detail.orderDetail.measurementMain.measurementDetails,
                         detail.orderDetail.material.name
                       )}
-                      className="p-button-outlined mb-3"
+                      className="p-button-outlined"
                     />
-                     <Button 
-                      label="Record Payment" 
-                      icon="pi pi-money-bill" 
-                      onClick={() => handleJobberPayment(selectedJobOrder!)}
-                      className="p-button-success"
-                    />
+                  </div>
+                  <div className="col-12 mt-2">
+                    <Button 
+                        label="Record Payment" 
+                        icon="pi pi-money-bill" 
+                        onClick={() => handleJobberPayment(selectedJobOrder!)}
+                        className="p-button-success"
+                      />
                   </div>
                 </div>
               </div>
@@ -955,6 +1368,8 @@ const JobOrder = () => {
               type="number" 
               className="w-full" 
               placeholder="Enter amount"
+              value={paymentForm.amount}
+              onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
             />
           </div>
 
@@ -966,7 +1381,8 @@ const JobOrder = () => {
               id="paymentDate" 
               type="date" 
               className="w-full" 
-              defaultValue={new Date().toISOString().split('T')[0]}
+              value={paymentForm.paymentDate}
+              onChange={(e) => setPaymentForm({...paymentForm, paymentDate: e.target.value})}
             />
           </div>
 
@@ -976,15 +1392,19 @@ const JobOrder = () => {
             </label>
             <Dropdown 
               id="paymentMethod"
-              options={[
-                { label: 'Cash', value: 'cash' },
-                { label: 'Bank Transfer', value: 'bank' },
-                { label: 'UPI', value: 'upi' },
-                { label: 'Cheque', value: 'cheque' }
-              ]}
+              value={selectedPaymentMode}
+              options={paymentModes.map(mode => ({
+                label: mode.mode_name,
+                value: mode.id
+              }))}
               optionLabel="label"
-              placeholder="Select payment method"
+              placeholder={paymentModes.length ? "Select payment method" : "Loading payment methods..."}
               className="w-full"
+              onChange={(e) => {
+                setSelectedPaymentMode(e.value);
+                setPaymentForm({...paymentForm, paymentMethod: e.value});
+              }}
+              disabled={!paymentModes.length}
             />
           </div>
 
@@ -996,20 +1416,24 @@ const JobOrder = () => {
               id="reference" 
               className="w-full" 
               placeholder="Enter reference or note"
+              value={paymentForm.reference}
+              onChange={(e) => setPaymentForm({...paymentForm, reference: e.target.value})}
             />
           </div>
 
           <div className="flex justify-content-end gap-2 mt-4">
             <Button 
+              label="Cancel" 
+              icon="pi pi-times" 
+              className="p-button-secondary"
+              onClick={() => setPaymentDialogVisible(false)}
+            />
+            <Button 
               label="Submit" 
               icon="pi pi-check" 
-              onClick={() => submitJobberPayment({
-                amount: 0,
-                date: new Date().toISOString(),
-                method: 'cash',
-                reference: ''
-              })}
               className="p-button-success"
+              onClick={handlePaymentSubmit}
+              disabled={!paymentForm.amount || !paymentForm.paymentDate || !selectedPaymentMode}
             />
           </div>
         </div>

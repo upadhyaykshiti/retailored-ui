@@ -318,7 +318,7 @@ const SalesOrder = () => {
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
           <Skeleton width="10rem" height="2rem" />
           <Skeleton width="100%" height="2.5rem" className="md:w-20rem" />
-          <Skeleton width="10rem" height="2.5rem" />
+          <Skeleton width="100%" height="2.5rem" />
         </div>
   
         <div className="grid">
