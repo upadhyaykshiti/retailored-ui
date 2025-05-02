@@ -15,6 +15,7 @@ import { JobOrderService } from '@/demo/service/job-order.service';
 import { Toast } from 'primereact/toast';
 import { Skeleton } from 'primereact/skeleton';
 import { ProgressSpinner } from 'primereact/progressspinner';
+import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
 
 interface JobOrderMain {
@@ -136,7 +137,11 @@ const JobOrder = () => {
   const [orderSidebarVisible, setOrderSidebarVisible] = useState(false);
   const [loadingOrdersButton, setLoadingOrdersButton] = useState(false);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
   const [loadingJobbers, setLoadingJobbers] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [loading, setLoading] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
@@ -197,6 +202,7 @@ const JobOrder = () => {
 
   const fetchJobOrderDetails = async (jobOrderId: string) => {
     try {
+      setLoadingDetails(true);
       const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
       setJobOrderDetails(response.jobOrderDetails);
     } catch (error) {
@@ -206,6 +212,8 @@ const JobOrder = () => {
         detail: 'Failed to fetch job order details',
         life: 3000
       });
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
@@ -311,9 +319,41 @@ const JobOrder = () => {
   };
 
   const openJobOrderDetails = async (jobOrder: JobOrderMain) => {
+    setVisible(true);
     setSelectedJobOrder(jobOrder);
     await fetchJobOrderDetails(jobOrder.id);
-    setVisible(true);
+  };
+
+  const itemTemplate = (item: {itemImageSrc: string}) => {
+    return (
+      <img 
+        src={item.itemImageSrc} 
+        alt="Preview" 
+        style={{ width: '100%', display: 'block' }}
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+        }}
+      />
+    );
+  };
+  
+  const thumbnailTemplate = (item: {itemImageSrc: string}) => {
+    return (
+      <img 
+        src={item.itemImageSrc} 
+        alt="Thumbnail" 
+        style={{ display: 'block', width: '100%' }}
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+        }}
+      />
+    );
+  };
+
+  const handleImagePreview = (imageUrl: string) => {
+    setImages([{ itemImageSrc: imageUrl }]);
+    setActiveImageIndex(0);
+    setImagePreviewVisible(true);
   };
 
   const showMeasurements = (measurements: MeasurementDetail[], materialName: string) => {
@@ -1140,122 +1180,173 @@ const JobOrder = () => {
         className={isMaximized ? 'maximized-dialog' : ''}
         blockScroll
       >
-        {selectedJobOrder && (
+        {loadingDetails ? (
           <div className="p-fluid my-4">
-            <div className="grid">
-              <div className="col-6">
-                <div className="field">
-                  <label>Job Order Number</label>
-                  <p className="m-0 font-medium">{selectedJobOrder.docno || `JOB-${selectedJobOrder.id}`}</p>
+            <div className="grid mb-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="col-6">
+                  <Skeleton width="100%" height="1.5rem" className="mb-2" />
+                  <Skeleton width="80%" height="1rem" />
                 </div>
-              </div>
-              <div className="col-6">
-                <div className="field">
-                  <label>Order Date</label>
-                  <p className="m-0 font-medium">{formatDate(selectedJobOrder.job_date)}</p>
-                </div>
-              </div>
-              <div className="col-6">
-                <div className="field">
-                  <label>Status &nbsp;</label>
-                  <Tag 
-                    value={selectedJobOrder.status?.status_name || "Unknown"}
-                    severity={getStatusSeverity(selectedJobOrder.status?.status_name)} 
-                  />
-                </div>
-              </div>
-              <div className="col-6">
-                <div className="field">
-                  <label>Trial Date</label>
-                  <p className="m-0 font-medium">{formatDate(selectedJobOrder.job_date)}</p>
-                </div>
-              </div>
+              ))}
             </div>
             
             <Divider />
-
+            
             <h5 className="m-0 mb-3">Job Order Details</h5>
-
-            {jobOrderDetails.map((detail, index) => (
-              <div key={index} className="mb-4 surface-50 p-3 border-round">
+            
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="mb-4 surface-50 p-3 border-round">
                 <div className="grid">
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Item Name</label>
-                      <p className="m-0 font-medium">{detail.orderDetail.material.name}</p>
+                  {[...Array(6)].map((_, j) => (
+                    <div key={j} className={j < 2 ? 'col-6' : j < 6 ? 'col-6 mt-3' : 'col-12 mt-3'}>
+                      <Skeleton width="100%" height="1.5rem" className="mb-2" />
+                      <Skeleton width="80%" height="1rem" />
                     </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Sales Order No</label>
-                      <p className="m-0 font-medium">{detail.orderDetail.measurementMain.docno}</p>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Customer Name</label>
-                      <p className="m-0 font-medium">{detail.orderDetail.measurementMain.user.fname}</p>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Trial Date</label>
-                      <p className="m-0 font-medium">{formatDate(detail.trial_date)}</p>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Delivered Qty</label>
-                      <p className="m-0 font-medium">{detail.delivered_qty}</p>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Pending Amount</label>
-                      <p className="m-0 font-medium">{detail.item_cost}</p>
-                    </div>
-                  </div>
-                  <div className="col-12">
-                    <div className="field">
-                      <label>Notes</label>
-                      <p className="m-0 font-medium">{detail?.desc1 || 'No notes'}</p>
-                    </div>
-                  </div>
-                  
-                  {detail.image_url && (
-                    <div className="col-12 mt-3">
-                      <Button 
-                        label="View Image" 
-                        icon="pi pi-image" 
-                        onClick={() => window.open(detail.image_url || '', '_blank')}
-                        className="p-button-outlined"
-                      />
-                    </div>
-                  )}
-                  <div className="col-12 mt-2">
-                    <Button
-                      label="View Measurements" 
-                      icon="pi pi-eye" 
-                      onClick={() => showMeasurements(
-                        detail.orderDetail.measurementMain.measurementDetails,
-                        detail.orderDetail.material.name
-                      )}
-                      className="p-button-outlined"
-                    />
-                  </div>
-                  <div className="col-12 mt-2">
-                    <Button 
-                        label="Record Payment" 
-                        icon="pi pi-money-bill" 
-                        onClick={() => handleJobberPayment(selectedJobOrder!)}
-                        className="p-button-success"
-                      />
+                  ))}
+                  <div className="col-12 mt-3">
+                    <Skeleton width="120px" height="38px" />
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        ) : (
+          selectedJobOrder && (
+            <div className="p-fluid my-4">
+              <div className="grid">
+                <div className="col-6">
+                  <div className="field">
+                    <label>Job Order Number</label>
+                    <p className="m-0 font-medium">{selectedJobOrder.docno || `JOB-${selectedJobOrder.id}`}</p>
+                  </div>
+                </div>
+                <div className="col-6">
+                  <div className="field">
+                    <label>Order Date</label>
+                    <p className="m-0 font-medium">{formatDate(selectedJobOrder.job_date)}</p>
+                  </div>
+                </div>
+                <div className="col-6">
+                  <div className="field">
+                    <label>Status &nbsp;</label>
+                    <Tag 
+                      value={selectedJobOrder.status?.status_name || "Unknown"}
+                      severity={getStatusSeverity(selectedJobOrder.status?.status_name)} 
+                    />
+                  </div>
+                </div>
+                <div className="col-6">
+                  <div className="field">
+                    <label>Trial Date</label>
+                    <p className="m-0 font-medium">{formatDate(selectedJobOrder.job_date)}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <Divider />
+
+              <h5 className="m-0 mb-3">Job Order Details</h5>
+
+              {jobOrderDetails.map((detail, index) => (
+                <div key={index} className="mb-4 surface-50 p-3 border-round">
+                  <div className="grid">
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Item Name</label>
+                        <p className="m-0 font-medium">{detail.orderDetail?.material.name}</p>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Sales Order No</label>
+                        <p className="m-0 font-medium">{detail.orderDetail?.measurementMain.docno}</p>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Customer Name</label>
+                        <p className="m-0 font-medium">{detail.orderDetail?.measurementMain.user.fname}</p>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Trial Date</label>
+                        <p className="m-0 font-medium">{formatDate(detail.trial_date)}</p>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Delivered Qty</label>
+                        <p className="m-0 font-medium">{detail.delivered_qty}</p>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="field">
+                        <label>Pending Amount</label>
+                        <p className="m-0 font-medium">{detail.item_cost}</p>
+                      </div>
+                    </div>
+                    <div className="col-12">
+                      <div className="field">
+                        <label>Notes</label>
+                        <p className="m-0 font-medium">{detail?.desc1 || 'No notes'}</p>
+                      </div>
+                    </div>
+                    
+                    {detail.image_url && (
+                      <div className="col-12 mt-3">
+                        <Button 
+                          label="View Image" 
+                          icon="pi pi-image" 
+                          onClick={() => handleImagePreview(detail.image_url || '')}
+                          className="p-button-outlined"
+                        />
+                      </div>
+                    )}
+                    <div className="col-12 mt-2">
+                      <Button
+                        label="View Measurements" 
+                        icon="pi pi-eye" 
+                        onClick={() => showMeasurements(
+                          detail.orderDetail.measurementMain.measurementDetails,
+                          detail.orderDetail.material.name
+                        )}
+                        className="p-button-outlined"
+                      />
+                    </div>
+                    <div className="col-12 mt-2">
+                      <Button 
+                          label="Record Payment" 
+                          icon="pi pi-money-bill" 
+                          onClick={() => handleJobberPayment(selectedJobOrder!)}
+                          className="p-button-success"
+                        />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
+      </Dialog>
+
+      <Dialog 
+        visible={imagePreviewVisible} 
+        onHide={() => setImagePreviewVisible(false)}
+        style={{ width: '90vw' }}
+      >
+        <Galleria
+          value={images}
+          activeIndex={activeImageIndex}
+          onItemChange={(e) => setActiveImageIndex(e.index)}
+          showThumbnails={false}
+          showIndicators={images.length > 1}
+          showItemNavigators={images.length > 1}
+          item={itemTemplate}
+          thumbnail={thumbnailTemplate}
+          style={{ maxWidth: '100%' }}
+        />
       </Dialog>
 
       <Dialog 

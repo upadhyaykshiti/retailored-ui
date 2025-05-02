@@ -6,6 +6,20 @@
     padding: 0rem;
 }
 
+.custom-tabview .p-tabview-nav {
+    display: flex;
+}
+  
+.custom-tabview .p-tabview-nav li {
+    flex: 1;
+    text-align: center;
+}
+  
+.custom-tabview .p-tabview-nav-link {
+    justify-content: center;
+    width: 100%;
+}
+
 .custom-selector-sidebar .p-sidebar-content {
     padding: 0;
     display: flex;

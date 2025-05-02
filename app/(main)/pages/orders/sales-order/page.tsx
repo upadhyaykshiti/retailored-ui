@@ -10,8 +10,11 @@ import { Calendar } from 'primereact/calendar';
 import { Skeleton } from 'primereact/skeleton';
 import { InputText } from 'primereact/inputtext';
 import { Sidebar } from 'primereact/sidebar';
+import { Dropdown } from 'primereact/dropdown';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
+import { JobOrderService } from '@/demo/service/job-order.service';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
 interface Order {
@@ -84,11 +87,22 @@ const SalesOrder = () => {
   const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
+  const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
+  const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     perPage: 2,
     total: 0,
     hasMorePages: true
+  });
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: '',
+    reference: ''
   });
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
@@ -222,6 +236,15 @@ const SalesOrder = () => {
     }
   };
 
+  const fetchPaymentModes = useCallback(async () => {
+    try {
+      const modes = await JobOrderService.getPaymentModes();
+      setPaymentModes(modes);
+    } catch (error) {
+      console.error('Error fetching payment modes:', error);
+    }
+  }, []);
+
   const getStatusSeverity = (status?: string): 'success' | 'info' | 'warning' | 'danger' | null | undefined => {
     switch (status) {
       case 'Completed': return 'success';
@@ -234,8 +257,41 @@ const SalesOrder = () => {
 
   const openOrderDetails = (order: Order) => {
     fetchOrderDetails(order.id);
+    fetchPaymentModes();
     setSelectedOrder(order);
     setVisible(true);
+  };
+
+  const itemTemplate = (item: {itemImageSrc: string}) => {
+    return (
+      <img 
+        src={item.itemImageSrc} 
+        alt="Preview" 
+        style={{ width: '100%', display: 'block' }}
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+        }}
+      />
+    );
+  };
+  
+  const thumbnailTemplate = (item: {itemImageSrc: string}) => {
+    return (
+      <img 
+        src={item.itemImageSrc} 
+        alt="Thumbnail" 
+        style={{ display: 'block', width: '100%' }}
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+        }}
+      />
+    );
+  };
+  
+  const handleImagePreview = (imageUrl: string) => {
+    setImages([{ itemImageSrc: imageUrl }]);
+    setActiveImageIndex(0);
+    setImagePreviewVisible(true);
   };
 
   const formatDate = (date: Date | null) => {
@@ -311,6 +367,51 @@ const SalesOrder = () => {
       fetchMeasurements(item.id);
     }
   };  
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedOrder || !paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod) {
+      await Toast.show({
+        text: 'Please fill all required fields',
+        duration: 'short',
+        position: 'top'
+      });
+      return;
+    }
+  
+    try {
+      const paymentData = {
+        docno: selectedOrder.docno,
+        payment_date: paymentForm.paymentDate,
+        payment_mode: paymentForm.paymentMethod,
+        payment_ref: paymentForm.reference || null,
+        payment_amt: parseFloat(paymentForm.amount),
+      };
+  
+      await JobOrderService.createPaymentMain(paymentData);
+
+      await Toast.show({
+        text: 'Payment recieved successfully',
+        duration: 'short',
+        position: 'top'
+      });
+  
+      setPaymentForm({
+        amount: '',
+        paymentDate: new Date().toISOString().split('T')[0],
+        reference: '',
+        paymentMethod: ''
+      });
+      setPaymentDialogVisible(false);
+  
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      await Toast.show({
+        text: 'Failed to record payment',
+        duration: 'short',
+        position: 'top'
+      });
+    }
+  };
 
   if (loading && !isFetchingMore) {
     return (
@@ -545,7 +646,7 @@ const SalesOrder = () => {
                 <Button
                   label="Receive Payment"
                   icon="pi pi-wallet"
-                  onClick={() => setReceivePaymentDialog(true)}
+                  onClick={() => setPaymentDialogVisible(true)}
                   className="mt-3"
                 />
               </div>
@@ -610,15 +711,16 @@ const SalesOrder = () => {
                     />
                   </div>
 
-                  {/* {item?.image_url && ( */}
+                  {item?.image_url && (
                     <div className="col-12 mt-2">
                       <Button 
                         label="View Image" 
                         icon="pi pi-image" 
                         className="p-button-outlined"
+                        onClick={() => handleImagePreview(item.image_url || '')}
                       />
                     </div>
-                  {/* )} */}
+                  )}
 
                   <div className="col-12 mt-2">
                     <Button 
@@ -641,54 +743,116 @@ const SalesOrder = () => {
       </Dialog>
 
       <Dialog 
+        visible={imagePreviewVisible} 
+        onHide={() => setImagePreviewVisible(false)}
+        style={{ width: '90vw' }}
+      >
+        <Galleria
+          value={images}
+          activeIndex={activeImageIndex}
+          onItemChange={(e) => setActiveImageIndex(e.index)}
+          showThumbnails={false}
+          showIndicators={images.length > 1}
+          showItemNavigators={images.length > 1}
+          item={itemTemplate}
+          thumbnail={thumbnailTemplate}
+          style={{ width: '100%' }}
+        />
+      </Dialog>
+
+      <Dialog 
         header="Receive Payment"
-        visible={receivePaymentDialog} 
-        className="w-full"
-        onHide={() => {
-          setReceivePaymentDialog(false);
-          setReceiveAmount('');
-          setSelectedDate(new Date());
-        }}
-        footer={
-          <div className="flex justify-content-end gap-2">
+        visible={paymentDialogVisible}
+        onHide={() => setPaymentDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+      >
+        <div className="p-fluid">
+          <div className="field my-4">
+            <label htmlFor="amount" className="font-bold block mb-2">
+              Payment Amount (₹)
+            </label>
+            <InputText 
+              id="amount" 
+              type="number" 
+              className="w-full" 
+              placeholder="Enter amount"
+              value={paymentForm.amount}
+              onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="paymentDate" className="font-bold block mb-2">
+              Payment Date
+            </label>
+            <Calendar
+              id="paymentDate"
+              value={new Date(paymentForm.paymentDate)}
+              onChange={(e) => setPaymentForm({...paymentForm, paymentDate: e.value?.toISOString().split('T')[0] || ''})}
+              dateFormat="dd-mm-yy"
+              showIcon
+              className="w-full"
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="paymentMethod" className="font-bold block mb-2">
+              Payment Method
+            </label>
+            <Dropdown 
+              id="paymentMethod"
+              value={paymentForm.paymentMethod}
+              options={paymentModes.map(mode => ({
+                label: mode.mode_name,
+                value: mode.id
+              }))}
+              optionLabel="label"
+              placeholder={paymentModes.length ? "Select payment method" : "Loading payment methods..."}
+              className="w-full"
+              onChange={(e) => setPaymentForm({...paymentForm, paymentMethod: e.value})}
+              disabled={!paymentModes.length}
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="reference" className="font-bold block mb-2">
+              Reference/Note
+            </label>
+            <InputText 
+              id="reference" 
+              className="w-full" 
+              placeholder="Enter reference or note"
+              value={paymentForm.reference}
+              onChange={(e) => setPaymentForm({...paymentForm, reference: e.target.value})}
+            />
+          </div>
+
+          <div className="flex justify-content-end gap-2 mt-4">
             <Button 
               label="Cancel" 
               icon="pi pi-times" 
-              className="p-button-text" 
-              onClick={() => setReceivePaymentDialog(false)} 
+              className="p-button-secondary"
+              onClick={() => {
+                setPaymentDialogVisible(false);
+                setPaymentForm({
+                  amount: '',
+                  paymentDate: new Date().toISOString().split('T')[0],
+                  reference: '',
+                  paymentMethod: ''
+                });
+              }}
             />
             <Button 
               label="Confirm" 
               icon="pi pi-check" 
-              onClick={() => {
-                setReceivePaymentDialog(false);
-              }} 
-              disabled={!receiveAmount}
+              className="p-button-success"
+              onClick={handlePaymentSubmit}
+              disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod}
             />
           </div>
-        }
-      >
-        <div className="field">
-          <label htmlFor="date">Date</label>
-          <Calendar
-            id="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.value)}
-            dateFormat="dd-mm-yy"
-            showIcon
-            className="w-full"
-          />
-        </div>
-
-        <div className="field mt-3">
-          <label htmlFor="amount">Enter Amount</label>
-          <InputText
-            id="amount"
-            value={receiveAmount}
-            onChange={(e) => setReceiveAmount(e.target.value)}
-            placeholder="₹ Amount"
-            className="w-full"
-          />
         </div>
       </Dialog>
 
