@@ -11,33 +11,89 @@ import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 import { Checkbox } from 'primereact/checkbox';
 import { Galleria } from 'primereact/galleria';
-import { useState } from 'react';
+import { Sidebar } from 'primereact/sidebar';
+import { useState, useEffect, useRef } from 'react';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { SalesOrderService } from '@/demo/service/sales-order.service';
+import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { Toast } from '@capacitor/toast';
 
 interface Customer {
-    id: number;
-    name: string;
-    phone: string;
+    id: string;
+    fname: string;
+    lname: string;
+    mobileNumber: string;
 }
 
-interface Garment {
-    id: number;
+interface Material {
+    id: string;
     name: string;
-    measurements: string[];
-    price: number;
+    img_url: string | null;
+    wsp: number;
+    mrp: number;
+}
+
+interface MeasurementMaster {
+    id: string;
+    measurement_name: string;
+    data_type: string;
+    seq: number;
+    measurementDetail: {
+      id: string;
+      measurement_main_id: string;
+      measurement_master_id: string;
+      measurement_val: string;
+    };
 }
 
 interface MeasurementValues {
     [garmentName: string]: {
-      [measurement: string]: number | null;
+      [measurement: string]: string | null;
     };
-}  
+}
+
+interface OutfitDetails {
+    type: string;
+    specialInstructions: string;
+    measurements: {[key: string]: string | null};
+    stitchingOptions: {
+        collar?: string;
+        sleeve?: string;
+        bottom?: string;
+        pocket?: string;
+        pocketSquare?: string;
+        cuffs?: string;
+    };
+    media: {
+        images: string[];
+        audioClips: string[];
+    };
+    inspirationLink: string;
+    deliveryDate: string;
+    trialDate: string;
+    isUrgent: boolean;
+    quantity: number;
+    stitchingPrice: number;
+    additionalCosts: Array<{
+        id: string;
+        name: string;
+        price: number;
+    }>;
+}
+
+interface AdditionalCost {
+    id: string;
+    description: string;
+    amount: number;
+}
 
 const CreateOrder = () => {
     const [selectedGarmentId, setSelectedGarmentId] = useState<number | null>(null);
     const [visible, setVisible] = useState(false);
-    const [selectedGarments, setSelectedGarments] = useState<Garment[]>([]);
+    const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
-    const [currentGarment, setCurrentGarment] = useState<Garment | null>(null);
+    const [currentGarment, setCurrentGarment] = useState<Material | null>(null);
     const [type, setType] = useState('stitching');
     const [specialInstructions, setSpecialInstructions] = useState('');
     const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
@@ -47,7 +103,7 @@ const CreateOrder = () => {
     const [stitchingPrice, setStitchingPrice] = useState(0);
     const [inspiration, setInspiration] = useState('');
     const [isMaximized, setIsMaximized] = useState(true);
-    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: number | null}>({});
+    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: string | null}>({});
     const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
     const [isMesurementSaved, setIsMesurementSaved] = useState(false);
     const [showStitchOptionsDialog, setShowStitchOptionsDialog] = useState(false);
@@ -61,55 +117,235 @@ const CreateOrder = () => {
     const [pocketOption, setPocketOption] = useState('');
     const [pocketSquareOption, setPocketSquareOption] = useState('');
     const [cuffsOption, setCuffsOption] = useState('');
+    const [showCustomerDialog, setShowCustomerDialog] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [showImageSourceDialog, setShowImageSourceDialog] = useState(false);
+    const [additionalCosts, setAdditionalCosts] = useState<AdditionalCost[]>([]);
+    const [showAddCostDialog, setShowAddCostDialog] = useState(false);
+    const [newCostDescription, setNewCostDescription] = useState('');
+    const [newCostAmount, setNewCostAmount] = useState<number | null>(null);
+    const [showOutfitSelectionDialog, setShowOutfitSelectionDialog] = useState(false);
+    const [measurementData, setMeasurementData] = useState<MeasurementMaster[]>([]);
+    const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
+    const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+    const [customerPage, setCustomerPage] = useState(1);
+    const [materials, setMaterials] = useState<Material[]>([]);
+    const [materialSearch, setMaterialSearch] = useState('');
+    const [materialPage, setMaterialPage] = useState(1);
+    const [outfitDetails, setOutfitDetails] = useState<{[outfitId: string]: OutfitDetails}>({});
+    const [customerPagination, setCustomerPagination] = useState({ hasMorePages: true, currentPage: 1, total: 0 });
+    const [materialPagination, setMaterialPagination] = useState({ hasMorePages: true, currentPage: 1, total: 0 });
+    const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+    const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+    const materialObserverTarget = useRef<HTMLDivElement>(null);
+    const materialSearchTimeout = useRef<NodeJS.Timeout>();
+    const observerTarget = useRef<HTMLDivElement>(null);
+    const searchTimeout = useRef<NodeJS.Timeout>();
 
-    const selectedCustomer: Customer = {
-        id: 1,
-        name: 'Nishant Kumar',
-        phone: '+91 1234567890'
+    useEffect(() => {
+        return () => {
+            if (searchTimeout.current) {
+                clearTimeout(searchTimeout.current);
+            }
+        };
+    }, []);
+
+    const fetchCustomers = async (searchTerm = '', page = 1) => {
+        setIsLoadingCustomers(true);
+        try {
+          const { data, pagination } = await SalesOrderService.getActiveCustomers(
+            page,
+            10,
+            searchTerm || null
+          );
+          
+          if (page === 1) {
+            setAllCustomers(data);
+          } else {
+            setAllCustomers(prev => [...prev, ...data]);
+          }
+          
+          setCustomerPagination({
+            hasMorePages: pagination.hasMorePages,
+            currentPage: pagination.currentPage,
+            total: pagination.total
+          });
+        } catch (error) {
+          console.error('Error fetching customers:', error);
+          await Toast.show({
+            text: 'Failed to load customers',
+            duration: 'short',
+            position: 'top'
+          });
+        } finally {
+          setIsLoadingCustomers(false);
+        }
+    };
+      
+    useEffect(() => {
+        fetchCustomers(customerSearch);
+    }, []);
+
+    const fetchMaterials = async (searchTerm = '', page = 1) => {
+        setIsLoadingMaterials(true);
+        try {
+            const response = await SalesOrderService.getActiveMaterials(
+                page,
+                10,
+                searchTerm || null
+            );
+            
+            const materialsData = response.data;
+            const pagination = response.pagination;
+    
+            if (page === 1) {
+                setMaterials(materialsData);
+            } else {
+                setMaterials(prev => [...prev, ...materialsData]);
+            }
+    
+            setMaterialPagination({
+                hasMorePages: pagination.hasMorePages,
+                currentPage: pagination.currentPage,
+                total: pagination.total
+            });
+        } catch (error) {
+            console.error('Error fetching materials:', error);
+            await Toast.show({
+                text: 'Failed to load materials',
+                duration: 'short',
+                position: 'top'
+            });
+        } finally {
+            setIsLoadingMaterials(false);
+        }
     };
 
-    const allGarments: Garment[] = [
-        { id: 1, name: 'Shirt', measurements: ['Chest', 'Length', 'Sleeve'], price: 1200 },
-        { id: 2, name: 'Pant', measurements: ['Waist', 'Length', 'Hip'], price: 800 },
-    ];
+    useEffect(() => {
+        fetchMaterials('', 1);
+    }, []);
 
-    const [garments, setGarments] = useState<Garment[]>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('garments');
-            return saved ? JSON.parse(saved) : [
-                { id: 1, name: 'Kurta Pajama', measurements: ['Length', 'Chest', 'Shoulder'], status: 'active' },
-                { id: 2, name: 'Pajama', measurements: ['Waist', 'Length', 'Hip'], status: 'active' },
-                { id: 3, name: 'Shirt', measurements: ['Chest', 'Length', 'Sleeve'], status: 'inactive' }
-                ];
-            }
-            return [];
-        });
+    const fetchMeasurementData = async (materialId: string) => {
+        if (!selectedCustomer) return;
+        
+        setIsLoadingMeasurements(true);
+        try {
+          const measurements = await SalesOrderService.getMeasurementData(
+            selectedCustomer.id,
+            materialId
+          );
+          setMeasurementData(measurements);
+        } catch (error) {
+          console.error('Error fetching measurements:', error);
+          await Toast.show({
+            text: 'Failed to load measurements',
+            duration: 'short',
+            position: 'top'
+          });
+        } finally {
+          setIsLoadingMeasurements(false);
+        }
+    };
 
-    const totalAmount = selectedGarments.reduce((sum, garment) => sum + garment.price, 0);
+    useInfiniteObserver({
+        targetRef: observerTarget,
+        hasMorePages: customerPagination.hasMorePages,
+        isLoading: isLoadingCustomers,
+        onIntersect: () => {
+            fetchCustomers(customerSearch, customerPage + 1);
+            setCustomerPage(prev => prev + 1);
+        },
+        deps: [customerPage, customerSearch],
+    });
+    
+    useInfiniteObserver({
+        targetRef: materialObserverTarget,
+        hasMorePages: materialPagination.hasMorePages,
+        isLoading: isLoadingMaterials,
+        onIntersect: () => {
+            fetchMaterials(materialSearch, materialPage + 1);
+            setMaterialPage(prev => prev + 1);
+        },
+        deps: [materialPage, materialSearch],
+    });    
 
-    const handleAddOutfit = (garment: Garment) => {
+    const handleCustomerSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setCustomerSearch(value);
+        
+        if (searchTimeout.current) {
+            clearTimeout(searchTimeout.current);
+        }
+        
+        searchTimeout.current = setTimeout(() => {
+            fetchCustomers(value, 1);
+            setCustomerPage(1);
+        }, 500);
+    };
+
+    const handleMaterialSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setMaterialSearch(value);
+    
+        if (materialSearchTimeout.current) {
+            clearTimeout(materialSearchTimeout.current);
+        }
+    
+        materialSearchTimeout.current = setTimeout(() => {
+            fetchMaterials(value, 1);
+            setMaterialPage(1);
+        }, 500);
+    };    
+
+    const getCustomerFullName = (customer: Customer) => {
+        if (!customer.lname) {
+          return customer.fname;
+        }
+        return `${customer.fname} ${customer.lname}`;
+    };
+
+    const handleSelectCustomer = (customer: Customer) => {
+        setSelectedCustomer(customer);
+        setShowCustomerDialog(false);
+        setCustomerSearch('');
+    };
+
+    const handleAddOutfit = (garment: Material) => {
         setCurrentGarment(garment);
         setShowCreateDialog(true);
     };
 
-    const openMeasurementDialog = (garmentId: number) => {
-        const selectedGarment = garments.find(g => g.id === garmentId);
-        if (selectedGarment) {
-          setSelectedGarmentId(garmentId);
-          
-          const savedValues = allMeasurements[garmentId] || {};
-          const initialValues: {[key: string]: number | null} = {};
-          
-          selectedGarment.measurements.forEach(measurement => {
-            initialValues[measurement] = savedValues[measurement] || null;
-          });
-          
-          setCurrentMeasurements(initialValues);
-          setVisible(true);
-        }
+    const handleClearCustomer = () => {
+        setSelectedCustomer(null);
     };
 
-    const handleMeasurementChange = (measurement: string, value: number | null) => {
+    const handleOutfitSelection = (garment: Material) => {
+        setSelectedGarments(prev => {
+            const isSelected = prev.some(g => g.id === garment.id);
+            const newSelection = isSelected 
+                ? prev.filter(g => g.id !== garment.id)
+                : [...prev, garment];
+            
+            return newSelection;
+        });
+    };
+
+    const openMeasurementDialog = async (garment: Material) => {
+        setCurrentGarment(garment);
+        await fetchMeasurementData(garment.id);
+        
+        const initialValues: {[key: string]: string} = {};
+        measurementData.forEach(master => {
+          initialValues[master.measurement_name] = 
+            master.measurementDetail?.measurement_val || '';
+        });
+        
+        setCurrentMeasurements(initialValues);
+        setVisible(true);
+    };
+
+    const handleMeasurementChange = (measurement: string, value: string) => {
         setCurrentMeasurements(prev => ({
           ...prev,
           [measurement]: value
@@ -117,11 +353,11 @@ const CreateOrder = () => {
     };
 
     const handleSaveMeasurements = () => {
-        if (selectedGarmentId !== null) {
+        if (currentGarment) {
           setAllMeasurements(prev => ({
             ...prev,
-            [selectedGarmentId]: {
-              ...prev[selectedGarmentId],
+            [currentGarment.id]: {
+              ...prev[currentGarment.id],
               ...currentMeasurements
             }
           }));
@@ -132,7 +368,10 @@ const CreateOrder = () => {
 
     const handleSaveOrder = () => {
         if (currentGarment) {
-            setSelectedGarments([...selectedGarments, currentGarment]);
+            const exists = selectedGarments.some(g => g.id === currentGarment.id);
+            if (!exists) {
+                setSelectedGarments([...selectedGarments, currentGarment]);
+            }
             setShowCreateDialog(false);
             resetDialog();
         }
@@ -149,10 +388,39 @@ const CreateOrder = () => {
         setInspiration('');
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageSourceSelect = async (source: 'camera' | 'gallery') => {
+        setShowImageSourceDialog(false);
+        try {
+          const image = await Camera.getPhoto({
+            quality: 90,
+            allowEditing: false,
+            resultType: CameraResultType.Uri,
+            source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
+          });
+      
+          if (image.webPath) {
+            setUploadedImages(prev => [...prev, image.webPath!]);
+          } else if (image.path) {
+            const file = await Filesystem.readFile({
+              path: image.path!,
+              directory: Directory.Cache,
+            });
+            const base64Image = `data:image/jpeg;base64,${file.data}`;
+            setUploadedImages(prev => [...prev, base64Image]);
+          }
+        } catch (error) {
+          console.error('Error capturing image:', error);
+        }
+      };
+      
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
           const files = Array.from(e.target.files);
-          const newImages = files.map(file => URL.createObjectURL(file));
+          const newImages = await Promise.all(
+            files.map(async (file) => {
+              return URL.createObjectURL(file);
+            })
+          );
           setUploadedImages(prev => [...prev, ...newImages]);
         }
     };
@@ -180,6 +448,86 @@ const CreateOrder = () => {
             />
         );
     };
+    const showToast = async (message: string) => {
+        await Toast.show({ 
+          text: message,
+          duration: 'long',
+          position: 'top'
+        });
+      };   
+
+      const handleConfirmOrder = async () => {        
+        try {
+          if (!selectedCustomer) {
+            await showToast('Please select a customer first');
+            return;
+          }
+          
+          if (selectedGarments.length === 0) {
+            await showToast('Please add at least one outfit');
+            return;
+          }
+      
+          const docno = `ORD-${Date.now()}`;
+
+          const formatDateTime = (date?: Date | null) => {
+            if (!date) return '';
+            const pad = (num: number) => num.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+          };
+
+          const currentDate = new Date();
+          
+          const orderPayload = {
+            user_id: parseInt(selectedCustomer.id),
+            docno: docno,
+            order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
+            type_id: 1,
+            status_id: 1,
+            order_details: selectedGarments.map(garment => ({
+              material_master_id: parseInt(garment.id),
+              image_url: uploadedImages.length > 0 ? uploadedImages[0] : '',
+              item_amt: garment.mrp,
+              item_discount: 0,
+              ord_qty: quantity,
+              trial_date: formatDateTime(trialDate),
+              delivery_date: formatDateTime(deliveryDate),
+              status_id: 1,
+              measurement_main: [{
+                user_id: parseInt(selectedCustomer.id),
+                docno: docno,
+                material_master_id: parseInt(garment.id),
+                measurement_date: formatDateTime(currentDate),
+                details: Object.entries(allMeasurements[garment.id] || {}).map(([key, value]) => ({
+                  measurement_master_id: parseInt(
+                    measurementData.find(m => m.measurement_name === key)?.id || '0'
+                  ),
+                  measurement_val: value || ''
+                }))
+              }]
+            })),
+          };
+      
+          console.log('Order payload:', orderPayload);
+      
+          const response = await SalesOrderService.createOrderWithDetails(orderPayload);
+          
+          await showToast('Order confirmed successfully!');
+          
+          setSelectedCustomer(null);
+          setSelectedGarments([]);
+          setUploadedImages([]);
+          setAdditionalCosts([]);
+          resetDialog();
+          
+          return response;
+          
+        } catch (error) {
+          console.error('Error confirming order:', error);
+          await showToast('Failed to confirm order. Please try again.');
+          throw error;
+        }
+    };
 
     const dialogFooter = (
         <div className="mt-3">
@@ -206,14 +554,36 @@ const CreateOrder = () => {
             <h2 className="text-2xl m-0 mb-3">Create Order</h2>
             <Card className="mb-4">
                 <div className="flex flex-column gap-2 p-3 surface-50 border-round">
-                    <div className="flex align-items-center gap-2">
-                        <i className="pi pi-user text-500"></i>
-                        <span className="font-bold font-medium">{selectedCustomer.name}</span>
-                    </div>
-                    <div className="flex align-items-center gap-2">
-                        <i className="pi pi-phone text-500"></i>
-                        <span>{selectedCustomer.phone}</span>
-                    </div>
+                    {selectedCustomer ? (
+                        <div className="flex flex-column gap-2">
+                            <div className="flex justify-content-between align-items-center">
+                                <div className="flex align-items-center gap-2">
+                                    <i className="pi pi-user text-500"></i>
+                                    <span className="font-bold">{getCustomerFullName(selectedCustomer)}</span>
+                                </div>
+                                <Button 
+                                    icon="pi pi-times" 
+                                    rounded 
+                                    text 
+                                    severity="secondary"
+                                    tooltip="Change customer"
+                                    tooltipOptions={{ position: 'top' }}
+                                    onClick={handleClearCustomer}
+                                />
+                            </div>
+                            <div className="flex align-items-center gap-2">
+                                <i className="pi pi-phone text-500"></i>
+                                <span>{selectedCustomer.mobileNumber}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <Button 
+                            label="Select Customer" 
+                            icon="pi pi-user-plus" 
+                            className="p-button-outlined w-full" 
+                            onClick={() => setShowCustomerDialog(true)}
+                        />
+                    )}
                 </div>
             </Card>
 
@@ -225,21 +595,21 @@ const CreateOrder = () => {
                     <Button 
                         label="Add Outfit" 
                         icon="pi pi-plus" 
-                        onClick={() => {}} 
+                        onClick={() => setShowOutfitSelectionDialog(true)}
                         size="small"
                     />
                 </div>
 
-                {allGarments.length > 0 ? (
+                {selectedGarments.length > 0 ? (
                     <div className="grid">
-                        {allGarments.map((garment) => (
+                        {selectedGarments.map((garment) => (
                             <div key={garment.id} className="col-12 md:col-6 lg:col-4">
                                 <Card className="h-full">
                                     <div className="flex flex-column gap-2">
                                         <div className="flex justify-content-between align-items-center">
                                             <span className="font-medium">{garment.name}</span>
                                             <div className="flex gap-2">
-                                                <Button 
+                                                 <Button 
                                                     icon="pi pi-plus" 
                                                     rounded
                                                     text
@@ -251,9 +621,7 @@ const CreateOrder = () => {
                                                     rounded
                                                     text 
                                                     severity="danger"
-                                                    onClick={() => setSelectedGarments(
-                                                        selectedGarments.filter(g => g.id !== garment.id)
-                                                    )}
+                                                    onClick={() => handleOutfitSelection(garment)}
                                                 />
                                             </div>
                                         </div>
@@ -263,16 +631,168 @@ const CreateOrder = () => {
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-column align-items-center py-4 gap-2">
-                        <i className="pi pi-box text-4xl text-400"></i>
-                        <p className="text-500">No outfits selected</p>
+                    <div className="flex flex-column align-items-center justify-content-center py-4 gap-3" style={{ minHeight: '25vh' }}>
+                        <i className="pi pi-shopping-bag text-4xl text-400" style={{ fontSize: '2.5rem' }}></i>
+                        <p className="text-500 font-medium text-xl">No outfits added</p>
                     </div>
                 )}
             </div>
 
+            <Sidebar 
+                visible={showCustomerDialog}
+                onHide={() => {
+                    setShowCustomerDialog(false);
+                    setCustomerSearch('');
+                    setCustomerPage(1);
+                }}
+                position="bottom"
+                style={{ 
+                    width: '100vw',
+                    height: '80vh',
+                    maxHeight: '80vh',
+                    borderTopLeftRadius: '12px',
+                    borderTopRightRadius: '12px',
+                    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+                }}
+                className="custom-selector-sidebar"
+                header={
+                    <div className="sticky top-0 bg-white z-1 p-2 surface-border flex justify-content-between align-items-center">
+                        <span className="font-bold text-2xl">Select Customer</span>
+                    </div>
+                }
+                blockScroll
+            >
+                <div className="flex flex-column h-full">
+                    <div className="p-3 border-bottom-1 surface-border">
+                        <span className="p-input-icon-left w-full">
+                            <i className="pi pi-search" />
+                            <InputText
+                                value={customerSearch}
+                                onChange={handleCustomerSearch}
+                                placeholder="Search"
+                                className="w-full"
+                            />
+                        </span>
+                    </div>
+
+                    <div className="flex-grow-1 overflow-y-auto">
+                        {allCustomers.map(customer => (
+                            <div 
+                                key={customer.id} 
+                                className={`p-3 border-bottom-1 surface-border cursor-pointer flex justify-content-between align-items-center ${
+                                    selectedCustomer?.id === customer.id ? 'bg-blue-50' : 'hover:surface-50'
+                                }`}
+                                onClick={() => handleSelectCustomer({
+                                    id: customer.id,
+                                    fname: customer.fname,
+                                    lname: customer.lname,
+                                    mobileNumber: customer.mobileNumber
+                                })}
+                            >
+                                <div className="flex-1">
+                                    <div className="font-medium">{getCustomerFullName(customer)}</div>
+                                    <div className="text-sm text-500">{customer.mobileNumber}</div>
+                                </div>
+                                {selectedCustomer?.id === customer.id && (
+                                    <i className="pi pi-check text-primary"></i>
+                                )}
+                            </div>
+                        ))}
+
+                        {isLoadingCustomers && (
+                            <div className="p-3 flex justify-content-center">
+                                <i className="pi pi-spinner pi-spin"></i>
+                            </div>
+                        )}
+
+                        {!isLoadingCustomers && customerPagination.hasMorePages && (
+                            <div ref={observerTarget} className="p-3 flex justify-content-center">
+                                <i className="pi pi-spinner pi-spin"></i>
+                            </div>
+                        )}
+
+                        {!isLoadingCustomers && allCustomers.length === 0 && (
+                            <div className="p-5 text-center text-500">
+                                No customers found
+                            </div>
+                        )}
+
+                        {!isLoadingCustomers && allCustomers.length > 0 && customerSearch && 
+                            allCustomers.filter(c => 
+                                getCustomerFullName(c).toLowerCase().includes(customerSearch.toLowerCase()) || 
+                                c.mobileNumber.includes(customerSearch)
+                            ).length === 0 && (
+                            <div className="p-5 text-center text-500">
+                                No matching customers found
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </Sidebar>
+
+            <Sidebar
+                visible={showOutfitSelectionDialog}
+                onHide={() => setShowOutfitSelectionDialog(false)}
+                position="bottom"
+                style={{ 
+                    width: '100vw',
+                    height: '68vh',
+                    maxHeight: '68vh',
+                    borderTopLeftRadius: '12px',
+                    borderTopRightRadius: '12px',
+                    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+                }}
+                className="custom-selector-sidebar"
+                header={
+                    <div className="sticky top-0 bg-white z-1 p-2 surface-border flex justify-content-between align-items-center">
+                    <span className="font-bold text-2xl">Select Outfits</span>
+                    </div>
+                }
+                blockScroll
+                >
+                <div className="flex flex-column h-full">
+                    <div className="p-3 border-bottom-1 surface-border">
+                        <span className="p-input-icon-left w-full">
+                            <i className="pi pi-search" />
+                            <InputText
+                                value={materialSearch}
+                                onChange={handleMaterialSearch}
+                                placeholder="Search outfits..."
+                                className="w-full"
+                            />
+                        </span>
+                    </div>
+
+                    <div className="flex flex-column" style={{ overflowY: 'auto' }}>
+                        {materials.map((material) => {
+                        const isSelected = selectedGarments.some(g => g.id === material.id);
+                        return (
+                            <div 
+                            key={material.id}
+                            className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border cursor-pointer hover:surface-100 transition-duration-150"
+                            onClick={() => handleOutfitSelection(material)}
+                            >
+                            <div>
+                                <span className="font-medium text-900">{material.name}</span>
+                                <div className="text-sm text-500">₹{material.mrp}</div>
+                            </div>
+                            <i className={`pi ${isSelected ? 'pi-check-circle text-primary' : 'pi-plus-circle'} text-2xl`} />
+                            </div>
+                        );
+                        })}
+                        
+                        {materials.length === 0 && (
+                        <div className="p-5 text-center text-500">
+                            No outfits available
+                        </div>
+                        )}
+                    </div>
+                </div>
+            </Sidebar>
+
             <Dialog 
                 header='Create Order' 
-                visible={showCreateDialog} 
+                visible={showCreateDialog}
                 onHide={() => { setShowCreateDialog(false); resetDialog(); }}
                 maximized={isMaximized}
                 onMaximize={(e) => setIsMaximized(e.maximized)}
@@ -310,14 +830,14 @@ const CreateOrder = () => {
                                                 <Button 
                                                     label="Edit"
                                                     icon="pi pi-pencil" 
-                                                    onClick={() => openMeasurementDialog(1)}
+                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment)}
                                                     className="p-button-sm p-button-outlined"
                                                 />
                                             ) : (
                                                 <Button 
                                                     label="Add"
                                                     icon="pi pi-plus" 
-                                                    onClick={() => openMeasurementDialog(1)}
+                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment)}
                                                     className="p-button-sm p-button-outlined"
                                                 />
                                             )}
@@ -364,7 +884,7 @@ const CreateOrder = () => {
                             <input 
                                 type="file" 
                                 ref={ref => setImageUploadRef(ref)}
-                                onChange={handleImageUpload}
+                                onChange={handleFileUpload}
                                 multiple 
                                 accept="image/*"
                                 style={{ display: 'none' }}
@@ -373,39 +893,9 @@ const CreateOrder = () => {
                                 icon="pi pi-image" 
                                 label="Upload Image" 
                                 className="p-button-outlined w-7" 
-                                onClick={() => imageUploadRef?.click()}
+                                onClick={() => setShowImageSourceDialog(true)}
                             />
                         </div>
-                        
-                        {/* {uploadedImages.length > 0 && (
-                            <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
-                            {uploadedImages.map((image, index) => (
-                                <div key={index} className="relative flex-shrink-0" style={{ width: '120px' }}>
-                                    <div className="border-1 surface-border border-round p-2 h-full">
-                                        <img 
-                                            src={image} 
-                                            alt={`Uploaded ${index + 1}`} 
-                                            className="w-full border-round cursor-pointer"
-                                            style={{ height: '80px', objectFit: 'cover' }}
-                                            onClick={() => {
-                                                setActiveIndex(index);
-                                                setVisibleGalleria(true);
-                                            }}
-                                        />
-                                        <Button 
-                                            icon="pi pi-trash" 
-                                            className="p-button-rounded p-button-danger p-button-text absolute" 
-                                            style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeImage(index);
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                            </div>
-                        )} */}
 
                         {uploadedImages.length > 0 && (
                             <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
@@ -457,13 +947,25 @@ const CreateOrder = () => {
                             <Calendar
                             id="deliveryDate"
                             value={deliveryDate}
-                            onChange={(e) => setDeliveryDate(e.value as Date)}
-                            dateFormat="dd/mm/yy |"
+                            onChange={(e) => {
+                                if (e.value) {
+                                const newDate = new Date(e.value);
+                                if (deliveryDate) {
+                                    newDate.setHours(deliveryDate.getHours());
+                                    newDate.setMinutes(deliveryDate.getMinutes());
+                                }
+                                setDeliveryDate(newDate);
+                                } else {
+                                setDeliveryDate(null);
+                                }
+                            }}
+                            dateFormat="dd/mm/yy"
                             className="w-full"
                             showIcon
                             showTime
                             hourFormat="12"
                             placeholder="Select Delivery Date"
+                            timeOnly={false}
                             />
                         </div>
 
@@ -472,13 +974,26 @@ const CreateOrder = () => {
                             <Calendar
                             id="trialDate"
                             value={trialDate}
-                            onChange={(e) => setTrialDate(e.value as Date)}
-                            dateFormat="dd/mm/yy |"
+                            onChange={(e) => {
+                                if (e.value) {
+                                // Ensure we maintain the time component if date changes
+                                const newDate = new Date(e.value);
+                                if (trialDate) {
+                                    newDate.setHours(trialDate.getHours());
+                                    newDate.setMinutes(trialDate.getMinutes());
+                                }
+                                setTrialDate(newDate);
+                                } else {
+                                setTrialDate(null);
+                                }
+                            }}
+                            dateFormat="dd/mm/yy"
                             className="w-full"
                             showIcon
                             showTime
                             hourFormat="12"
                             placeholder="Select Trial Date"
+                            timeOnly={false}
                             />
                         </div>
                         </div>
@@ -513,12 +1028,15 @@ const CreateOrder = () => {
                             <label htmlFor="price">Stitching Price (₹)</label>
                             <InputNumber 
                                 id="price" 
-                                value={stitchingPrice} 
-                                onValueChange={(e) => setStitchingPrice(e.value || 0)} 
+                                value={stitchingPrice || undefined} 
+                                onValueChange={(e) => setStitchingPrice(e.value ?? 0)} 
                                 mode="currency" 
                                 currency="INR" 
                                 locale="en-IN" 
-                                className="w-full" 
+                                className="w-full"
+                                placeholder="Enter amount"
+                                minFractionDigits={2}
+                                maxFractionDigits={2}
                             />
                         </div>
 
@@ -527,7 +1045,7 @@ const CreateOrder = () => {
                                 label="Add Additional Cost" 
                                 icon="pi pi-plus" 
                                 className="p-button-outlined w-8" 
-                                onClick={() => console.log('Add additional cost clicked')}
+                                onClick={() => setShowAddCostDialog(true)}
                             />
                         </div>
                     </div>
@@ -536,16 +1054,35 @@ const CreateOrder = () => {
                         <h5 className="mt-0 mb-3">Price Breakup</h5>
                         <Divider className="my-2" />
                         
-                        <div className="flex justify-content-between align-items-center mb-4">
-                            <span className="text-600">Stiching Price</span>
+                        <div className="flex justify-content-between align-items-center mb-3">
+                            <span className="text-600">Stitching Price</span>
                             <span>{quantity} x ₹{stitchingPrice} = ₹{(quantity * stitchingPrice).toFixed(2)}</span>
                         </div>
+
+                        {additionalCosts.map((cost) => (
+                            <div key={cost.id} className="flex justify-content-between align-items-center">
+                            <div className="flex align-items-center gap-2">
+                                <span className="text-600">{cost.description}</span>
+                                <Button 
+                                icon="pi pi-trash" 
+                                className="p-button-rounded p-button-text p-button-danger p-button-sm" 
+                                onClick={() => setAdditionalCosts(additionalCosts.filter(c => c.id !== cost.id))}
+                                />
+                            </div>
+                            <span>₹{cost.amount.toFixed(2)}</span>
+                            </div>
+                        ))}
                         
                         <Divider className="my-2" />
                         
                         <div className="flex justify-content-between align-items-center font-bold">
                             <span className="text-600">Total:</span>
-                            <span>₹{(quantity * stitchingPrice).toFixed(2)}</span>
+                            <span>
+                            ₹{(
+                                (quantity * stitchingPrice) + 
+                                additionalCosts.reduce((sum, cost) => sum + cost.amount, 0)
+                            ).toFixed(2)}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -553,28 +1090,54 @@ const CreateOrder = () => {
 
             <Dialog 
                 header={`${currentGarment?.name} Measurements`}
-                visible={visible} 
+                visible={visible}
+                onHide={() => setVisible(false)}
                 maximized={isMaximized}
                 onMaximize={(e) => setIsMaximized(e.maximized)}
-                footer={measurementFooter}
-                onHide={() => setVisible(false)}
+                className={isMaximized ? 'maximized-dialog' : ''}
                 blockScroll
+                footer={measurementFooter}
             >
-                <div className="p-fluid">
-                {selectedGarmentId && garments.find(g => g.id === selectedGarmentId)?.measurements.map((measurement) => (
-                    <div key={measurement} className="field mb-4">
-                    <label htmlFor={measurement} className="block mb-2 font-medium">{measurement} (in inches)</label>
-                    <InputNumber 
-                        id={measurement}
-                        value={currentMeasurements[measurement] || null}
-                        onChange={(e) => handleMeasurementChange(measurement, e.value)}
-                        mode="decimal" 
-                        min={0} 
-                        max={100}
-                        className="w-full"
-                    />
+                <div className="p-fluid mt-3">
+                    {isLoadingMeasurements ? (
+                    <div className="flex justify-content-center p-5">
+                        <i className="pi pi-spinner pi-spin"></i>
                     </div>
-                ))}
+                    ) : (
+                    measurementData
+                        .sort((a, b) => a.seq - b.seq)
+                        .map((master) => (
+                        <div key={master.id} className="field mb-4">
+                            <label htmlFor={master.measurement_name} className="block mb-2 font-medium">
+                            {master.measurement_name} ({master.data_type})
+                            </label>
+                            {master.data_type === 'number' ? (
+                            <InputNumber 
+                                id={master.measurement_name}
+                                value={currentMeasurements[master.measurement_name] ? parseFloat(currentMeasurements[master.measurement_name]!) : null}
+                                onChange={(e) => handleMeasurementChange(
+                                master.measurement_name, 
+                                e.value?.toString() || ''
+                                )}
+                                mode="decimal" 
+                                min={0} 
+                                max={100}
+                                className="w-full"
+                            />
+                            ) : (
+                            <InputText
+                                id={master.measurement_name}
+                                value={currentMeasurements[master.measurement_name] || ''}
+                                onChange={(e) => handleMeasurementChange(
+                                master.measurement_name, 
+                                e.target.value
+                                )}
+                                className="w-full"
+                            />
+                            )}
+                        </div>
+                        ))
+                    )}
                 </div>
             </Dialog>
 
@@ -797,24 +1360,124 @@ const CreateOrder = () => {
                 </div>
             </Dialog>
 
+            <Dialog 
+                visible={showImageSourceDialog} 
+                onHide={() => setShowImageSourceDialog(false)}
+                style={{ width: '95vw', maxWidth: '400px' }}
+            >
+                <div className="flex flex-column gap-3 p-3">
+                <Button 
+                    icon="pi pi-camera" 
+                    label="Take Photo" 
+                    className="p-button-outlined" 
+                    onClick={() => handleImageSourceSelect('camera')}
+                />
+                <Button 
+                    icon="pi pi-images" 
+                    label="Choose from Gallery" 
+                    className="p-button-outlined" 
+                    onClick={() => handleImageSourceSelect('gallery')}
+                />
+                <Button 
+                    icon="pi pi-folder-open" 
+                    label="Choose Files" 
+                    className="p-button-outlined" 
+                    onClick={() => {
+                    setShowImageSourceDialog(false);
+                    imageUploadRef?.click();
+                    }}
+                />
+                </div>
+            </Dialog>
+
+            <Dialog 
+                header="Add Additional Cost" 
+                visible={showAddCostDialog} 
+                onHide={() => {
+                    setShowAddCostDialog(false);
+                    setNewCostDescription('');
+                    setNewCostAmount(null);
+                }}
+                style={{ width: '95vw', maxWidth: '800px' }}
+                footer={
+                    <div>
+                    <Button 
+                        label="Cancel" 
+                        icon="pi pi-times" 
+                        onClick={() => {
+                        setShowAddCostDialog(false);
+                        setNewCostDescription('');
+                        setNewCostAmount(null);
+                        }} 
+                        className="p-button-text" 
+                    />
+                    <Button 
+                        label="Add" 
+                        icon="pi pi-check" 
+                        onClick={() => {
+                        if (newCostDescription && newCostAmount) {
+                            setAdditionalCosts([
+                            ...additionalCosts,
+                            {
+                                id: Date.now().toString(),
+                                description: newCostDescription,
+                                amount: newCostAmount
+                            }
+                            ]);
+                            setShowAddCostDialog(false);
+                            setNewCostDescription('');
+                            setNewCostAmount(null);
+                        }
+                        }} 
+                        autoFocus 
+                    />
+                    </div>
+                }
+                >
+                <div className="p-fluid">
+                    <div className="field my-4">
+                        <label htmlFor="costDescription">Title</label>
+                        <InputText 
+                            id="costDescription" 
+                            value={newCostDescription} 
+                            onChange={(e) => setNewCostDescription(e.target.value)} 
+                            className="w-full" 
+                            placeholder="e.g., Embroidery, Special Fabric, etc." 
+                        />
+                    </div>
+                    <div className="field">
+                        <label htmlFor="costAmount">Amount (₹)</label>
+                        <InputNumber 
+                            id="costAmount" 
+                            value={newCostAmount} 
+                            onValueChange={(e) => setNewCostAmount(e.value ?? null)} 
+                            mode="currency" 
+                            currency="INR" 
+                            locale="en-IN" 
+                            className="w-full"
+                        />
+                    </div>
+                </div>
+            </Dialog>
+
             <div className="fixed bottom-0 left-0 right-0 bg-white shadow-2 border-top-1 surface-border">
                 <div className="flex justify-content-between align-items-center p-3 surface-100">
                     <span className="font-bold">Total:</span>
-                    <span className="font-bold">₹{totalAmount.toFixed(1)}</span>
+                    <span className="font-bold">₹0.00</span>
                 </div>
                 <div className="p-3">
                     <Button 
                         label="Confirm Order"
-                        onClick={() => {}}
+                        onClick={handleConfirmOrder}
                         className="w-full"
+                        disabled={!selectedCustomer || selectedGarments.length === 0}
                     />
                 </div>
             </div>
 
             <Dialog
-                header="Preview"
                 visible={activeIndex !== null}
-                style={{ width: '90vw', maxWidth: '800px' }}
+                style={{ width: '95vw', maxWidth: '800px' }}
                 onHide={() => setActiveIndex(null)}
                 modal
             >
