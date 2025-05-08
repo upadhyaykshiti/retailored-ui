@@ -89,6 +89,11 @@ const SalesOrder = () => {
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
+  const [itemActionSidebarVisible, setItemActionSidebarVisible] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<Order['orderDetails'][0] | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [confirmDeliveredVisible, setConfirmDeliveredVisible] = useState(false);
+  const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
@@ -413,6 +418,71 @@ const SalesOrder = () => {
     }
   };
 
+  const openItemActionSidebar = (detail: Order['orderDetails'][0]) => {
+    setSelectedDetail(detail);
+    const maxQty = detail.ord_qty - detail.delivered_qty - detail.cancelled_qty;
+    setQuantity(maxQty);
+    setItemActionSidebarVisible(true);
+  };
+  
+  const handleStatusQuantityChange = (value: number) => {
+    if (!selectedDetail) return;
+    const maxQty = selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty;
+    setQuantity(Math.min(Math.max(1, value), maxQty));
+  };
+  
+  const handleDelivered = async () => {
+    if (!selectedDetail || !selectedOrder) return;
+    
+    try {
+      await SalesOrderService.markOrderDelivered(
+        selectedOrder.id,
+        quantity
+      );
+      
+      await Toast.show({
+        text: 'Item marked as delivered',
+        duration: 'short',
+        position: 'top'
+      });
+      
+      await fetchOrderDetails(selectedOrder.id);
+      setItemActionSidebarVisible(false);
+    } catch (error) {
+      await Toast.show({
+        text: 'Failed to update delivery status',
+        duration: 'short',
+        position: 'top'
+      });
+    }
+  };
+  
+  const handleCancelled = async () => {
+    if (!selectedDetail || !selectedOrder) return;
+    
+    try {
+      await SalesOrderService.markOrderCancelled(
+        selectedOrder.id,
+        quantity
+      );
+      
+      await Toast.show({
+        text: 'Item marked as cancelled',
+        duration: 'short',
+        position: 'top'
+      });
+      
+      await fetchOrderDetails(selectedOrder.id);
+      setItemActionSidebarVisible(false);
+    } catch (error) {
+      await Toast.show({
+        text: 'Failed to update cancellation status',
+        duration: 'short',
+        position: 'top'
+      });
+    }
+  };
+
   if (loading && !isFetchingMore) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -524,14 +594,6 @@ const SalesOrder = () => {
                     <div className="flex justify-content-between">
                       <span className="text-600">Order Date:</span>
                       <span>{formatDate(new Date(order.order_date))}</span>
-                    </div>
-                    <div className="flex justify-content-between">
-                      <span className="text-600">Trial Date:</span>
-                      <span>{formatDate(new Date(order.tentitive_delivery_date))}</span>
-                    </div>
-                    <div className="flex justify-content-between">
-                      <span className="text-600">Delivery Date:</span>
-                      <span>{formatDate(new Date(order.delivery_date))}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Delivered:</span>
@@ -685,7 +747,7 @@ const SalesOrder = () => {
                   </div>
                   <div className="col-6">
                     <div className="field">
-                      <label>Pending Qty</label>
+                      <label>Delivered Qty</label>
                       <p className="m-0 font-medium">{item.delivered_qty}</p>
                     </div>
                   </div>
@@ -728,6 +790,15 @@ const SalesOrder = () => {
                       icon="pi pi-eye" 
                       className="p-button-outlined"
                       onClick={() => handleViewMeasurement(item)}
+                    />
+                  </div>
+
+                  <div className="col-12 mt-2">
+                    <Button 
+                      label="Update Status" 
+                      icon="pi pi-pencil" 
+                      onClick={() => openItemActionSidebar(item)}
+                      className="w-full"
                     />
                   </div>
                   <Divider />
@@ -857,6 +928,80 @@ const SalesOrder = () => {
       </Dialog>
 
       <Sidebar 
+        visible={itemActionSidebarVisible}
+        onHide={() => setItemActionSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '80vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-item-action-sidebar"
+        header={
+          <div className="sticky top-0 bg-white z-1 p-3 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-xl mr-2">
+              {/* {selectedDetail?.material?.name || 'Item Actions'} */}
+            </span>
+            <span className="text-sm text-500">
+              Max: {selectedDetail ? selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty : 0}
+            </span>
+          </div>
+        }
+        blockScroll
+      >
+        {selectedDetail && (
+          <div className="p-3">
+            <div className="field mb-4">
+              <label className="font-bold block mb-2">Quantity</label>
+              <div className="flex align-items-center justify-content-between bg-gray-100 p-2 border-round">
+                <Button
+                  icon="pi pi-minus" 
+                  onClick={() => handleStatusQuantityChange(quantity - 1)}
+                  className="p-button-rounded p-button-text"
+                  disabled={quantity <= 1}
+                />
+                <InputText 
+                  value={String(quantity)}
+                  onChange={(e) => {
+                    const newValue = parseInt(e.target.value) || 1;
+                    const maxQty = selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty;
+                    handleStatusQuantityChange(Math.min(newValue, maxQty));
+                  }}
+                  className="text-center mx-2 bg-white"
+                  style={{ width: '60px' }}
+                  keyfilter="int"
+                />
+                <Button 
+                  icon="pi pi-plus" 
+                  onClick={() => handleStatusQuantityChange(quantity + 1)}
+                  className="p-button-rounded p-button-text"
+                  disabled={quantity >= (selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 w-full">
+              <Button 
+                label="Cancelled" 
+                icon="pi pi-times" 
+                onClick={() => setConfirmCancelledVisible(true)}
+                className="flex-grow-1 p-button-danger"
+              />
+              <Button 
+                label="Delivered" 
+                icon="pi pi-check" 
+                onClick={() => setConfirmDeliveredVisible(true)}
+                className="flex-grow-1 p-button-success"
+              />
+            </div>
+          </div>
+        )}
+      </Sidebar>
+
+      <Sidebar 
         visible={statusSidebarVisible} 
         onHide={() => setStatusSidebarVisible(false)}
         position="bottom"
@@ -899,118 +1044,186 @@ const SalesOrder = () => {
       </Sidebar>
 
       <Dialog 
-          header="Measurement Details" 
-          visible={measurementDialogVisible} 
-          onHide={() => {
-            setMeasurementDialogVisible(false);
-            setMeasurementData(null);
-          }}
-          maximized={isMaximized}
-          onMaximize={(e) => setIsMaximized(e.maximized)}
-          className={isMaximized ? 'maximized-dialog' : ''}
-          blockScroll
-        >
-          {selectedItem && (
-            <div className="p-fluid">
-              <div className="grid my-2">
-                <div className="col-6 font-bold text-600">Customer Name:</div>
-                <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
-                
-                <div className="col-6 font-bold text-600">Delivery Date:</div>
-                <div className="col-6 font-medium text-right">
-                  {formatDate(new Date(selectedItem?.delivery_date))}
-                </div>
-                
-                <div className="col-6 font-bold text-600">Trial Date:</div>
-                <div className="col-6 font-medium text-right">
-                  {formatDate(new Date(selectedItem.trial_date))}
-                </div>
+        header="Measurement Details" 
+        visible={measurementDialogVisible} 
+        onHide={() => {
+          setMeasurementDialogVisible(false);
+          setMeasurementData(null);
+        }}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+      >
+        {selectedItem && (
+          <div className="p-fluid">
+            <div className="grid my-2">
+              <div className="col-6 font-bold text-600">Customer Name:</div>
+              <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
+              
+              <div className="col-6 font-bold text-600">Delivery Date:</div>
+              <div className="col-6 font-medium text-right">
+                {formatDate(new Date(selectedItem?.delivery_date))}
               </div>
+              
+              <div className="col-6 font-bold text-600">Trial Date:</div>
+              <div className="col-6 font-medium text-right">
+                {formatDate(new Date(selectedItem.trial_date))}
+              </div>
+            </div>
 
-              {loadingMeasurements ? (
-                <div className="surface-100 p-3 border-round my-4">
-                  <div className="flex align-items-center gap-3">
-                    <Skeleton shape="circle" size="2rem" />
-                    <div className="flex flex-column gap-2 w-full">
-                      <Skeleton width="100%" height="1.5rem" />
-                      <Skeleton width="50%" height="1rem" />
+            {loadingMeasurements ? (
+              <div className="surface-100 p-3 border-round my-4">
+                <div className="flex align-items-center gap-3">
+                  <Skeleton shape="circle" size="2rem" />
+                  <div className="flex flex-column gap-2 w-full">
+                    <Skeleton width="100%" height="1.5rem" />
+                    <Skeleton width="50%" height="1rem" />
+                  </div>
+                </div>
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="grid my-3">
+                    <div className="col-6">
+                      <Skeleton width="80%" height="1.5rem" />
+                    </div>
+                    <div className="col-6">
+                      <Skeleton width="60%" height="1.5rem" className="float-right" />
                     </div>
                   </div>
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="grid my-3">
-                      <div className="col-6">
-                        <Skeleton width="80%" height="1.5rem" />
-                      </div>
-                      <div className="col-6">
-                        <Skeleton width="60%" height="1.5rem" className="float-right" />
+                ))}
+              </div>
+            ) : measurementData ? (
+              <>
+                <div className="surface-100 p-3 border-round my-4">
+                  <h4 className="m-0">Measurements</h4>
+                  <p className="text-sm mt-1">
+                    Taken on: {new Date(measurementData.measurement_date).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="grid mb-4">
+                  {measurementData.measurementDetails.map((detail, index) => (
+                    <div key={index} className="col-12 md:col-6">
+                      <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
+                        <span className="font-medium">{detail.measurementMaster.measurement_name}</span>
+                        <span className="font-bold">{detail.measurement_val}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : measurementData ? (
-                <>
-                  <div className="surface-100 p-3 border-round my-4">
-                    <h4 className="m-0">Measurements</h4>
-                    <p className="text-sm mt-1">
-                      Taken on: {new Date(measurementData.measurement_date).toLocaleString()}
-                    </p>
-                  </div>
+              </>
+            ) : (
+              <div className="surface-100 p-3 border-round my-4 text-center">
+                <i className="pi pi-info-circle text-2xl mb-2" />
+                <p className="m-0">No measurement details available</p>
+              </div>
+            )}
 
-                  <div className="grid mb-4">
-                    {measurementData.measurementDetails.map((detail, index) => (
-                      <div key={index} className="col-12 md:col-6">
-                        <div className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border">
-                          <span className="font-medium">{detail.measurementMaster.measurement_name}</span>
-                          <span className="font-bold">{detail.measurement_val}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
+            <div className="surface-50 p-3 border-round">
+              <h5 className="mt-0 mb-3">Stitch Options</h5>
+              {loadingMeasurements ? (
+                <div className="grid">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="col-6">
+                      <Skeleton width="80%" height="1.5rem" className="mb-2" />
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="surface-100 p-3 border-round my-4 text-center">
-                  <i className="pi pi-info-circle text-2xl mb-2" />
-                  <p className="m-0">No measurement details available</p>
+                <div className="grid">
+                  <div className="col-6 font-bold text-600">Collar:</div>
+                  <div className="col-6 font-medium text-right">
+                    {measurementData ? 'Classic' : 'No details available'}
+                  </div>
+                  
+                  <div className="col-6 font-bold text-600">Sleeve:</div>
+                  <div className="col-6 font-medium text-right">
+                    {measurementData ? 'Full' : 'No details available'}
+                  </div>
+                  
+                  <div className="col-6 font-bold text-600">Cuffs:</div>
+                  <div className="col-6 font-medium text-right">
+                    {measurementData ? 'Squared' : 'No details available'}
+                  </div>
+                  
+                  <div className="col-6 font-bold text-600">Pocket Type:</div>
+                  <div className="col-6 font-medium text-right">
+                    {measurementData ? 'Classic' : 'No details available'}
+                  </div>
                 </div>
               )}
-
-              <div className="surface-50 p-3 border-round">
-                <h5 className="mt-0 mb-3">Stitch Options</h5>
-                {loadingMeasurements ? (
-                  <div className="grid">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="col-6">
-                        <Skeleton width="80%" height="1.5rem" className="mb-2" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid">
-                    <div className="col-6 font-bold text-600">Collar:</div>
-                    <div className="col-6 font-medium text-right">
-                      {measurementData ? 'Classic' : 'No details available'}
-                    </div>
-                    
-                    <div className="col-6 font-bold text-600">Sleeve:</div>
-                    <div className="col-6 font-medium text-right">
-                      {measurementData ? 'Full' : 'No details available'}
-                    </div>
-                    
-                    <div className="col-6 font-bold text-600">Cuffs:</div>
-                    <div className="col-6 font-medium text-right">
-                      {measurementData ? 'Squared' : 'No details available'}
-                    </div>
-                    
-                    <div className="col-6 font-bold text-600">Pocket Type:</div>
-                    <div className="col-6 font-medium text-right">
-                      {measurementData ? 'Classic' : 'No details available'}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
-          )}
-        </Dialog>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog 
+        header="Confirm Delivery"
+        visible={confirmDeliveredVisible}
+        onHide={() => setConfirmDeliveredVisible(false)}
+        style={{ width: '450px' }}
+        modal
+        footer={
+          <div>
+            <Button 
+              label="No" 
+              icon="pi pi-times" 
+              onClick={() => setConfirmDeliveredVisible(false)} 
+              className="p-button-text" 
+            />
+            <Button 
+              label="Yes" 
+              icon="pi pi-check" 
+              onClick={() => {
+                setConfirmDeliveredVisible(false);
+                handleDelivered();
+              }} 
+              autoFocus 
+            />
+          </div>
+        }
+      >
+        <div className="flex align-items-center justify-content-center">
+          <i className="pi pi-exclamation-triangle mr-3" style={{ fontSize: '2rem' }} />
+          <span>
+            Are you sure you want to mark {quantity} items as delivered?
+          </span>
+        </div>
+      </Dialog>
+
+      <Dialog 
+        header="Confirm Cancellation"
+        visible={confirmCancelledVisible}
+        onHide={() => setConfirmCancelledVisible(false)}
+        style={{ width: '450px' }}
+        modal
+        footer={
+          <div>
+            <Button 
+              label="No" 
+              icon="pi pi-times" 
+              onClick={() => setConfirmCancelledVisible(false)} 
+              className="p-button-text" 
+            />
+            <Button 
+              label="Yes" 
+              icon="pi pi-check" 
+              onClick={() => {
+                setConfirmCancelledVisible(false);
+                handleCancelled();
+              }} 
+              autoFocus 
+            />
+          </div>
+        }
+      >
+        <div className="flex align-items-center justify-content-center">
+          <i className="pi pi-exclamation-triangle mr-3" style={{ fontSize: '2rem' }} />
+          <span>
+            Are you sure you want to mark {quantity} items as cancelled?
+          </span>
+        </div>
+      </Dialog>
     </div>
   );
 };

@@ -30,7 +30,7 @@ type Ext = 'N' | 'Y';
 interface Garment {
   id: number;
   name: string;
-  img_url: string;
+  image_url: string[];
   measurements: Measurement[];
   ext: Ext;
 }
@@ -65,7 +65,7 @@ const Garments = () => {
   const [currentGarment, setCurrentGarment] = useState<Garment>({
     id: 0,
     name: '',
-    img_url: '',
+    image_url: [],
     measurements: [],
     ext: 'N'
   });
@@ -93,7 +93,7 @@ const Garments = () => {
       const mappedGarments = data.map((material: any) => ({
         id: Number(material.id),
         name: material.name,
-        img_url: material.img_url,
+        image_url: material.img_url || [],
         measurements: material.measurements.map((m: Measurement) => ({
           id: Number(m.id),
           measurement_name: m.measurement_name,
@@ -153,7 +153,7 @@ const Garments = () => {
     setCurrentGarment({
       id: 0,
       name: '',
-      img_url: '',
+      image_url: [],
       measurements: [],
       ext: 'N'
     });
@@ -166,7 +166,10 @@ const Garments = () => {
   };
 
   const handleEdit = (garment: Garment) => {
-    setCurrentGarment({ ...garment });
+    setCurrentGarment({ 
+      ...garment,
+      image_url: garment.image_url || []
+    });
     setEditMode(true);
     setShowDialog(true);
   };
@@ -187,6 +190,7 @@ const Garments = () => {
       if (editMode) {
         const payload = {
           name: currentGarment.name,
+          image_url: currentGarment.image_url,
           ext: currentGarment.ext,
           measurements: currentGarment.measurements
         };
@@ -197,7 +201,7 @@ const Garments = () => {
       } else {
         const payload = {
           name: currentGarment.name,
-          img_url: 'null',
+          image_url: currentGarment.image_url || [],
           material_type: 'F',
           isSaleable: 'Y',
           wsp: 0,

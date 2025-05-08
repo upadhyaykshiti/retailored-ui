@@ -3,10 +3,12 @@ import React from 'react';
 import AppMenuitem from './AppMenuitem';
 import { MenuProvider } from './context/menucontext';
 import { AppMenuItem } from '@/types';
+import useMobileDetect from '@/demo/hooks/useMobileDetect';
 
 const AppMenu = () => {
+    const isMobile = useMobileDetect();
 
-    const model: AppMenuItem[] = [
+    const fullModel: AppMenuItem[] = [
         {
             label: 'Home',
             items: [
@@ -45,6 +47,34 @@ const AppMenu = () => {
             ]
         }
     ];
+
+    const mobileModel: AppMenuItem[] = [
+        {
+            label: 'Masters',
+            items: [
+                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/garments' },
+                { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list' },
+                { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' },
+                { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
+            ]
+        },
+        {
+            label: 'Reports',
+            items: [
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true }
+            ]
+        },
+        {
+            label: 'Settings',
+            items: [
+                { label: 'Users', icon: 'pi pi-fw pi-user', to: '/pages/settings/users', disabled: true },
+                { label: 'Configuration', icon: 'pi pi-fw pi-cog', to: '/pages/settings/configuration', disabled: true }
+            ]
+        }
+    ];
+
+    const model = isMobile ? mobileModel : fullModel;
 
     return (
         <MenuProvider>

@@ -23,7 +23,7 @@ export const MaterialService = {
           data {
             id
             name
-            img_url
+            image_url
             material_type
             isSaleable
             wsp
@@ -58,7 +58,7 @@ export const MaterialService = {
 
   async createMaterialWithMeasurements(input: {
     name: string;
-    img_url: string;
+    image_url: string[];
     material_type: string;
     isSaleable: string;
     wsp: number;
@@ -86,7 +86,7 @@ export const MaterialService = {
 
   async updateMaterialWithMeasurements(id: string, input: {
     name?: string;
-    img_url?: string;
+    image_url?: string[];
     material_type?: string;
     isSaleable?: string;
     wsp?: number;

@@ -240,6 +240,60 @@ export const JobOrderService = {
     return data.createPaymentMain;
   },
   
+  async markJobOrderDelivered(
+    id: string,
+    delivered_qty: number,
+    token?: string
+  ): Promise<{ id: string }> {
+    const mutation = `
+      mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
+        markOrderDelivered(input: $input, id: $id) {
+          id
+        }
+      }
+    `;
+
+    const variables = {
+      id: id,
+      input: {
+        delivered_qty: delivered_qty
+      }
+    };
+
+    const data = await GraphQLService.mutation<{ 
+      markOrderDelivered: { id: string } 
+    }>(mutation, variables, token);
+
+    return data.markOrderDelivered;
+  },
+
+  async markJobOrderCancelled(
+    id: string,
+    cancelled_qty: number,
+    token?: string
+  ): Promise<{ id: string }> {
+    const mutation = `
+      mutation MarkJobOrderCancelled($input: MarkJobOrderCancelledInput!, $id: ID!) {
+        markJobOrderCancelled(input: $input, id: $id) {
+          id
+        }
+      }
+    `;
+
+    const variables = {
+      id: id,
+      input: {
+        cancelled_qty: cancelled_qty
+      }
+    };
+
+    const data = await GraphQLService.mutation<{ 
+      markJobOrderCancelled: { id: string } 
+    }>(mutation, variables, token);
+
+    return data.markJobOrderCancelled;
+  },
+  
   async createJobOrderwithInput(
     input: {
       job_date?: string | null;

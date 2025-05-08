@@ -129,7 +129,7 @@ export const SalesOrderService = {
           data {
             id
             name
-            img_url
+            image_url
             wsp
             mrp
           }
@@ -270,6 +270,60 @@ export const SalesOrderService = {
         }
       }
     };
+  },
+
+  async markOrderDelivered(
+      id: string,
+      delivered_qty: number,
+      token?: string
+  ): Promise<{ id: string }> {
+      const mutation = `
+          mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
+              markOrderDelivered(input: $input, id: $id) {
+                  id
+              }
+          }
+      `;
+
+      const variables = {
+          id: id,
+          input: {
+              delivered_qty: delivered_qty
+          }
+      };
+
+      const data = await GraphQLService.mutation<{ 
+          markOrderDelivered: { id: string } 
+      }>(mutation, variables, token);
+
+      return data.markOrderDelivered;
+  },
+
+  async markOrderCancelled(
+      id: string,
+      cancelled_qty: number,
+      token?: string
+  ): Promise<{ id: string }> {
+      const mutation = `
+          mutation MarkOrderCancelled($input: MarkOrderCancelledInput!, $id: ID!) {
+              markOrderCancelled(input: $input, id: $id) {
+                  id
+              }
+          }
+      `;
+
+      const variables = {
+          id: id,
+          input: {
+              cancelled_qty: cancelled_qty
+          }
+      };
+
+      const data = await GraphQLService.mutation<{ 
+          markOrderCancelled: { id: string } 
+      }>(mutation, variables, token);
+
+      return data.markOrderCancelled;
   },
 
   async createOrderWithDetails(

@@ -148,7 +148,6 @@ const CustomerList = () => {
     return (
       currentCustomer?.fname?.trim() &&
       currentCustomer?.mobileNumber?.trim()?.length === 10 &&
-      currentCustomer?.dob &&
       currentCustomer?.sex
     );
   };
@@ -513,7 +512,6 @@ const CustomerList = () => {
                   <div className="field col-12 md:col-6">
                       <div className="flex align-items-center gap-1 mb-2">
                           <label htmlFor="dob">Date of Birth</label>
-                          <span className="text-red-500 font-bold">*</span>
                       </div>
                       <Calendar
                           id="dob"

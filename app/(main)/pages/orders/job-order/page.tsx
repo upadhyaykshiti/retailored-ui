@@ -137,6 +137,11 @@ const JobOrder = () => {
   const [orderSidebarVisible, setOrderSidebarVisible] = useState(false);
   const [loadingOrdersButton, setLoadingOrdersButton] = useState(false);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [itemActionSidebarVisible, setItemActionSidebarVisible] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<JobOrderDetail | null>(null);
+  const [confirmDeliveredVisible, setConfirmDeliveredVisible] = useState(false);
+  const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
@@ -605,6 +610,75 @@ const JobOrder = () => {
         severity: 'error',
         summary: 'Error',
         detail: 'Failed to record payment',
+        life: 3000
+      });
+    }
+  };
+
+  const openItemActionSidebar = (detail: JobOrderDetail) => {
+    setSelectedDetail(detail);
+    const maxQty = detail.ord_qty - detail.delivered_qty - detail.cancelled_qty;
+    setQuantity(maxQty);
+    setItemActionSidebarVisible(true);
+  };
+
+  const handleStatusQuantityChange = (value: number) => {
+    if (!selectedDetail) return;
+    const maxQty = selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty;
+    setQuantity(Math.min(Math.max(1, value), maxQty));
+  };
+
+  const handleDelivered = async () => {
+    if (!selectedDetail || !selectedJobOrder) return;
+    
+    try {
+      await JobOrderService.markJobOrderDelivered(
+        selectedJobOrder.id,
+        quantity,
+      );
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Item marked as delivered',
+        life: 3000
+      });
+      
+      await fetchJobOrderDetails(selectedJobOrder.id);
+      setItemActionSidebarVisible(false);
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to update delivery status',
+        life: 3000
+      });
+    }
+  };
+  
+  const handleCancelled = async () => {
+    if (!selectedDetail || !selectedJobOrder) return;
+    
+    try {
+      await JobOrderService.markJobOrderCancelled(
+        selectedJobOrder.id,
+        quantity
+      );
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Item marked as cancelled',
+        life: 3000
+      });
+      
+      await fetchJobOrderDetails(selectedJobOrder.id);
+      setItemActionSidebarVisible(false);
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to update cancellation status',
         life: 3000
       });
     }
@@ -1171,6 +1245,77 @@ const JobOrder = () => {
         )}
       </Sidebar>
 
+      <Sidebar 
+        visible={itemActionSidebarVisible}
+        onHide={() => setItemActionSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '80vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-item-action-sidebar"
+        header={
+          <div className="sticky top-0 bg-white z-1 p-3 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-xl mr-2">
+              {selectedDetail?.orderDetail?.material.name || 'Item Actions'}
+            </span>
+          </div>
+        }
+        blockScroll
+      >
+        {selectedDetail && (
+          <div className="p-3">
+            <div className="field mb-4">
+              <label className="font-bold block mb-2">Quantity</label>
+              <div className="flex align-items-center justify-content-between bg-gray-100 p-2 border-round">
+                <Button
+                  icon="pi pi-minus" 
+                  onClick={() => handleStatusQuantityChange(quantity - 1)}
+                  className="p-button-rounded p-button-text"
+                  disabled={quantity <= 1}
+                />
+                <InputText 
+                  value={String(quantity)}
+                  onChange={(e) => {
+                    const newValue = parseInt(e.target.value) || 1;
+                    const maxQty = selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty;
+                    handleStatusQuantityChange(Math.min(newValue, maxQty));
+                  }}
+                  className="text-center mx-2 bg-white"
+                  style={{ width: '60px' }}
+                  keyfilter="int"
+                />
+                <Button 
+                  icon="pi pi-plus" 
+                  onClick={() => handleStatusQuantityChange(quantity + 1)}
+                  className="p-button-rounded p-button-text"
+                  disabled={quantity >= (selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 w-full">
+              <Button 
+                label="Cancelled" 
+                icon="pi pi-times" 
+                onClick={() => setConfirmCancelledVisible(true)}
+                className="flex-grow-1 p-button-danger"
+              />
+              <Button 
+                label="Delivered" 
+                icon="pi pi-check" 
+                onClick={() => setConfirmDeliveredVisible(true)}
+                className="flex-grow-1 p-button-success"
+              />
+            </div>
+          </div>
+        )}
+      </Sidebar>
+
       <Dialog 
         header={`Order Details - ${selectedJobOrder?.docno || `JOB-${selectedJobOrder?.id}`}`} 
         visible={visible} 
@@ -1322,6 +1467,14 @@ const JobOrder = () => {
                           onClick={() => handleJobberPayment(selectedJobOrder!)}
                           className="p-button-success"
                         />
+                    </div>
+                    <div className="col-12 mt-2">
+                      <Button 
+                        label="Update Status" 
+                        icon="pi pi-pencil" 
+                        onClick={() => openItemActionSidebar(detail)}
+                        className="w-full"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1527,6 +1680,74 @@ const JobOrder = () => {
               disabled={!paymentForm.amount || !paymentForm.paymentDate || !selectedPaymentMode}
             />
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog 
+        header="Confirm Delivery"
+        visible={confirmDeliveredVisible}
+        onHide={() => setConfirmDeliveredVisible(false)}
+        style={{ width: '450px' }}
+        modal
+        footer={
+          <div>
+            <Button 
+              label="No" 
+              icon="pi pi-times" 
+              onClick={() => setConfirmDeliveredVisible(false)} 
+              className="p-button-text" 
+            />
+            <Button 
+              label="Yes" 
+              icon="pi pi-check" 
+              onClick={() => {
+                setConfirmDeliveredVisible(false);
+                handleDelivered();
+              }} 
+              autoFocus 
+            />
+          </div>
+        }
+      >
+        <div className="flex align-items-center justify-content-center">
+          <i className="pi pi-exclamation-triangle mr-3" style={{ fontSize: '2rem' }} />
+          <span>
+            Are you sure you want to mark {quantity} items as delivered?
+          </span>
+        </div>
+      </Dialog>
+
+      <Dialog 
+        header="Confirm Cancellation"
+        visible={confirmCancelledVisible}
+        onHide={() => setConfirmCancelledVisible(false)}
+        style={{ width: '450px' }}
+        modal
+        footer={
+          <div>
+            <Button 
+              label="No" 
+              icon="pi pi-times" 
+              onClick={() => setConfirmCancelledVisible(false)} 
+              className="p-button-text" 
+            />
+            <Button 
+              label="Yes" 
+              icon="pi pi-check" 
+              onClick={() => {
+                setConfirmCancelledVisible(false);
+                handleCancelled();
+              }} 
+              autoFocus 
+            />
+          </div>
+        }
+      >
+        <div className="flex align-items-center justify-content-center">
+          <i className="pi pi-exclamation-triangle mr-3" style={{ fontSize: '2rem' }} />
+          <span>
+            Are you sure you want to mark {quantity} items as cancelled?
+          </span>
         </div>
       </Dialog>
     </div>
