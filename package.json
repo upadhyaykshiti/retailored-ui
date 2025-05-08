@@ -16,8 +16,6 @@
     "@capacitor/filesystem": "^7.0.1",
     "@capacitor/toast": "^7.0.1",
     "@capacitor/android": "^6.2.1",
-    "@capacitor/cli": "^6.2.1",
-    "@capacitor/core": "^6.2.1",
     "@types/node": "20.3.1",
     "@types/react": "18.2.12",
     "@types/react-beautiful-dnd": "^13.1.8",
