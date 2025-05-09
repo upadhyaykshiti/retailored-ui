@@ -14,6 +14,7 @@ import { Dropdown } from 'primereact/dropdown';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getImageUrl } from '@/demo/utils/imageShowUtils';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
@@ -45,7 +46,7 @@ interface Order {
     id: string;
     order_id: string;
     measurement_main_id: string;
-    image_url: string | null;
+    image_url: string[] | null;
     material_master_id: string;
     trial_date: string;
     delivery_date: string;
@@ -293,12 +294,18 @@ const SalesOrder = () => {
     );
   };
   
-  const handleImagePreview = (imageUrl: string) => {
-    setImages([{ itemImageSrc: imageUrl }]);
+  const handleImagePreview = (images: string | string[] | null) => {
+    if (!images) return;
+    
+    const imageArray = Array.isArray(images) ? images : [images];
+    const imageUrls = imageArray.map(filename => ({
+      itemImageSrc: getImageUrl(filename, 'sales_order')
+    }));
+        
+    setImages(imageUrls);
     setActiveImageIndex(0);
     setImagePreviewVisible(true);
   };
-
   const formatDate = (date: Date | null) => {
     return date ? date.toLocaleDateString('en-IN') : 'Not scheduled';
   };
@@ -574,7 +581,7 @@ const SalesOrder = () => {
               className="col-12 md:col-6 lg:col-4"
               ref={index === filteredOrders.length - 1 ? lastOrderRef : null}
             >
-              <Card className="h-full">
+              <Card className="h-full mb-5">
                 <div className="flex flex-column gap-2">
                   <div className="flex justify-content-between align-items-center">
                     <span className="font-bold">{order.docno}</span>
@@ -773,13 +780,13 @@ const SalesOrder = () => {
                     />
                   </div>
 
-                  {item?.image_url && (
+                  {item?.image_url && item.image_url.length > 0 && (
                     <div className="col-12 mt-2">
                       <Button 
-                        label="View Image" 
+                        label={`View Images (${item.image_url.length})`} 
                         icon="pi pi-image" 
                         className="p-button-outlined"
-                        onClick={() => handleImagePreview(item.image_url || '')}
+                        onClick={() => handleImagePreview(item.image_url)}
                       />
                     </div>
                   )}

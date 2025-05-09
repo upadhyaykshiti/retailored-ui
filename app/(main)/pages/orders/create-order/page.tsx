@@ -17,6 +17,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Toast } from '@capacitor/toast';
 
 interface Customer {
@@ -411,7 +412,7 @@ const CreateOrder = () => {
         } catch (error) {
           console.error('Error capturing image:', error);
         }
-      };
+    };
       
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -448,15 +449,16 @@ const CreateOrder = () => {
             />
         );
     };
+
     const showToast = async (message: string) => {
         await Toast.show({ 
           text: message,
           duration: 'long',
           position: 'top'
         });
-      };   
+    };   
 
-      const handleConfirmOrder = async () => {        
+    const handleConfirmOrder = async () => {        
         try {
           if (!selectedCustomer) {
             await showToast('Please select a customer first');
@@ -469,15 +471,17 @@ const CreateOrder = () => {
           }
       
           const docno = `ORD-${Date.now()}`;
-
+      
           const formatDateTime = (date?: Date | null) => {
             if (!date) return '';
             const pad = (num: number) => num.toString().padStart(2, '0');
             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
           };
-
+      
           const currentDate = new Date();
           
+          const base64Images = await convertImagesToBase64(uploadedImages);
+      
           const orderPayload = {
             user_id: parseInt(selectedCustomer.id),
             docno: docno,
@@ -486,7 +490,7 @@ const CreateOrder = () => {
             status_id: 1,
             order_details: selectedGarments.map(garment => ({
               material_master_id: parseInt(garment.id),
-              image_url: uploadedImages.length > 0 ? uploadedImages[0] : '',
+              image_url: base64Images,
               item_amt: garment.mrp,
               item_discount: 0,
               ord_qty: quantity,
@@ -507,9 +511,7 @@ const CreateOrder = () => {
               }]
             })),
           };
-      
-          console.log('Order payload:', orderPayload);
-      
+            
           const response = await SalesOrderService.createOrderWithDetails(orderPayload);
           
           await showToast('Order confirmed successfully!');
@@ -597,6 +599,7 @@ const CreateOrder = () => {
                         icon="pi pi-plus" 
                         onClick={() => setShowOutfitSelectionDialog(true)}
                         size="small"
+                        disabled={!selectedCustomer}
                     />
                 </div>
 
@@ -976,7 +979,6 @@ const CreateOrder = () => {
                             value={trialDate}
                             onChange={(e) => {
                                 if (e.value) {
-                                // Ensure we maintain the time component if date changes
                                 const newDate = new Date(e.value);
                                 if (trialDate) {
                                     newDate.setHours(trialDate.getHours());
@@ -1460,12 +1462,12 @@ const CreateOrder = () => {
                 </div>
             </Dialog>
 
-            <div className="fixed bottom-0 left-0 right-0 bg-white shadow-2 border-top-1 surface-border">
+            <div className="fixed bottom-0 left-0 right-0 bg-white shadow-2 border-top-1 surface-border mb-5">
                 <div className="flex justify-content-between align-items-center p-3 surface-100">
                     <span className="font-bold">Total:</span>
                     <span className="font-bold">₹0.00</span>
                 </div>
-                <div className="p-3">
+                <div className="p-3 mb-5">
                     <Button 
                         label="Confirm Order"
                         onClick={handleConfirmOrder}

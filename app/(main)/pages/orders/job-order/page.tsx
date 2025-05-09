@@ -15,6 +15,8 @@ import { JobOrderService } from '@/demo/service/job-order.service';
 import { Toast } from 'primereact/toast';
 import { Skeleton } from 'primereact/skeleton';
 import { ProgressSpinner } from 'primereact/progressspinner';
+import { getImageUrl } from '@/demo/utils/imageShowUtils';
+import { convertImageToBase64, convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
 
@@ -43,10 +45,10 @@ interface MeasurementDetail {
 }
 
 interface JobOrderDetail {
-  image_url: string | null;
+  image_url: string[] | null;
   trial_date: string | null;
   delivery_date: string | null;
-  item_cost: number;
+  item_amt: number;
   item_discount: number;
   ord_qty: number;
   delivered_qty: number;
@@ -71,6 +73,7 @@ interface OrdersList {
   id: string;
   order_id: string;
   measurement_main_id: string;
+  image_url: string[];
   orderMain: {
     docno: string;
     user: {
@@ -105,6 +108,7 @@ interface OrderItemDetails {
   quantity: number;
   makingCharge: number;
   image: File | null;
+  selectedImages?: string[];
 }
 
 const JobOrder = () => {
@@ -469,36 +473,52 @@ const JobOrder = () => {
 
   const handleCreateOrder = async () => {
     if (!selectedJobber || selectedItems.length === 0) return;
-  
+
     setCreatingOrder(true);
     try {
       const now = new Date();
       const docno = `JOB-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-  
-      const jobDetails = selectedItems.map(item => ({
-        admsite_code: selectedJobber.value,
-        order_details_id: item.orderUniqueId || null,
-        material_master_id: item.materialId,
-        measurement_main_id: item.measurementMainID,
-        image_url: itemDetails[item.id]?.image ? URL.createObjectURL(itemDetails[item.id].image!) : null,
-        item_cost: itemDetails[item.id]?.makingCharge || 0,
-        ord_qty: itemDetails[item.id]?.quantity || 1
+
+      const jobDetails = await Promise.all(selectedItems.map(async (item) => {
+        const itemDetail = itemDetails[item.id] || {};
+        
+        let allImages: string[] = [];
+
+        if (itemDetail.image) {
+          const uploadedImageBase64 = await convertImageToBase64(URL.createObjectURL(itemDetail.image));
+          allImages.push(uploadedImageBase64);
+        }
+
+        if (itemDetail.selectedImages?.length) {
+          const selectedImagesBase64 = await convertImagesToBase64(itemDetail.selectedImages);
+          allImages = [...allImages, ...selectedImagesBase64];
+        }
+
+        return {
+          admsite_code: selectedJobber.value,
+          order_details_id: item.orderUniqueId || null,
+          material_master_id: item.materialId,
+          measurement_main_id: item.measurementMainID,
+          image_url: allImages.length > 0 ? allImages : null,
+          item_amt: itemDetail.makingCharge || 0,
+          ord_qty: itemDetail.quantity || 1
+        };
       }));
-  
+
       await JobOrderService.createJobOrderwithInput({
         job_date: new Date().toISOString().split('T')[0],
         status_id: null,
         docno: docno,
         job_details: jobDetails
       });
-  
+
       toast.current?.show({
         severity: 'success',
         summary: 'Success',
         detail: 'Job order created successfully',
         life: 3000
       });
-  
+
       setCreateOrderVisible(false);
       setSelectedJobber(null);
       setSelectedItems([]);
@@ -1183,10 +1203,129 @@ const JobOrder = () => {
               />
             </div>
 
+            <div className="field mb-4">
+              <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-image mr-2"></i>
+                Select Images from Order
+              </label>
+              
+              <div className="border-1 surface-border border-round p-3">
+                {currentlyEditingItem.orderUniqueId && (
+                  <div className="flex flex-column gap-3">
+                    {(() => {
+                      const order = ordersList.find(o => o.id === currentlyEditingItem.orderUniqueId);
+                      const images = order?.image_url 
+                        ? (Array.isArray(order.image_url) ? order.image_url : [order.image_url])
+                        : [];
+                      
+                      if (images.length === 0) {
+                        return (
+                          <div className="text-center p-4 surface-50 border-round">
+                            <i className="pi pi-image text-2xl mb-2" />
+                            <p className="m-0">No images available in this order</p>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <>
+                          <div className="flex justify-content-between align-items-center">
+                            <span>Select All</span>
+                            <Checkbox 
+                              inputId="select-all-images"
+                              checked={images.every(image => {
+                                const fullUrl = getImageUrl(image, 'sales_order');
+                                return itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(fullUrl);
+                              })}
+                              onChange={(e) => {
+                                const fullUrls = images.map(image => 
+                                  getImageUrl(image, 'sales_order')
+                                );
+                                
+                                setItemDetails(prev => {
+                                  const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
+                                  
+                                  return {
+                                    ...prev,
+                                    [currentlyEditingItem.id]: {
+                                      ...current,
+                                      selectedImages: e.checked ? fullUrls : []
+                                    }
+                                  };
+                                });
+                              }}
+                            />
+                          </div>
+                          
+                          <div className="grid">
+                            {images.map((imageUrl, index) => {
+                              const fullImageUrl = getImageUrl(imageUrl, 'sales_order');
+                              
+                              return (
+                                <div key={index} className="col-6 md:col-4">
+                                  <div className="border-1 surface-border border-round p-2 flex flex-column align-items-center">
+                                    <img 
+                                      src={fullImageUrl} 
+                                      alt={`Order image ${index + 1}`}
+                                      className="w-full mb-2 border-round cursor-pointer"
+                                      style={{ 
+                                        height: '100px',
+                                        objectFit: 'cover',
+                                        aspectRatio: '1/1'
+                                      }}
+                                      onClick={() => {
+                                        setImages(images.map(img => ({
+                                          itemImageSrc: getImageUrl(img, 'sales_order')
+                                        })));
+                                        setActiveImageIndex(index);
+                                        setImagePreviewVisible(true);
+                                      }}
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+                                      }}
+                                    />
+                                    <Checkbox 
+                                      inputId={`order-image-${index}`}
+                                      checked={itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(fullImageUrl) || false}
+                                      onChange={(e) => {
+                                        setItemDetails(prev => {
+                                          const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
+                                          const selectedImages = current.selectedImages || [];
+                                          
+                                          let updatedImages;
+                                          if (e.checked) {
+                                            updatedImages = [...selectedImages, fullImageUrl];
+                                          } else {
+                                            updatedImages = selectedImages.filter(img => img !== fullImageUrl);
+                                          }
+                                          
+                                          return {
+                                            ...prev,
+                                            [currentlyEditingItem.id]: {
+                                              ...current,
+                                              selectedImages: updatedImages
+                                            }
+                                          };
+                                        });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="field">
               <label className="font-bold block mb-2 flex align-items-center">
                 <i className="pi pi-image mr-2"></i>
-                  Image
+                Upload New Image
               </label>
               
               {itemDetails[currentlyEditingItem.id]?.image ? (
@@ -1244,6 +1383,25 @@ const JobOrder = () => {
           </div>
         )}
       </Sidebar>
+
+      <Dialog 
+        visible={imagePreviewVisible} 
+        onHide={() => setImagePreviewVisible(false)}
+        style={{ width: '90vw', maxWidth: '800px' }}
+        header="Image Preview"
+      >
+        <Galleria
+          value={images}
+          activeIndex={activeImageIndex}
+          onItemChange={(e) => setActiveImageIndex(e.index)}
+          showThumbnails={false}
+          showIndicators={images.length > 1}
+          showItemNavigators={images.length > 1}
+          item={itemTemplate}
+          thumbnail={thumbnailTemplate}
+          style={{ width: '100%' }}
+        />
+      </Dialog>
 
       <Sidebar 
         visible={itemActionSidebarVisible}
@@ -1326,8 +1484,8 @@ const JobOrder = () => {
         blockScroll
       >
         {loadingDetails ? (
-          <div className="p-fluid my-4">
-            <div className="grid mb-4">
+          <div className="p-fluid my-5">
+            <div className="grid mb-5">
               {[...Array(4)].map((_, i) => (
                 <div key={i} className="col-6">
                   <Skeleton width="100%" height="1.5rem" className="mb-2" />
@@ -1429,7 +1587,7 @@ const JobOrder = () => {
                     <div className="col-6">
                       <div className="field">
                         <label>Pending Amount</label>
-                        <p className="m-0 font-medium">{detail.item_cost}</p>
+                        <p className="m-0 font-medium">{detail.item_amt}</p>
                       </div>
                     </div>
                     <div className="col-12">
@@ -1439,16 +1597,16 @@ const JobOrder = () => {
                       </div>
                     </div>
                     
-                    {detail.image_url && (
-                      <div className="col-12 mt-3">
+                    {detail.image_url?.map((url, idx) => (
+                      <div key={idx} className="col-12 mt-3">
                         <Button 
-                          label="View Image" 
+                          label={`View Image ${idx + 1}`} 
                           icon="pi pi-image" 
-                          onClick={() => handleImagePreview(detail.image_url || '')}
+                          onClick={() => handleImagePreview(url)}
                           className="p-button-outlined"
                         />
                       </div>
-                    )}
+                    ))}
                     <div className="col-12 mt-2">
                       <Button
                         label="View Measurements" 

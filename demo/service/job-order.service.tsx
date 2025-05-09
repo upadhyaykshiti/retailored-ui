@@ -41,6 +41,7 @@ export const JobOrderService = {
             id
             order_id
             measurement_main_id
+            image_url
             orderMain {
               docno
               user {
@@ -144,7 +145,7 @@ export const JobOrderService = {
             image_url
             trial_date
             delivery_date
-            item_cost
+            item_amt
             item_discount
             ord_qty
             delivered_qty
@@ -304,8 +305,8 @@ export const JobOrderService = {
         order_details_id?: string | null;
         material_master_id: string;
         measurement_main_id?: string | null;
-        image_url?: string | null;
-        item_cost?: number | null;
+        image_url?: string[] | null;
+        item_amt?: number | null;
         ord_qty: number;
       }>;
     },
@@ -330,7 +331,7 @@ export const JobOrderService = {
           material_master_id: detail.material_master_id,
           measurement_main_id: detail.measurement_main_id || null,
           image_url: detail.image_url || null,
-          item_cost: detail.item_cost || null,
+          item_amt: detail.item_amt || null, 
           ord_qty: detail.ord_qty
         }))
       }

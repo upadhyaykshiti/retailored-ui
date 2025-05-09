@@ -334,7 +334,7 @@ export const SalesOrderService = {
       type_id: number;
       order_details: Array<{
         material_master_id: number;
-        image_url: string;
+        image_url: string[];
         item_amt: number;
         item_discount: number;
         ord_qty: number;
