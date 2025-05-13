@@ -14,7 +14,6 @@ import { Dropdown } from 'primereact/dropdown';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getImageUrl } from '@/demo/utils/imageShowUtils';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
@@ -299,13 +298,14 @@ const SalesOrder = () => {
     
     const imageArray = Array.isArray(images) ? images : [images];
     const imageUrls = imageArray.map(filename => ({
-      itemImageSrc: getImageUrl(filename, 'sales_order')
+      itemImageSrc: filename
     }));
         
     setImages(imageUrls);
     setActiveImageIndex(0);
     setImagePreviewVisible(true);
   };
+
   const formatDate = (date: Date | null) => {
     return date ? date.toLocaleDateString('en-IN') : 'Not scheduled';
   };
@@ -581,12 +581,12 @@ const SalesOrder = () => {
               className="col-12 md:col-6 lg:col-4"
               ref={index === filteredOrders.length - 1 ? lastOrderRef : null}
             >
-              <Card className="h-full mb-5">
+              <Card className="h-full">
                 <div className="flex flex-column gap-2">
                   <div className="flex justify-content-between align-items-center">
                     <span className="font-bold">{order.docno}</span>
                     <Tag 
-                      value={order.orderStatus?.status_name || 'Unknown'} 
+                      value={order.orderStatus?.status_name || 'Unknown'}
                       severity={getStatusSeverity(order.orderStatus?.status_name)} 
                     />
                   </div>

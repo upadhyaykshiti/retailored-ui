@@ -17,6 +17,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { compressImage } from '@/demo/utils/imageCompressUtils';
 import { convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Toast } from '@capacitor/toast';
 
@@ -392,37 +393,91 @@ const CreateOrder = () => {
     const handleImageSourceSelect = async (source: 'camera' | 'gallery') => {
         setShowImageSourceDialog(false);
         try {
-          const image = await Camera.getPhoto({
+            const image = await Camera.getPhoto({
             quality: 90,
             allowEditing: false,
             resultType: CameraResultType.Uri,
             source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
-          });
-      
-          if (image.webPath) {
-            setUploadedImages(prev => [...prev, image.webPath!]);
-          } else if (image.path) {
-            const file = await Filesystem.readFile({
-              path: image.path!,
-              directory: Directory.Cache,
             });
-            const base64Image = `data:image/jpeg;base64,${file.data}`;
-            setUploadedImages(prev => [...prev, base64Image]);
-          }
+
+            if (image.webPath || image.path) {
+            let imageUrl = image.webPath;
+            
+            if (!imageUrl && image.path) {
+                const file = await Filesystem.readFile({
+                path: image.path!,
+                directory: Directory.Cache,
+                });
+                imageUrl = `data:image/jpeg;base64,${file.data}`;
+            }
+
+            if (imageUrl) {
+                const response = await fetch(imageUrl);
+                const blob = await response.blob();
+                const file = new File([blob], 'captured.jpg', { type: blob.type });
+
+                const MAX_SIZE_MB = 1;
+                let finalFile = file;
+                if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                finalFile = await compressImage(file, MAX_SIZE_MB) || file;
+                }
+
+                if (finalFile.size > MAX_SIZE_MB * 1024 * 1024) {
+                await Toast.show({
+                    text: 'Image is too large after compression',
+                    duration: 'short',
+                    position: 'top'
+                });
+                return;
+                }
+
+                setUploadedImages(prev => [...prev, URL.createObjectURL(finalFile)]);
+            }
+            }
         } catch (error) {
-          console.error('Error capturing image:', error);
+            console.error('Error capturing image:', error);
+            await Toast.show({
+            text: 'Failed to capture image',
+            duration: 'short',
+            position: 'top'
+            });
         }
     };
-      
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
-          const files = Array.from(e.target.files);
-          const newImages = await Promise.all(
-            files.map(async (file) => {
-              return URL.createObjectURL(file);
-            })
-          );
-          setUploadedImages(prev => [...prev, ...newImages]);
+            const files = Array.from(e.target.files);
+            const MAX_SIZE_MB = 1;
+            
+            try {
+            const compressedFiles = await Promise.all(
+                files.map(async (file) => {
+                if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                    const compressedFile = await compressImage(file, MAX_SIZE_MB);
+                    if (!compressedFile) {
+                    throw new Error('Compression failed');
+                    }
+                    return compressedFile;
+                }
+                return file;
+                })
+            );
+
+            const newImages = await Promise.all(
+                compressedFiles.map(async (file) => {
+                return URL.createObjectURL(file);
+                })
+            );
+            
+            setUploadedImages(prev => [...prev, ...newImages]);
+            } catch (error) {
+            console.error('Error processing images:', error);
+            await Toast.show({
+                text: 'Failed to process some images. Please try smaller files.',
+                duration: 'short',
+                position: 'top'
+            });
+            }
         }
     };
       
@@ -480,7 +535,17 @@ const CreateOrder = () => {
       
           const currentDate = new Date();
           
-          const base64Images = await convertImagesToBase64(uploadedImages);
+          const base64Images = await Promise.all(
+            uploadedImages.map(async (url) => {
+                const response = await fetch(url);
+                const blob = await response.blob();
+                return new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+                });
+            })
+          );
       
           const orderPayload = {
             user_id: parseInt(selectedCustomer.id),
@@ -494,8 +559,8 @@ const CreateOrder = () => {
               item_amt: garment.mrp,
               item_discount: 0,
               ord_qty: quantity,
-              trial_date: formatDateTime(trialDate),
               delivery_date: formatDateTime(deliveryDate),
+              trial_date: formatDateTime(trialDate),
               status_id: 1,
               measurement_main: [{
                 user_id: parseInt(selectedCustomer.id),
@@ -882,6 +947,7 @@ const CreateOrder = () => {
                             icon="pi pi-microphone" 
                             label="Record Audio" 
                             className="p-button-outlined w-7" 
+                            disabled
                         />
                         <div>
                             <input 
@@ -894,10 +960,13 @@ const CreateOrder = () => {
                             />
                             <Button 
                                 icon="pi pi-image" 
-                                label="Upload Image" 
+                                label="Upload Image"
                                 className="p-button-outlined w-7" 
                                 onClick={() => setShowImageSourceDialog(true)}
                             />
+                            <p className="mt-1 text-sm text-500">
+                                <small>Max 1MB per image (larger images will be compressed)</small>
+                            </p>
                         </div>
 
                         {uploadedImages.length > 0 && (
@@ -1310,7 +1379,7 @@ const CreateOrder = () => {
                                         name="sleeve" 
                                         value="Half" 
                                         onChange={(e) => setSleeveOption(e.value)} 
-                                        checked={sleeveOption === 'Half'} 
+                                        checked={sleeveOption === 'Half'}
                                     />
                                     <label htmlFor="sleeve2" className="ml-2">Half</label>
                                 </div>

@@ -11,11 +11,12 @@ import { Dropdown } from 'primereact/dropdown';
 import { Checkbox } from 'primereact/checkbox';
 import { ScrollPanel } from 'primereact/scrollpanel';
 import { Sidebar } from 'primereact/sidebar';
+import { Calendar } from 'primereact/calendar';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import { Toast } from 'primereact/toast';
 import { Skeleton } from 'primereact/skeleton';
 import { ProgressSpinner } from 'primereact/progressspinner';
-import { getImageUrl } from '@/demo/utils/imageShowUtils';
+import { compressImage } from '@/demo/utils/imageCompressUtils';
 import { convertImageToBase64, convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
@@ -74,6 +75,8 @@ interface OrdersList {
   order_id: string;
   measurement_main_id: string;
   image_url: string[];
+  trial_date: string;
+  delivery_date: string;
   orderMain: {
     docno: string;
     user: {
@@ -146,6 +149,8 @@ const JobOrder = () => {
   const [confirmDeliveredVisible, setConfirmDeliveredVisible] = useState(false);
   const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [trialDate, setTrialDate] = useState<Date | null>(new Date());
+  const [deliveryDate, setDeliveryDate] = useState<Date | null>(new Date());
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
@@ -256,13 +261,15 @@ const JobOrder = () => {
   const fetchOrdersList = useCallback(async (page: number = 1, search: string = '') => {
     try {
       setLoadingOrders(true);
+
       const { data, pagination } = await JobOrderService.getOrdersList(
         page,
         10,
         search || null
       );
-  
-      setOrdersList(prev => page === 1 ? data : [...prev, ...data]);
+
+      setOrdersList(prev => (page === 1 ? data : [...prev, ...data]));
+
       setOrdersPagination({
         currentPage: pagination.currentPage,
         hasMorePages: pagination.hasMorePages,
@@ -270,6 +277,15 @@ const JobOrder = () => {
         perPage: pagination.perPage,
         total: pagination.total
       });
+
+      if (currentlyEditingItem) {
+        const editingOrder = data.find(o => o.id === currentlyEditingItem.orderUniqueId);
+        if (editingOrder) {
+          setTrialDate(editingOrder.trial_date ? new Date(editingOrder.trial_date) : new Date());
+          setDeliveryDate(editingOrder.delivery_date ? new Date(editingOrder.delivery_date) : new Date());
+        }
+      }
+
     } catch (error) {
       toast.current?.show({
         severity: 'error',
@@ -280,7 +296,7 @@ const JobOrder = () => {
     } finally {
       setLoadingOrders(false);
     }
-  }, []);
+  }, [currentlyEditingItem?.orderUniqueId]);
 
   const fetchPaymentModes = useCallback(async () => {
     try {
@@ -359,8 +375,14 @@ const JobOrder = () => {
     );
   };
 
-  const handleImagePreview = (imageUrl: string) => {
-    setImages([{ itemImageSrc: imageUrl }]);
+  const handleImagePreview = (images: string[] | null) => {
+    if (!images || images.length === 0) return;
+    
+    const imageUrls = images.map(imageUrl => ({
+      itemImageSrc: imageUrl
+    }));
+        
+    setImages(imageUrls);
     setActiveImageIndex(0);
     setImagePreviewVisible(true);
   };
@@ -401,16 +423,55 @@ const JobOrder = () => {
       }
     }));
   };
-  
-  const handleItemImageUpload = (file: File | null) => {
-    if (!currentlyEditingItem) return;
-    setItemDetails(prev => ({
-      ...prev,
-      [currentlyEditingItem.id]: {
-        ...(prev[currentlyEditingItem.id] || {quantity: 1, makingCharge: 0}),
-        image: file
+
+  const handleItemImageUpload = async (file: File | null) => {
+    if (!currentlyEditingItem || !file) return;
+
+    try {
+      const MAX_SIZE_MB = 1;
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        const compressedFile = await compressImage(file, MAX_SIZE_MB);
+        
+        if (!compressedFile) {
+          toast.current?.show({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to compress image',
+            life: 3000
+          });
+          return;
+        }
+
+        if (compressedFile.size > MAX_SIZE_MB * 1024 * 1024) {
+          toast.current?.show({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Image is too large after compression (max ${MAX_SIZE_MB}MB allowed)`,
+            life: 3000
+          });
+          return;
+        }
+
+        file = compressedFile;
       }
-    }));
+
+      setItemDetails(prev => ({
+        ...prev,
+        [currentlyEditingItem.id]: {
+          ...(prev[currentlyEditingItem.id] || {quantity: 1, makingCharge: 0}),
+          image: file
+        }
+      }));
+
+    } catch (error) {
+      console.error('Error processing image:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Error processing image',
+        life: 3000
+      });
+    }
   };
 
   const formatDate = (dateString: string | null) => {
@@ -501,7 +562,9 @@ const JobOrder = () => {
           measurement_main_id: item.measurementMainID,
           image_url: allImages.length > 0 ? allImages : null,
           item_amt: itemDetail.makingCharge || 0,
-          ord_qty: itemDetail.quantity || 1
+          ord_qty: itemDetail.quantity || 1,
+          trial_date: trialDate ? trialDate.toISOString().split('T')[0] : null,
+          delivery_date: deliveryDate ? deliveryDate.toISOString().split('T')[0] : null
         };
       }));
 
@@ -1016,7 +1079,7 @@ const JobOrder = () => {
         }
         blockScroll
       >
-        <div className="flex flex-column h-full">
+        <div className="flex flex-column">
           <div className="p-3 border-bottom-1 surface-border">
             <span className="p-input-icon-left w-full">
               <i className="pi pi-search" />
@@ -1205,6 +1268,36 @@ const JobOrder = () => {
 
             <div className="field mb-4">
               <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-calendar mr-2"></i>
+                Trial Date
+              </label>
+              <Calendar
+                  id="trialDate"
+                  value={trialDate}
+                  onChange={(e) => setTrialDate(e.value as Date)}
+                  dateFormat="dd/mm/yy"
+                  className="w-full"
+                  showIcon
+              />
+            </div>
+
+            <div className="field mb-4">
+              <label className="font-bold block mb-2 flex align-items-center">
+                <i className="pi pi-calendar mr-2"></i>
+                Delivery Date
+              </label>
+              <Calendar
+                id="deliveryDate"
+                value={deliveryDate}
+                onChange={(e) => setDeliveryDate(e.value as Date)}
+                dateFormat="dd/mm/yy"
+                className="w-full"
+                showIcon
+              />
+            </div>
+
+            <div className="field mb-4">
+              <label className="font-bold block mb-2 flex align-items-center">
                 <i className="pi pi-image mr-2"></i>
                 Select Images from Order
               </label>
@@ -1233,15 +1326,10 @@ const JobOrder = () => {
                             <span>Select All</span>
                             <Checkbox 
                               inputId="select-all-images"
-                              checked={images.every(image => {
-                                const fullUrl = getImageUrl(image, 'sales_order');
-                                return itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(fullUrl);
-                              })}
+                              checked={images.every(image =>
+                                itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(image)
+                              )}
                               onChange={(e) => {
-                                const fullUrls = images.map(image => 
-                                  getImageUrl(image, 'sales_order')
-                                );
-                                
                                 setItemDetails(prev => {
                                   const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
                                   
@@ -1249,7 +1337,7 @@ const JobOrder = () => {
                                     ...prev,
                                     [currentlyEditingItem.id]: {
                                       ...current,
-                                      selectedImages: e.checked ? fullUrls : []
+                                      selectedImages: e.checked ? images : []
                                     }
                                   };
                                 });
@@ -1258,14 +1346,12 @@ const JobOrder = () => {
                           </div>
                           
                           <div className="grid">
-                            {images.map((imageUrl, index) => {
-                              const fullImageUrl = getImageUrl(imageUrl, 'sales_order');
-                              
+                            {images.map((imageUrl, index) => {                              
                               return (
                                 <div key={index} className="col-6 md:col-4">
                                   <div className="border-1 surface-border border-round p-2 flex flex-column align-items-center">
                                     <img 
-                                      src={fullImageUrl} 
+                                      src={imageUrl} 
                                       alt={`Order image ${index + 1}`}
                                       className="w-full mb-2 border-round cursor-pointer"
                                       style={{ 
@@ -1275,7 +1361,7 @@ const JobOrder = () => {
                                       }}
                                       onClick={() => {
                                         setImages(images.map(img => ({
-                                          itemImageSrc: getImageUrl(img, 'sales_order')
+                                          itemImageSrc: img
                                         })));
                                         setActiveImageIndex(index);
                                         setImagePreviewVisible(true);
@@ -1286,7 +1372,7 @@ const JobOrder = () => {
                                     />
                                     <Checkbox 
                                       inputId={`order-image-${index}`}
-                                      checked={itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(fullImageUrl) || false}
+                                      checked={itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(imageUrl) || false}
                                       onChange={(e) => {
                                         setItemDetails(prev => {
                                           const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
@@ -1294,9 +1380,9 @@ const JobOrder = () => {
                                           
                                           let updatedImages;
                                           if (e.checked) {
-                                            updatedImages = [...selectedImages, fullImageUrl];
+                                            updatedImages = [...selectedImages, imageUrl];
                                           } else {
-                                            updatedImages = selectedImages.filter(img => img !== fullImageUrl);
+                                            updatedImages = selectedImages.filter(img => img !== imageUrl);
                                           }
                                           
                                           return {
@@ -1366,8 +1452,9 @@ const JobOrder = () => {
                     className="p-button p-component p-button-outlined w-full flex justify-content-center align-items-center gap-2"
                   >
                     <i className="pi pi-upload"></i>
-                    <span>Upload Image</span>
+                    <span>Upload Image (max 1MB)</span>
                   </label>
+                  <small className="text-500">Images larger than 1MB will be compressed automatically</small>
                 </div>
               )}
             </div>
@@ -1597,16 +1684,17 @@ const JobOrder = () => {
                       </div>
                     </div>
                     
-                    {detail.image_url?.map((url, idx) => (
-                      <div key={idx} className="col-12 mt-3">
+                    {detail.image_url && detail.image_url.length > 0 && (
+                      <div className="col-12 mt-2">
                         <Button 
-                          label={`View Image ${idx + 1}`} 
+                          label={`View Images (${detail.image_url.length})`} 
                           icon="pi pi-image" 
-                          onClick={() => handleImagePreview(url)}
+                          onClick={() => handleImagePreview(detail.image_url)}
                           className="p-button-outlined"
                         />
                       </div>
-                    ))}
+                    )}
+
                     <div className="col-12 mt-2">
                       <Button
                         label="View Measurements" 
