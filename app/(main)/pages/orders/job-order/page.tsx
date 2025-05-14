@@ -167,14 +167,14 @@ const JobOrder = () => {
     currentPage: 1,
     hasMorePages: false,
     lastPage: 1,
-    perPage: 10,
+    perPage: 50,
     total: 0
   });
   const [ordersPagination, setOrdersPagination] = useState({
     currentPage: 1,
     hasMorePages: false,
     lastPage: 1,
-    perPage: 10,
+    perPage: 50,
     total: 0
   });
   const toast = useRef<Toast>(null);
@@ -186,7 +186,7 @@ const JobOrder = () => {
       setLoading(true);
       const { data, pagination: paginationData } = await JobOrderService.getJobOrderMains(
         page,
-        10,
+        50,
         search || null
       );
 
@@ -264,7 +264,7 @@ const JobOrder = () => {
 
       const { data, pagination } = await JobOrderService.getOrdersList(
         page,
-        10,
+        50,
         search || null
       );
 
@@ -1125,12 +1125,12 @@ const JobOrder = () => {
                         <div className="flex align-items-center justify-content-between p-2 border-round surface-50">
                           <div className="flex align-items-center p-2">
                             <Checkbox 
-                              inputId={`item-${order.id}-${item.material.id}`}
+                              inputId={`item-${order.id}-${item?.material?.id}`}
                               checked={selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)}
                               onChange={() => handleItemSelection(order, item.material, item.ord_qty)}
                             />
-                            <label htmlFor={`item-${order.id}-${item.material.id}`} className="ml-2">
-                              {item.material.name}
+                            <label htmlFor={`item-${order.id}-${item?.material?.id}`} className="ml-2">
+                              {item?.material?.name}
                             </label>
                           </div>
                           

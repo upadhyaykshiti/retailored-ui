@@ -18,7 +18,6 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 import { compressImage } from '@/demo/utils/imageCompressUtils';
-import { convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Toast } from '@capacitor/toast';
 
 interface Customer {
@@ -50,38 +49,9 @@ interface MeasurementMaster {
 }
 
 interface MeasurementValues {
-    [garmentName: string]: {
+    [instanceId: string]: {
       [measurement: string]: string | null;
     };
-}
-
-interface OutfitDetails {
-    type: string;
-    specialInstructions: string;
-    measurements: {[key: string]: string | null};
-    stitchingOptions: {
-        collar?: string;
-        sleeve?: string;
-        bottom?: string;
-        pocket?: string;
-        pocketSquare?: string;
-        cuffs?: string;
-    };
-    media: {
-        images: string[];
-        audioClips: string[];
-    };
-    inspirationLink: string;
-    deliveryDate: string;
-    trialDate: string;
-    isUrgent: boolean;
-    quantity: number;
-    stitchingPrice: number;
-    additionalCosts: Array<{
-        id: string;
-        name: string;
-        price: number;
-    }>;
 }
 
 interface AdditionalCost {
@@ -90,32 +60,51 @@ interface AdditionalCost {
     amount: number;
 }
 
+interface ItemData {
+  type: string;
+  specialInstructions: string;
+  deliveryDate: Date | null;
+  trialDate: Date | null;
+  isPriority: boolean;
+  quantity: number;
+  stitchingPrice: number;
+  inspiration: string;
+  uploadedImages: string[];
+  additionalCosts: AdditionalCost[];
+}
+
+interface StitchOptions {
+    collar?: string;
+    sleeve?: string;
+    bottom?: string;
+    pocket?: string;
+    pocketSquare?: string;
+    cuffs?: string;
+}
+
 const CreateOrder = () => {
-    const [selectedGarmentId, setSelectedGarmentId] = useState<number | null>(null);
     const [visible, setVisible] = useState(false);
     const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [currentGarment, setCurrentGarment] = useState<Material | null>(null);
+    const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
     const [type, setType] = useState('stitching');
-    const [specialInstructions, setSpecialInstructions] = useState('');
-    const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
-    const [trialDate, setTrialDate] = useState<Date | null>(null);
     const [isPriority, setIsPriority] = useState(false);
-    const [quantity, setQuantity] = useState(1);
-    const [stitchingPrice, setStitchingPrice] = useState(0);
     const [inspiration, setInspiration] = useState('');
     const [isMaximized, setIsMaximized] = useState(true);
     const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: string | null}>({});
     const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
-    const [isMesurementSaved, setIsMesurementSaved] = useState(false);
+    const [isMesurementSaved, setIsMesurementSaved] = useState<{[instanceId: string]: boolean}>({});
     const [showStitchOptionsDialog, setShowStitchOptionsDialog] = useState(false);
-    const [collarOption, setCollarOption] = useState<string | null>(null);
-    const [sleeveOption, setSleeveOption] = useState<string | null>(null);
-    const [bottomOption, setBottomOption] = useState<string | null>(null);
-    const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [stitchOptions, setStitchOptions] = useState<{[instanceId: string]: StitchOptions}>({});
+    const [garmentTotals, setGarmentTotals] = useState<{[instanceId: string]: number}>({});
+    const [itemsData, setItemsData] = useState<{[instanceId: string]: ItemData}>({});
     const [visibleGalleria, setVisibleGalleria] = useState(false);
     const [activeIndex, setActiveIndex] = useState<number | null>(null);
     const [imageUploadRef, setImageUploadRef] = useState<HTMLInputElement | null>(null);
+    const [collarOption, setCollarOption] = useState<string | null>(null);
+    const [sleeveOption, setSleeveOption] = useState<string | null>(null);
+    const [bottomOption, setBottomOption] = useState<string | null>(null);
     const [pocketOption, setPocketOption] = useState('');
     const [pocketSquareOption, setPocketSquareOption] = useState('');
     const [cuffsOption, setCuffsOption] = useState('');
@@ -123,7 +112,6 @@ const CreateOrder = () => {
     const [customerSearch, setCustomerSearch] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [showImageSourceDialog, setShowImageSourceDialog] = useState(false);
-    const [additionalCosts, setAdditionalCosts] = useState<AdditionalCost[]>([]);
     const [showAddCostDialog, setShowAddCostDialog] = useState(false);
     const [newCostDescription, setNewCostDescription] = useState('');
     const [newCostAmount, setNewCostAmount] = useState<number | null>(null);
@@ -135,7 +123,8 @@ const CreateOrder = () => {
     const [materials, setMaterials] = useState<Material[]>([]);
     const [materialSearch, setMaterialSearch] = useState('');
     const [materialPage, setMaterialPage] = useState(1);
-    const [outfitDetails, setOutfitDetails] = useState<{[outfitId: string]: OutfitDetails}>({});
+    const [garmentRefNames, setGarmentRefNames] = useState<{[instanceId: string]: string}>({});
+    const [editingRefName, setEditingRefName] = useState<{[instanceId: string]: boolean}>({});
     const [customerPagination, setCustomerPagination] = useState({ hasMorePages: true, currentPage: 1, total: 0 });
     const [materialPagination, setMaterialPagination] = useState({ hasMorePages: true, currentPage: 1, total: 0 });
     const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
@@ -152,6 +141,19 @@ const CreateOrder = () => {
             }
         };
     }, []);
+
+    useEffect(() => {
+        if (currentInstanceId) {
+            const itemData = itemsData[currentInstanceId] || {};
+            const total = (itemData.quantity * itemData.stitchingPrice) + 
+                        (itemData.additionalCosts?.reduce((sum, cost) => sum + cost.amount, 0) || 0);
+            
+            setGarmentTotals(prev => ({
+                ...prev,
+                [currentInstanceId]: total
+            }));
+        }
+    }, [currentInstanceId, itemsData]);
 
     const fetchCustomers = async (searchTerm = '', page = 1) => {
         setIsLoadingCustomers(true);
@@ -307,34 +309,85 @@ const CreateOrder = () => {
         return `${customer.fname} ${customer.lname}`;
     };
 
+    const generateInstanceId = (garment: Material, index: number) => {
+        return `${garment.id}-${index}`;
+    };
+
     const handleSelectCustomer = (customer: Customer) => {
         setSelectedCustomer(customer);
         setShowCustomerDialog(false);
         setCustomerSearch('');
     };
 
-    const handleAddOutfit = (garment: Material) => {
+    const handleAddOutfit = (garment: Material, index: number) => {
         setCurrentGarment(garment);
+        const instanceId = generateInstanceId(garment, index);
+        setCurrentInstanceId(instanceId);
         setShowCreateDialog(true);
     };
 
     const handleClearCustomer = () => {
         setSelectedCustomer(null);
+        setGarmentRefNames({});
+        setSelectedGarments([]);
+        setAllMeasurements({});
+        setIsMesurementSaved({});
+        setStitchOptions({});
     };
 
-    const handleOutfitSelection = (garment: Material) => {
-        setSelectedGarments(prev => {
-            const isSelected = prev.some(g => g.id === garment.id);
-            const newSelection = isSelected 
-                ? prev.filter(g => g.id !== garment.id)
-                : [...prev, garment];
-            
-            return newSelection;
-        });
+    const handleRefNameChange = (garmentId: string, newName: string) => {
+        setGarmentRefNames(prev => ({
+            ...prev,
+            [garmentId]: newName
+        }));
     };
 
-    const openMeasurementDialog = async (garment: Material) => {
+    const toggleEditRefName = (garmentId: string) => {
+        setEditingRefName(prev => ({
+            ...prev,
+            [garmentId]: !prev[garmentId]
+        }));
+    };
+
+   const handleOutfitSelection = (garment: Material) => {
+        const newGarments = [...selectedGarments, garment];
+        setSelectedGarments(newGarments);
+        setShowOutfitSelectionDialog(false);
         setCurrentGarment(garment);
+        
+        const instanceId = generateInstanceId(garment, newGarments.length - 1);
+        setCurrentInstanceId(instanceId);
+        
+        setItemsData(prev => ({
+            ...prev,
+            [instanceId]: {
+                type: 'stitching',
+                specialInstructions: '',
+                deliveryDate: null,
+                trialDate: null,
+                isPriority: false,
+                quantity: 1,
+                stitchingPrice: 0,
+                inspiration: '',
+                uploadedImages: [],
+                additionalCosts: []
+            }
+        }));
+        
+        if (selectedCustomer) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceId]: selectedCustomer.fname
+            }));
+        }
+        
+        setShowCreateDialog(true);
+    };
+
+    const openMeasurementDialog = async (garment: Material, index: number) => {
+        const instanceId = generateInstanceId(garment, index);
+        setCurrentGarment(garment);
+        setCurrentInstanceId(instanceId);
         await fetchMeasurementData(garment.id);
         
         const initialValues: {[key: string]: string} = {};
@@ -343,7 +396,11 @@ const CreateOrder = () => {
             master.measurementDetail?.measurement_val || '';
         });
         
-        setCurrentMeasurements(initialValues);
+        const existingMeasurements = allMeasurements[instanceId] || {};
+        setCurrentMeasurements({
+            ...initialValues,
+            ...existingMeasurements
+        });
         setVisible(true);
     };
 
@@ -355,25 +412,33 @@ const CreateOrder = () => {
     };
 
     const handleSaveMeasurements = () => {
-        if (currentGarment) {
+        if (currentGarment && currentInstanceId) {
           setAllMeasurements(prev => ({
             ...prev,
-            [currentGarment.id]: {
-              ...prev[currentGarment.id],
+            [currentInstanceId]: {
+              ...prev[currentInstanceId],
               ...currentMeasurements
             }
           }));
+          
+          setIsMesurementSaved(prev => ({
+            ...prev,
+            [currentInstanceId]: true
+          }));
         }
         setVisible(false);
-        setIsMesurementSaved(true);
     };
 
     const handleSaveOrder = () => {
-        if (currentGarment) {
-            const exists = selectedGarments.some(g => g.id === currentGarment.id);
-            if (!exists) {
-                setSelectedGarments([...selectedGarments, currentGarment]);
+        if (currentGarment && currentInstanceId) {
+            const instanceExists = selectedGarments.some((g, index) => 
+                generateInstanceId(g, index) === currentInstanceId
+            );
+            
+            if (!instanceExists) {
+                setSelectedGarments(prev => [...prev, currentGarment]);
             }
+            
             setShowCreateDialog(false);
             resetDialog();
         }
@@ -381,110 +446,134 @@ const CreateOrder = () => {
 
     const resetDialog = () => {
         setType('stitching');
-        setSpecialInstructions('');
-        setDeliveryDate(null);
-        setTrialDate(null);
         setIsPriority(false);
-        setQuantity(1);
-        setStitchingPrice(0);
         setInspiration('');
+        setCurrentInstanceId(null);
     };
 
-    const handleImageSourceSelect = async (source: 'camera' | 'gallery') => {
+    const handleImageSourceSelect = async (source: 'camera' | 'gallery', instanceId?: string) => {
+        const targetInstanceId = instanceId || currentInstanceId;
+        
+        if (!targetInstanceId) {
+            await Toast.show({
+                text: 'No item selected for image upload',
+                duration: 'short',
+                position: 'top'
+            });
+            return;
+        }
+
         setShowImageSourceDialog(false);
         try {
             const image = await Camera.getPhoto({
-            quality: 90,
-            allowEditing: false,
-            resultType: CameraResultType.Uri,
-            source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
+                quality: 90,
+                allowEditing: false,
+                resultType: CameraResultType.Uri,
+                source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
             });
 
             if (image.webPath || image.path) {
-            let imageUrl = image.webPath;
-            
-            if (!imageUrl && image.path) {
-                const file = await Filesystem.readFile({
-                path: image.path!,
-                directory: Directory.Cache,
-                });
-                imageUrl = `data:image/jpeg;base64,${file.data}`;
-            }
-
-            if (imageUrl) {
-                const response = await fetch(imageUrl);
-                const blob = await response.blob();
-                const file = new File([blob], 'captured.jpg', { type: blob.type });
-
-                const MAX_SIZE_MB = 1;
-                let finalFile = file;
-                if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                finalFile = await compressImage(file, MAX_SIZE_MB) || file;
+                let imageUrl = image.webPath;
+                
+                if (!imageUrl && image.path) {
+                    const file = await Filesystem.readFile({
+                        path: image.path!,
+                        directory: Directory.Cache,
+                    });
+                    imageUrl = `data:image/jpeg;base64,${file.data}`;
                 }
 
-                if (finalFile.size > MAX_SIZE_MB * 1024 * 1024) {
-                await Toast.show({
-                    text: 'Image is too large after compression',
-                    duration: 'short',
-                    position: 'top'
-                });
-                return;
-                }
+                if (imageUrl) {
+                    const response = await fetch(imageUrl);
+                    const blob = await response.blob();
+                    const file = new File([blob], 'captured.jpg', { type: blob.type });
 
-                setUploadedImages(prev => [...prev, URL.createObjectURL(finalFile)]);
-            }
+                    const MAX_SIZE_MB = 1;
+                    let finalFile = file;
+                    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                        finalFile = await compressImage(file, MAX_SIZE_MB) || file;
+                    }
+
+                    if (finalFile.size > MAX_SIZE_MB * 1024 * 1024) {
+                        await Toast.show({
+                            text: 'Image is too large after compression',
+                            duration: 'short',
+                            position: 'top'
+                        });
+                        return;
+                    }
+
+                    setItemsData(prev => ({
+                        ...prev,
+                        [targetInstanceId]: {
+                            ...prev[targetInstanceId],
+                            uploadedImages: [...(prev[targetInstanceId]?.uploadedImages || []), URL.createObjectURL(finalFile)]
+                        }
+                    }));
+                }
             }
         } catch (error) {
             console.error('Error capturing image:', error);
             await Toast.show({
-            text: 'Failed to capture image',
-            duration: 'short',
-            position: 'top'
+                text: 'Failed to capture image',
+                duration: 'short',
+                position: 'top'
             });
         }
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, instanceId: string | null) => {
+        if (!instanceId) {
+            await Toast.show({
+                text: 'No item selected for image upload',
+                duration: 'short',
+                position: 'top'
+            });
+            return;
+        }
+
         if (e.target.files) {
             const files = Array.from(e.target.files);
             const MAX_SIZE_MB = 1;
             
             try {
-            const compressedFiles = await Promise.all(
-                files.map(async (file) => {
-                if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                    const compressedFile = await compressImage(file, MAX_SIZE_MB);
-                    if (!compressedFile) {
-                    throw new Error('Compression failed');
-                    }
-                    return compressedFile;
-                }
-                return file;
-                })
-            );
+                const compressedFiles = await Promise.all(
+                    files.map(async (file) => {
+                        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                            const compressedFile = await compressImage(file, MAX_SIZE_MB);
+                            if (!compressedFile) {
+                                throw new Error('Compression failed');
+                            }
+                            return compressedFile;
+                        }
+                        return file;
+                    })
+                );
 
-            const newImages = await Promise.all(
-                compressedFiles.map(async (file) => {
-                return URL.createObjectURL(file);
-                })
-            );
-            
-            setUploadedImages(prev => [...prev, ...newImages]);
+                const newImages = await Promise.all(
+                    compressedFiles.map(async (file) => {
+                        return URL.createObjectURL(file);
+                    })
+                );
+                
+                setItemsData(prev => ({
+                    ...prev,
+                    [instanceId]: {
+                        ...prev[instanceId],
+                        uploadedImages: [...(prev[instanceId]?.uploadedImages || []), ...newImages]
+                    }
+                }));
             } catch (error) {
-            console.error('Error processing images:', error);
-            await Toast.show({
-                text: 'Failed to process some images. Please try smaller files.',
-                duration: 'short',
-                position: 'top'
-            });
+                console.error('Error processing images:', error);
+                await Toast.show({
+                    text: 'Failed to process some images. Please try smaller files.',
+                    duration: 'short',
+                    position: 'top'
+                });
             }
         }
     };
       
-    const removeImage = (index: number) => {
-        setUploadedImages(prev => prev.filter((_, i) => i !== index));
-    };     
-    
     const itemTemplate = (item: string) => {
         return (
             <img 
@@ -515,84 +604,97 @@ const CreateOrder = () => {
 
     const handleConfirmOrder = async () => {        
         try {
-          if (!selectedCustomer) {
-            await showToast('Please select a customer first');
-            return;
-          }
-          
-          if (selectedGarments.length === 0) {
-            await showToast('Please add at least one outfit');
-            return;
-          }
-      
-          const docno = `ORD-${Date.now()}`;
-      
-          const formatDateTime = (date?: Date | null) => {
-            if (!date) return '';
-            const pad = (num: number) => num.toString().padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-          };
-      
-          const currentDate = new Date();
-          
-          const base64Images = await Promise.all(
-            uploadedImages.map(async (url) => {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                return new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-                });
-            })
-          );
-      
-          const orderPayload = {
-            user_id: parseInt(selectedCustomer.id),
-            docno: docno,
-            order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-            type_id: 1,
-            status_id: 1,
-            order_details: selectedGarments.map(garment => ({
-              material_master_id: parseInt(garment.id),
-              image_url: base64Images,
-              item_amt: garment.mrp,
-              item_discount: 0,
-              ord_qty: quantity,
-              delivery_date: formatDateTime(deliveryDate),
-              trial_date: formatDateTime(trialDate),
-              status_id: 1,
-              measurement_main: [{
+            if (!selectedCustomer) {
+                await showToast('Please select a customer first');
+                return;
+            }
+            
+            if (selectedGarments.length === 0) {
+                await showToast('Please add at least one outfit');
+                return;
+            }
+        
+            const docno = `ORD-${Date.now()}`;
+        
+            const formatDate = (date?: Date | null) => {
+                if (!date) return '';
+                const pad = (num: number) => num.toString().padStart(2, '0');
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            };
+        
+            const currentDate = new Date();
+            
+            const orderDetails = await Promise.all(
+                selectedGarments.map(async (garment, index) => {
+                    const instanceId = generateInstanceId(garment, index);
+                    const itemData = itemsData[instanceId] || {};
+                    
+                    const base64Images = await Promise.all(
+                        (itemData.uploadedImages || []).map(async (url) => {
+                            const response = await fetch(url);
+                            const blob = await response.blob();
+                            return new Promise<string>((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result as string);
+                                reader.readAsDataURL(blob);
+                            });
+                        })
+                    );
+                    
+                    return {
+                        material_master_id: parseInt(garment.id),
+                        image_url: base64Images,
+                        item_amt: garmentTotals[instanceId] || 0,
+                        item_ref: garmentRefNames[instanceId] || '',
+                        item_discount: 0,
+                        ord_qty: itemData.quantity || 1,
+                        delivery_date: formatDate(itemData.deliveryDate),
+                        trial_date: formatDate(itemData.trialDate),
+                        status_id: 1,
+                        measurement_main: [{
+                            user_id: parseInt(selectedCustomer.id),
+                            docno: docno,
+                            material_master_id: parseInt(garment.id),
+                            measurement_date: currentDate.toISOString().split('T')[0],
+                            details: Object.entries(allMeasurements[instanceId] || {}).map(([key, value]) => {
+                                const measurement = measurementData.find(m => m.measurement_name === key);
+                                return {
+                                    measurement_master_id: parseInt(measurement?.id || '0'),
+                                    measurement_val: value || ''
+                                };
+                            })
+                        }]
+                    };
+                })
+            );
+            
+            const orderPayload = {
                 user_id: parseInt(selectedCustomer.id),
                 docno: docno,
-                material_master_id: parseInt(garment.id),
-                measurement_date: formatDateTime(currentDate),
-                details: Object.entries(allMeasurements[garment.id] || {}).map(([key, value]) => ({
-                  measurement_master_id: parseInt(
-                    measurementData.find(m => m.measurement_name === key)?.id || '0'
-                  ),
-                  measurement_val: value || ''
-                }))
-              }]
-            })),
-          };
+                order_date: currentDate.toISOString().split('T')[0],
+                type_id: 1,
+                status_id: 1,
+                order_details: orderDetails
+            };
+                
+            const response = await SalesOrderService.createOrderWithDetails(orderPayload);
             
-          const response = await SalesOrderService.createOrderWithDetails(orderPayload);
-          
-          await showToast('Order confirmed successfully!');
-          
-          setSelectedCustomer(null);
-          setSelectedGarments([]);
-          setUploadedImages([]);
-          setAdditionalCosts([]);
-          resetDialog();
-          
-          return response;
-          
+            await showToast('Order confirmed successfully!');
+            
+            setSelectedCustomer(null);
+            setSelectedGarments([]);
+            setItemsData({});
+            setGarmentTotals({});
+            setGarmentRefNames({});
+            setAllMeasurements({});
+            setIsMesurementSaved({});
+            setStitchOptions({});
+            
+            return response;
         } catch (error) {
-          console.error('Error confirming order:', error);
-          await showToast('Failed to confirm order. Please try again.');
-          throw error;
+            console.error('Error confirming order:', error);
+            await showToast('Failed to confirm order. Please try again.');
+            throw error;
         }
     };
 
@@ -612,7 +714,22 @@ const CreateOrder = () => {
     const stitchFooter = (
         <div>
           <Button label="Cancel" icon="pi pi-times" onClick={() => setShowStitchOptionsDialog(false)} className="p-button-text" />
-          <Button label="Save" icon="pi pi-check" onClick={() => setShowStitchOptionsDialog(false)} autoFocus />
+          <Button label="Save" icon="pi pi-check" onClick={() => {
+              if (currentInstanceId) {
+                  setStitchOptions(prev => ({
+                      ...prev,
+                      [currentInstanceId]: {
+                          collar: collarOption || undefined,
+                          sleeve: sleeveOption || undefined,
+                          bottom: bottomOption || undefined,
+                          pocket: pocketOption || undefined,
+                          pocketSquare: pocketSquareOption || undefined,
+                          cuffs: cuffsOption || undefined
+                      }
+                  }));
+              }
+              setShowStitchOptionsDialog(false);
+          }} autoFocus />
         </div>
     );
 
@@ -670,33 +787,64 @@ const CreateOrder = () => {
 
                 {selectedGarments.length > 0 ? (
                     <div className="grid">
-                        {selectedGarments.map((garment) => (
-                            <div key={garment.id} className="col-12 md:col-6 lg:col-4">
-                                <Card className="h-full">
-                                    <div className="flex flex-column gap-2">
-                                        <div className="flex justify-content-between align-items-center">
-                                            <span className="font-medium">{garment.name}</span>
-                                            <div className="flex gap-2">
-                                                 <Button 
-                                                    icon="pi pi-plus" 
-                                                    rounded
-                                                    text
-                                                    severity="success"
-                                                    onClick={() => handleAddOutfit(garment)}
-                                                />
-                                                <Button 
-                                                    icon="pi pi-trash" 
-                                                    rounded
-                                                    text 
-                                                    severity="danger"
-                                                    onClick={() => handleOutfitSelection(garment)}
-                                                />
+                        {selectedGarments.map((garment, index) => {
+                            const instanceId = generateInstanceId(garment, index);
+                            return (
+                                <div key={instanceId} className="col-12 md:col-6 lg:col-4">
+                                    <Card className="h-full">
+                                        <div className="flex flex-column gap-1">
+                                            <div className="flex justify-content-between align-items-center">
+                                                <span className="font-medium">{garment.name}</span>
+                                                <div className="flex gap-2">
+                                                    <Button 
+                                                        icon="pi pi-pencil" 
+                                                        rounded
+                                                        text
+                                                        severity="info"
+                                                        onClick={() => handleAddOutfit(garment, index)}
+                                                    />
+                                                    <Button 
+                                                        icon="pi pi-trash" 
+                                                        rounded
+                                                        text 
+                                                        severity="danger"
+                                                        onClick={() => {
+                                                            setSelectedGarments(
+                                                                selectedGarments.filter((g, i) => i !== index)
+                                                            );
+                                                            // Clean up related data
+                                                            setGarmentRefNames(prev => {
+                                                                const newRefNames = {...prev};
+                                                                delete newRefNames[instanceId];
+                                                                return newRefNames;
+                                                            });
+                                                            setAllMeasurements(prev => {
+                                                                const newMeasurements = {...prev};
+                                                                delete newMeasurements[instanceId];
+                                                                return newMeasurements;
+                                                            });
+                                                            setIsMesurementSaved(prev => {
+                                                                const newSaved = {...prev};
+                                                                delete newSaved[instanceId];
+                                                                return newSaved;
+                                                            });
+                                                            setStitchOptions(prev => {
+                                                                const newOptions = {...prev};
+                                                                delete newOptions[instanceId];
+                                                                return newOptions;
+                                                            });
+                                                        }}
+                                                    />
+                                                </div>
                                             </div>
+                                            {selectedCustomer && (
+                                                <small className="text-500">Ref: {garmentRefNames[instanceId] || ''}</small>
+                                            )}
                                         </div>
-                                    </div>
-                                </Card>
-                            </div>
-                        ))}
+                                    </Card>
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="flex flex-column align-items-center justify-content-center py-4 gap-3" style={{ minHeight: '25vh' }}>
@@ -832,22 +980,19 @@ const CreateOrder = () => {
                     </div>
 
                     <div className="flex flex-column" style={{ overflowY: 'auto' }}>
-                        {materials.map((material) => {
-                        const isSelected = selectedGarments.some(g => g.id === material.id);
-                        return (
+                        {materials.map((material) => (
                             <div 
-                            key={material.id}
-                            className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border cursor-pointer hover:surface-100 transition-duration-150"
-                            onClick={() => handleOutfitSelection(material)}
+                                key={material.id}
+                                className="flex justify-content-between align-items-center p-3 border-bottom-1 surface-border cursor-pointer hover:surface-100 transition-duration-150"
+                                onClick={() => handleOutfitSelection(material)}
                             >
-                            <div>
-                                <span className="font-medium text-900">{material.name}</span>
-                                <div className="text-sm text-500">₹{material.mrp}</div>
+                                <div>
+                                    <span className="font-medium text-900">{material.name}</span>
+                                    <div className="text-sm text-500">₹{material.mrp}</div>
+                                </div>
+                                <i className="pi pi-plus-circle text-2xl" />
                             </div>
-                            <i className={`pi ${isSelected ? 'pi-check-circle text-primary' : 'pi-plus-circle'} text-2xl`} />
-                            </div>
-                        );
-                        })}
+                        ))}
                         
                         {materials.length === 0 && (
                         <div className="p-5 text-center text-500">
@@ -861,7 +1006,11 @@ const CreateOrder = () => {
             <Dialog 
                 header='Create Order' 
                 visible={showCreateDialog}
-                onHide={() => { setShowCreateDialog(false); resetDialog(); }}
+                onHide={() => { 
+                    setShowCreateDialog(false); 
+                    resetDialog();
+                    setEditingRefName({});
+                }}
                 maximized={isMaximized}
                 onMaximize={(e) => setIsMaximized(e.maximized)}
                 className={isMaximized ? 'maximized-dialog' : ''}
@@ -869,8 +1018,44 @@ const CreateOrder = () => {
                 footer={dialogFooter}
             >
                 <div className="p-fluid">
-                    <div className="field my-4">
-                        <h4 className="m-0 text-900 font-medium">{currentGarment?.name}</h4>
+                     <div className="field my-4">
+                        <div className="flex justify-content-between align-items-center">
+                            <h4 className="m-0 text-900 font-medium">{currentGarment?.name}</h4>
+                            {currentGarment && currentInstanceId && (
+                                <div className="flex align-items-center gap-2">
+                                    {editingRefName[currentInstanceId] ? (
+                                        <>
+                                            <small className="text-500">Ref:</small>
+                                            <InputText 
+                                                value={garmentRefNames[currentInstanceId] || ''}
+                                                onChange={(e) => handleRefNameChange(currentInstanceId, e.target.value)}
+                                                className="p-inputtext-sm"
+                                                style={{ width: '100px' }}
+                                                autoFocus
+                                            />
+                                            <Button 
+                                                icon="pi pi-check" 
+                                                rounded 
+                                                text 
+                                                className="p-button-sm p-button-success"
+                                                onClick={() => toggleEditRefName(currentInstanceId)}
+                                            />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <small className="text-500">Ref: {garmentRefNames[currentInstanceId] || ''}</small>
+                                            <Button 
+                                                icon="pi pi-pencil" 
+                                                rounded 
+                                                text 
+                                                className="p-button-sm"
+                                                onClick={() => toggleEditRefName(currentInstanceId)}
+                                            />
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="field mb-4">
@@ -894,18 +1079,18 @@ const CreateOrder = () => {
                                     <div className="flex align-items-center">
                                         <span className="font-medium w-9">Add Measurements</span>
                                         <div className="w-3 text-right">
-                                           {isMesurementSaved ? (
+                                           {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
                                                 <Button 
                                                     label="Edit"
                                                     icon="pi pi-pencil" 
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment)}
+                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
                                                     className="p-button-sm p-button-outlined"
                                                 />
                                             ) : (
                                                 <Button 
                                                     label="Add"
                                                     icon="pi pi-plus" 
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment)}
+                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
                                                     className="p-button-sm p-button-outlined"
                                                 />
                                             )}
@@ -920,7 +1105,18 @@ const CreateOrder = () => {
                                             <Button 
                                                 label="Add" 
                                                 icon="pi pi-plus" 
-                                                onClick={() => setShowStitchOptionsDialog(true)}
+                                                onClick={() => {
+                                                    if (currentInstanceId) {
+                                                        const currentOptions = stitchOptions[currentInstanceId] || {};
+                                                        setCollarOption(currentOptions.collar || null);
+                                                        setSleeveOption(currentOptions.sleeve || null);
+                                                        setBottomOption(currentOptions.bottom || null);
+                                                        setPocketOption(currentOptions.pocket || '');
+                                                        setPocketSquareOption(currentOptions.pocketSquare || '');
+                                                        setCuffsOption(currentOptions.cuffs || '');
+                                                    }
+                                                    setShowStitchOptionsDialog(true);
+                                                }}
                                                 className="p-button-sm p-button-outlined"
                                             />
                                         </div>
@@ -935,8 +1131,18 @@ const CreateOrder = () => {
                         <InputTextarea 
                             id="instructions" 
                             rows={3} 
-                            value={specialInstructions} 
-                            onChange={(e) => setSpecialInstructions(e.target.value)} 
+                            value={currentInstanceId ? itemsData[currentInstanceId]?.specialInstructions || '' : ''} 
+                            onChange={(e) => {
+                                if (currentInstanceId) {
+                                    setItemsData(prev => ({
+                                        ...prev,
+                                        [currentInstanceId]: {
+                                            ...prev[currentInstanceId],
+                                            specialInstructions: e.target.value
+                                        }
+                                    }));
+                                }
+                            }} 
                             placeholder="Write instructions..." 
                             className="w-full" 
                         />
@@ -953,7 +1159,11 @@ const CreateOrder = () => {
                             <input 
                                 type="file" 
                                 ref={ref => setImageUploadRef(ref)}
-                                onChange={handleFileUpload}
+                                onChange={(e) => {
+                                    if (currentInstanceId) {
+                                        handleFileUpload(e, currentInstanceId);
+                                    }
+                                }}
                                 multiple 
                                 accept="image/*"
                                 style={{ display: 'none' }}
@@ -969,9 +1179,9 @@ const CreateOrder = () => {
                             </p>
                         </div>
 
-                        {uploadedImages.length > 0 && (
+                        {currentInstanceId && itemsData[currentInstanceId]?.uploadedImages?.length > 0 && (
                             <div className="flex overflow-x-auto pb-2" style={{ gap: '0.75rem' }}>
-                                {uploadedImages.map((image, index) => (
+                                {itemsData[currentInstanceId].uploadedImages.map((image, index) => (
                                     <div key={index} className="relative flex-shrink-0" style={{ width: '120px' }}>
                                         <div className="border-1 surface-border border-round p-2 h-full">
                                             <img 
@@ -990,7 +1200,15 @@ const CreateOrder = () => {
                                                 style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    removeImage(index);
+                                                    if (currentInstanceId) {
+                                                        setItemsData(prev => ({
+                                                            ...prev,
+                                                            [currentInstanceId]: {
+                                                                ...prev[currentInstanceId],
+                                                                uploadedImages: prev[currentInstanceId].uploadedImages.filter((_, i) => i !== index)
+                                                            }
+                                                        }));
+                                                    }
                                                 }}
                                             />
                                         </div>
@@ -1017,57 +1235,55 @@ const CreateOrder = () => {
                         <div className="field">
                             <label htmlFor="deliveryDate">Delivery Date</label>
                             <Calendar
-                            id="deliveryDate"
-                            value={deliveryDate}
-                            onChange={(e) => {
-                                if (e.value) {
-                                const newDate = new Date(e.value);
-                                if (deliveryDate) {
-                                    newDate.setHours(deliveryDate.getHours());
-                                    newDate.setMinutes(deliveryDate.getMinutes());
-                                }
-                                setDeliveryDate(newDate);
-                                } else {
-                                setDeliveryDate(null);
-                                }
-                            }}
-                            dateFormat="dd/mm/yy"
-                            className="w-full"
-                            showIcon
-                            showTime
-                            hourFormat="12"
-                            placeholder="Select Delivery Date"
-                            timeOnly={false}
+                                id="deliveryDate"
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.deliveryDate || null : null}
+                                onChange={(e) => {
+                                    if (currentInstanceId) {
+                                        setItemsData(prev => ({
+                                            ...prev,
+                                            [currentInstanceId]: {
+                                                ...prev[currentInstanceId],
+                                                deliveryDate: e.value as Date
+                                            }
+                                        }));
+                                    }
+                                }}
+                                dateFormat="dd/mm/yy"
+                                className="w-full"
+                                showIcon
+                                showTime
+                                hourFormat="12"
+                                placeholder="Select Delivery Date"
+                                timeOnly={false}
                             />
                         </div>
 
-                        <div className="field">
+                         <div className="field">
                             <label htmlFor="trialDate">Trial Date</label>
                             <Calendar
-                            id="trialDate"
-                            value={trialDate}
-                            onChange={(e) => {
-                                if (e.value) {
-                                const newDate = new Date(e.value);
-                                if (trialDate) {
-                                    newDate.setHours(trialDate.getHours());
-                                    newDate.setMinutes(trialDate.getMinutes());
-                                }
-                                setTrialDate(newDate);
-                                } else {
-                                setTrialDate(null);
-                                }
-                            }}
-                            dateFormat="dd/mm/yy"
-                            className="w-full"
-                            showIcon
-                            showTime
-                            hourFormat="12"
-                            placeholder="Select Trial Date"
-                            timeOnly={false}
+                                id="trialDate"
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.trialDate || null : null}
+                                onChange={(e) => {
+                                    if (currentInstanceId) {
+                                        setItemsData(prev => ({
+                                            ...prev,
+                                            [currentInstanceId]: {
+                                                ...prev[currentInstanceId],
+                                                trialDate: e.value as Date
+                                            }
+                                        }));
+                                    }
+                                }}
+                                dateFormat="dd/mm/yy"
+                                className="w-full"
+                                showIcon
+                                showTime
+                                hourFormat="12"
+                                placeholder="Select Trial Date"
+                                timeOnly={false}
                             />
                         </div>
-                        </div>
+                    </div>
 
                     <div className="field mb-4 flex align-items-center">
                         <Checkbox 
@@ -1085,8 +1301,18 @@ const CreateOrder = () => {
                             <label htmlFor="quantity">Quantity</label>
                             <InputNumber 
                                 id="quantity"
-                                value={quantity} 
-                                onValueChange={(e) => setQuantity(e.value || 1)} 
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1} 
+                                onValueChange={(e) => {
+                                    if (currentInstanceId) {
+                                        setItemsData(prev => ({
+                                            ...prev,
+                                            [currentInstanceId]: {
+                                                ...prev[currentInstanceId],
+                                                quantity: e.value || 1
+                                            }
+                                        }));
+                                    }
+                                }} 
                                 mode="decimal" 
                                 showButtons 
                                 min={1} 
@@ -1099,8 +1325,18 @@ const CreateOrder = () => {
                             <label htmlFor="price">Stitching Price (₹)</label>
                             <InputNumber 
                                 id="price" 
-                                value={stitchingPrice || undefined} 
-                                onValueChange={(e) => setStitchingPrice(e.value ?? 0)} 
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0} 
+                                onValueChange={(e) => {
+                                    if (currentInstanceId) {
+                                        setItemsData(prev => ({
+                                            ...prev,
+                                            [currentInstanceId]: {
+                                                ...prev[currentInstanceId],
+                                                stitchingPrice: e.value || 0
+                                            }
+                                        }));
+                                    }
+                                }} 
                                 mode="currency" 
                                 currency="INR" 
                                 locale="en-IN" 
@@ -1125,36 +1361,48 @@ const CreateOrder = () => {
                         <h5 className="mt-0 mb-3">Price Breakup</h5>
                         <Divider className="my-2" />
                         
-                        <div className="flex justify-content-between align-items-center mb-3">
-                            <span className="text-600">Stitching Price</span>
-                            <span>{quantity} x ₹{stitchingPrice} = ₹{(quantity * stitchingPrice).toFixed(2)}</span>
-                        </div>
+                        {currentInstanceId && (
+                            <>
+                                <div className="flex justify-content-between align-items-center mb-3">
+                                    <span className="text-600">Stitching Price</span>
+                                    <span>
+                                        {itemsData[currentInstanceId]?.quantity || 1} x ₹{itemsData[currentInstanceId]?.stitchingPrice || 0} = 
+                                        ₹{((itemsData[currentInstanceId]?.quantity || 1) * (itemsData[currentInstanceId]?.stitchingPrice || 0)).toFixed(2)}
+                                    </span>
+                                </div>
 
-                        {additionalCosts.map((cost) => (
-                            <div key={cost.id} className="flex justify-content-between align-items-center">
-                            <div className="flex align-items-center gap-2">
-                                <span className="text-600">{cost.description}</span>
-                                <Button 
-                                icon="pi pi-trash" 
-                                className="p-button-rounded p-button-text p-button-danger p-button-sm" 
-                                onClick={() => setAdditionalCosts(additionalCosts.filter(c => c.id !== cost.id))}
-                                />
-                            </div>
-                            <span>₹{cost.amount.toFixed(2)}</span>
-                            </div>
-                        ))}
-                        
-                        <Divider className="my-2" />
-                        
-                        <div className="flex justify-content-between align-items-center font-bold">
-                            <span className="text-600">Total:</span>
-                            <span>
-                            ₹{(
-                                (quantity * stitchingPrice) + 
-                                additionalCosts.reduce((sum, cost) => sum + cost.amount, 0)
-                            ).toFixed(2)}
-                            </span>
-                        </div>
+                                {itemsData[currentInstanceId]?.additionalCosts?.map((cost) => (
+                                    <div key={cost.id} className="flex justify-content-between align-items-center">
+                                        <div className="flex align-items-center gap-2">
+                                            <span className="text-600">{cost.description}</span>
+                                            <Button 
+                                                icon="pi pi-trash" 
+                                                className="p-button-rounded p-button-text p-button-danger p-button-sm" 
+                                                onClick={() => {
+                                                    setItemsData(prev => ({
+                                                        ...prev,
+                                                        [currentInstanceId]: {
+                                                            ...prev[currentInstanceId],
+                                                            additionalCosts: prev[currentInstanceId].additionalCosts.filter(c => c.id !== cost.id)
+                                                        }
+                                                    }));
+                                                }}
+                                            />
+                                        </div>
+                                        <span>₹{cost.amount.toFixed(2)}</span>
+                                    </div>
+                                ))}
+                                
+                                <Divider className="my-2" />
+                                
+                                <div className="flex justify-content-between align-items-center font-bold">
+                                    <span className="text-600">Total:</span>
+                                    <span>
+                                        ₹{(garmentTotals[currentInstanceId] || 0).toFixed(2)}
+                                    </span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </Dialog>
@@ -1169,7 +1417,7 @@ const CreateOrder = () => {
                 blockScroll
                 footer={measurementFooter}
             >
-                <div className="p-fluid mt-3">
+                <div className="p-fluid mt-4">
                     {isLoadingMeasurements ? (
                     <div className="flex justify-content-center p-5">
                         <i className="pi pi-spinner pi-spin"></i>
@@ -1223,7 +1471,7 @@ const CreateOrder = () => {
                 blockScroll
             >
                 <div className="p-fluid">
-                    <div className="mb-4">
+                    <div className="my-4">
                         <div className="surface-100 p-3 border-round mb-3">
                             <h5 className="m-0 font-medium">Top</h5>
                         </div>
@@ -1441,13 +1689,15 @@ const CreateOrder = () => {
                     icon="pi pi-camera" 
                     label="Take Photo" 
                     className="p-button-outlined" 
-                    onClick={() => handleImageSourceSelect('camera')}
+                    onClick={() => currentInstanceId && handleImageSourceSelect('camera', currentInstanceId)}
+                    disabled={!currentInstanceId}
                 />
                 <Button 
                     icon="pi pi-images" 
                     label="Choose from Gallery" 
                     className="p-button-outlined" 
-                    onClick={() => handleImageSourceSelect('gallery')}
+                    onClick={() => currentInstanceId && handleImageSourceSelect('gallery', currentInstanceId)}
+                    disabled={!currentInstanceId}
                 />
                 <Button 
                     icon="pi pi-folder-open" 
@@ -1469,42 +1719,63 @@ const CreateOrder = () => {
                     setNewCostDescription('');
                     setNewCostAmount(null);
                 }}
-                style={{ width: '95vw', maxWidth: '800px' }}
+                style={{ width: '95vw', maxWidth: '400px' }}
                 footer={
                     <div>
-                    <Button 
-                        label="Cancel" 
-                        icon="pi pi-times" 
-                        onClick={() => {
-                        setShowAddCostDialog(false);
-                        setNewCostDescription('');
-                        setNewCostAmount(null);
-                        }} 
-                        className="p-button-text" 
-                    />
-                    <Button 
-                        label="Add" 
-                        icon="pi pi-check" 
-                        onClick={() => {
-                        if (newCostDescription && newCostAmount) {
-                            setAdditionalCosts([
-                            ...additionalCosts,
-                            {
-                                id: Date.now().toString(),
-                                description: newCostDescription,
-                                amount: newCostAmount
-                            }
-                            ]);
-                            setShowAddCostDialog(false);
-                            setNewCostDescription('');
-                            setNewCostAmount(null);
-                        }
-                        }} 
-                        autoFocus 
-                    />
+                        <Button 
+                            label="Cancel" 
+                            icon="pi pi-times" 
+                            onClick={() => {
+                                setShowAddCostDialog(false);
+                                setNewCostDescription('');
+                                setNewCostAmount(null);
+                            }} 
+                            className="p-button-text" 
+                        />
+                        <Button 
+                            label="Add" 
+                            icon="pi pi-check" 
+                            onClick={() => {
+                                if (newCostDescription && newCostAmount && currentInstanceId) {
+                                    setItemsData(prev => {
+                                        const currentItem = prev[currentInstanceId] || {
+                                            type: 'stitching',
+                                            specialInstructions: '',
+                                            deliveryDate: null,
+                                            trialDate: null,
+                                            isPriority: false,
+                                            quantity: 1,
+                                            stitchingPrice: 0,
+                                            inspiration: '',
+                                            uploadedImages: [],
+                                            additionalCosts: []
+                                        };
+
+                                        return {
+                                            ...prev,
+                                            [currentInstanceId]: {
+                                                ...currentItem,
+                                                additionalCosts: [
+                                                    ...(currentItem.additionalCosts || []),
+                                                    {
+                                                        id: Date.now().toString(),
+                                                        description: newCostDescription,
+                                                        amount: newCostAmount
+                                                    }
+                                                ]
+                                            }
+                                        };
+                                    });
+                                    setShowAddCostDialog(false);
+                                    setNewCostDescription('');
+                                    setNewCostAmount(null);
+                                }
+                            }} 
+                            autoFocus 
+                        />
                     </div>
                 }
-                >
+            >
                 <div className="p-fluid">
                     <div className="field my-4">
                         <label htmlFor="costDescription">Title</label>
@@ -1553,7 +1824,7 @@ const CreateOrder = () => {
                 modal
             >
                 <Galleria
-                    value={uploadedImages}
+                    value={currentInstanceId ? itemsData[currentInstanceId]?.uploadedImages || [] : []}
                     activeIndex={activeIndex ?? 0}
                     onItemChange={(e) => setActiveIndex(e.index)}
                     showThumbnails={false}
