@@ -145,8 +145,8 @@ const CreateOrder = () => {
     useEffect(() => {
         if (currentInstanceId) {
             const itemData = itemsData[currentInstanceId] || {};
-            const total = (itemData.quantity * itemData.stitchingPrice) + 
-                        (itemData.additionalCosts?.reduce((sum, cost) => sum + cost.amount, 0) || 0);
+            const total = ((itemData.quantity || 1) * (itemData.stitchingPrice || 0)) + 
+                        ((itemData.additionalCosts || []).reduce((sum, cost) => sum + (cost.amount || 0), 0));
             
             setGarmentTotals(prev => ({
                 ...prev,
@@ -615,11 +615,11 @@ const CreateOrder = () => {
             }
         
             const docno = `ORD-${Date.now()}`;
-        
-            const formatDate = (date?: Date | null) => {
+
+            const formatDateTime = (date?: Date | null) => {
                 if (!date) return '';
                 const pad = (num: number) => num.toString().padStart(2, '0');
-                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
             };
         
             const currentDate = new Date();
@@ -648,8 +648,8 @@ const CreateOrder = () => {
                         item_ref: garmentRefNames[instanceId] || '',
                         item_discount: 0,
                         ord_qty: itemData.quantity || 1,
-                        delivery_date: formatDate(itemData.deliveryDate),
-                        trial_date: formatDate(itemData.trialDate),
+                        delivery_date: formatDateTime (itemData.deliveryDate),
+                        trial_date: formatDateTime (itemData.trialDate),
                         status_id: 1,
                         measurement_main: [{
                             user_id: parseInt(selectedCustomer.id),
@@ -671,7 +671,7 @@ const CreateOrder = () => {
             const orderPayload = {
                 user_id: parseInt(selectedCustomer.id),
                 docno: docno,
-                order_date: currentDate.toISOString().split('T')[0],
+                order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
                 type_id: 1,
                 status_id: 1,
                 order_details: orderDetails
@@ -812,7 +812,6 @@ const CreateOrder = () => {
                                                             setSelectedGarments(
                                                                 selectedGarments.filter((g, i) => i !== index)
                                                             );
-                                                            // Clean up related data
                                                             setGarmentRefNames(prev => {
                                                                 const newRefNames = {...prev};
                                                                 delete newRefNames[instanceId];
@@ -1805,7 +1804,11 @@ const CreateOrder = () => {
             <div className="fixed bottom-0 left-0 right-0 bg-white shadow-2 border-top-1 surface-border mb-5">
                 <div className="flex justify-content-between align-items-center p-3 surface-100">
                     <span className="font-bold">Total:</span>
-                    <span className="font-bold">₹0.00</span>
+                    <span className="font-bold">
+                        ₹{Object.values(garmentTotals)
+                            .reduce((sum, current) => sum + (Number(current) || 0), 0)
+                            .toFixed(2)}
+                    </span>
                 </div>
                 <div className="p-3 mb-5">
                     <Button 
