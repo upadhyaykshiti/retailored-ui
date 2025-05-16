@@ -333,20 +333,24 @@ const JobOrder = () => {
           return item;
         });
 
+        const hasDetail = order.orderMain.orderDetails.some(d => d.id === orderDetailId);
+        
         return {
           ...order,
           orderMain: {
             ...order.orderMain,
             orderDetails: updatedOrderDetails
           },
-          measurement_main_id: details?.measurement_main_id || '',
-          image_url: details?.image_url 
-            ? (Array.isArray(details.image_url) 
-              ? details.image_url 
-              : [details.image_url])
-            : [],
-          trial_date: details?.trial_date || '',
-          delivery_date: details?.delivery_date || ''
+          measurement_main_id: hasDetail ? (details?.measurement_main_id || '') : order.measurement_main_id,
+          image_url: hasDetail ? 
+            (details?.image_url 
+              ? (Array.isArray(details.image_url) 
+                ? details.image_url 
+                : [details.image_url])
+              : [])
+            : order.image_url,
+          trial_date: hasDetail ? (details?.trial_date || '') : order.trial_date,
+          delivery_date: hasDetail ? (details?.delivery_date || '') : order.delivery_date
         };
       }));
     } catch (error) {
@@ -553,7 +557,7 @@ const JobOrder = () => {
         return [...prev, {
           id: itemKey,
           materialId: item.material.id,
-          measurementMainID: order.measurement_main_id,
+          measurementMainID: order.measurement_main_id || '',
           name: item.material.name,
           selected: true,
           quantity: item.ord_qty,
@@ -588,11 +592,12 @@ const JobOrder = () => {
     }
 
     const updatedOrder = ordersList.find(o => o.id === order.id) || order;
+    const measurementMainID = updatedOrder.measurement_main_id || '';
 
     openItemManagement({
       id: itemKey,
       materialId: item.material.id,
-      measurementMainID: updatedOrder.measurement_main_id,
+      measurementMainID: measurementMainID,
       name: item.material.name,
       selected: true,
       quantity: item.ord_qty,
@@ -658,7 +663,7 @@ const JobOrder = () => {
 
         return {
           admsite_code: Number(selectedCode),
-          order_details_id: item.orderUniqueId || null,
+          order_details_id: item.orderDetailId || null,
           material_master_id: item.materialId,
           measurement_main_id: item.measurementMainID,
           image_url: allImages.length > 0 ? allImages : null,
