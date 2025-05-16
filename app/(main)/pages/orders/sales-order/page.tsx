@@ -227,7 +227,7 @@ const SalesOrder = () => {
     setLoadingMeasurements(true);
     try {
       const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
-      const measurementData = response?.measurementMain;
+      const measurementData = response.data.orderDetail.measurementMain;
       console.log("Measurement data:", measurementData);
       
       if (measurementData) {

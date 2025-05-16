@@ -318,33 +318,36 @@ const JobOrder = () => {
     }
   }, []);
 
-  const fetchOrderDetails = async (orderId: string) => {
+  const fetchOrderDetails = async (orderDetailId: string) => {
     try {
-      const details = await JobOrderService.getOrderDetails(orderId);
+      const details = await JobOrderService.getOrderDetails(orderDetailId);
       
       setOrdersList(prev => prev.map(order => {
-        if (order.id === orderId) {
-          const measurementId = details?.orderDetail?.measurementMain?.id || details?.measurement_main_id || '';
-          return {
-            ...order,
-            measurement_main_id: measurementId,
-            image_url: details?.image_url 
-              ? (Array.isArray(details.image_url) 
-                ? details.image_url 
-                : [details.image_url])
-              : [],
-            trial_date: details?.trial_date || '',
-            delivery_date: details?.delivery_date || '',
-            orderMain: {
-              ...order.orderMain,
-              orderDetails: order.orderMain.orderDetails.map(detail => ({
-                ...detail,
-                ord_qty: details?.ord_qty || 0
-              }))
-            }
-          };
-        }
-        return order;
+        const updatedOrderDetails = order.orderMain.orderDetails.map(item => {
+          if (item.id === orderDetailId) {
+            return {
+              ...item,
+              ord_qty: details?.ord_qty || 0
+            };
+          }
+          return item;
+        });
+
+        return {
+          ...order,
+          orderMain: {
+            ...order.orderMain,
+            orderDetails: updatedOrderDetails
+          },
+          measurement_main_id: details?.measurement_main_id || '',
+          image_url: details?.image_url 
+            ? (Array.isArray(details.image_url) 
+              ? details.image_url 
+              : [details.image_url])
+            : [],
+          trial_date: details?.trial_date || '',
+          delivery_date: details?.delivery_date || ''
+        };
       }));
     } catch (error) {
       toast.current?.show({
@@ -571,7 +574,7 @@ const JobOrder = () => {
       setItemLoadingStates(prev => ({...prev, [itemKey]: true}));
       
       try {
-        await fetchOrderDetails(order.id);
+        await fetchOrderDetails(item.id);
       } catch (error) {
         toast.current?.show({
           severity: 'error',

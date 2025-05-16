@@ -246,7 +246,6 @@ export const SalesOrderService = {
     const query = `
       query OrderDetail($id: ID!) {
         orderDetail(id: $id) {
-          id
           measurementMain {
             measurement_date
             measurementDetails {
