@@ -47,6 +47,7 @@ interface MeasurementDetail {
 
 interface JobOrderDetail {
   image_url: string[] | null;
+  admsite_code: number | null;
   trial_date: string | null;
   delivery_date: string | null;
   item_amt: number;
@@ -105,6 +106,7 @@ interface OrderItem {
   orderId?: string;
   customerName?: string;
   orderUniqueId?: string;
+  orderDetailId?: string;
 }
 
 interface OrderItemDetails {
@@ -124,11 +126,11 @@ const JobOrder = () => {
   const [selectedJobOrderForPayment, setSelectedJobOrderForPayment] = useState<JobOrderMain | null>(null);
   const [itemManagementSidebarVisible, setItemManagementSidebarVisible] = useState(false);
   const [currentlyEditingItem, setCurrentlyEditingItem] = useState<OrderItem | null>(null);
-  const [makingCharges, setMakingCharges] = useState<{[key: string]: number}>({});
   const [uploadingImages, setUploadingImages] = useState<{[key: string]: File | null}>({});
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [selectedMaterialName, setSelectedMaterialName] = useState('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrderMain | null>(null);
+  const [selectedCode, setSelectedCode] = useState<number | null>(null);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
@@ -154,6 +156,7 @@ const JobOrder = () => {
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
+  const [itemLoadingStates, setItemLoadingStates] = useState<{[key: string]: boolean}>({});
   const [loadingJobbers, setLoadingJobbers] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -180,13 +183,13 @@ const JobOrder = () => {
   const toast = useRef<Toast>(null);
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
-
+  
   const fetchJobOrders = useCallback(async (page: number = 1, search: string = '') => {
     try {
       setLoading(true);
       const { data, pagination: paginationData } = await JobOrderService.getJobOrderMains(
         page,
-        50,
+        20,
         search || null
       );
 
@@ -238,10 +241,12 @@ const JobOrder = () => {
         const response = await JobOrderService.getJobberList();
         const formattedJobbers = response.map(jobber => ({
           label: jobber.sitename,
-          value: jobber.code
+          value: {
+            ...jobber,
+            code: jobber.code
+          }
         }));
-        setJobbers(formattedJobbers);
-        console.log(formattedJobbers);
+        console.log('Formatted Jobbers:', formattedJobbers);
       } catch (error) {
         console.error('Error fetching jobbers:', error);
         toast.current?.show({
@@ -264,12 +269,35 @@ const JobOrder = () => {
 
       const { data, pagination } = await JobOrderService.getOrdersList(
         page,
-        50,
+        20,
         search || null
       );
 
-      setOrdersList(prev => (page === 1 ? data : [...prev, ...data]));
+      const transformedData = data.map(order => ({
+        id: order.id,
+        order_id: order.id,
+        measurement_main_id: '',
+        image_url: [],
+        trial_date: '',
+        delivery_date: '',
+        orderMain: {
+          docno: order.docno,
+          user: {
+            id: order.user.id,
+            fname: order.user.fname
+          },
+          orderDetails: order.orderDetails.map((detail: { id: any; material: { id: any; name: any; }; }) => ({
+            id: detail.id,
+            ord_qty: 0,
+            material: {
+              id: detail.material.id,
+              name: detail.material.name
+            }
+          }))
+        }
+      }));
 
+      setOrdersList(prev => (page === 1 ? transformedData : [...prev, ...transformedData]));
       setOrdersPagination({
         currentPage: pagination.currentPage,
         hasMorePages: pagination.hasMorePages,
@@ -277,14 +305,6 @@ const JobOrder = () => {
         perPage: pagination.perPage,
         total: pagination.total
       });
-
-      if (currentlyEditingItem) {
-        const editingOrder = data.find(o => o.id === currentlyEditingItem.orderUniqueId);
-        if (editingOrder) {
-          setTrialDate(editingOrder.trial_date ? new Date(editingOrder.trial_date) : new Date());
-          setDeliveryDate(editingOrder.delivery_date ? new Date(editingOrder.delivery_date) : new Date());
-        }
-      }
 
     } catch (error) {
       toast.current?.show({
@@ -296,7 +316,45 @@ const JobOrder = () => {
     } finally {
       setLoadingOrders(false);
     }
-  }, [currentlyEditingItem?.orderUniqueId]);
+  }, []);
+
+  const fetchOrderDetails = async (orderId: string) => {
+    try {
+      const details = await JobOrderService.getOrderDetails(orderId);
+      
+      setOrdersList(prev => prev.map(order => {
+        if (order.id === orderId) {
+          const measurementId = details?.orderDetail?.measurementMain?.id || details?.measurement_main_id || '';
+          return {
+            ...order,
+            measurement_main_id: measurementId,
+            image_url: details?.image_url 
+              ? (Array.isArray(details.image_url) 
+                ? details.image_url 
+                : [details.image_url])
+              : [],
+            trial_date: details?.trial_date || '',
+            delivery_date: details?.delivery_date || '',
+            orderMain: {
+              ...order.orderMain,
+              orderDetails: order.orderMain.orderDetails.map(detail => ({
+                ...detail,
+                ord_qty: details?.ord_qty || 0
+              }))
+            }
+          };
+        }
+        return order;
+      }));
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to load order details',
+        life: 3000
+      });
+    }
+  };
 
   const fetchPaymentModes = useCallback(async () => {
     try {
@@ -480,50 +538,90 @@ const JobOrder = () => {
     return date.toLocaleDateString('en-IN');
   };
 
-  const handleItemSelection = (order: OrdersList, material: { id: string; name: string }, ord_qty: number) => {
+  const handleItemSelection = (order: OrdersList, item: { id: string; material: { id: string; name: string; }; ord_qty: number; }) => {
+    const itemKey = `${order.id}-${item.id}`;
+    
     setSelectedItems(prev => {
-      const itemKey = `${order.id}-${material.id}`;
-      const existingIndex = prev.findIndex(item => item.id === itemKey);
+      const existingIndex = prev.findIndex(selected => selected.id === itemKey);
       
       if (existingIndex >= 0) {
         return prev.filter(item => item.id !== itemKey);
       } else {
         return [...prev, {
           id: itemKey,
-          materialId: material.id,
+          materialId: item.material.id,
           measurementMainID: order.measurement_main_id,
-          name: material.name,
+          name: item.material.name,
           selected: true,
-          quantity: 1,
-          maxQuantity: ord_qty,
+          quantity: item.ord_qty,
+          maxQuantity: item.ord_qty,
           orderId: order.orderMain.docno,
           customerName: order.orderMain.user.fname,
-          orderUniqueId: order.id
+          orderUniqueId: order.id,
+          orderDetailId: item.id
         }];
       }
+    });
+  };
+
+  const handleAddItemClick = async (order: OrdersList, item: { id: string; material: { id: string; name: string; }; ord_qty: number; }) => {
+    const itemKey = `${order.id}-${item.id}`;
+    
+    if (!order.measurement_main_id && order.image_url.length === 0) {
+      setItemLoadingStates(prev => ({...prev, [itemKey]: true}));
+      
+      try {
+        await fetchOrderDetails(order.id);
+      } catch (error) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load order details',
+          life: 3000
+        });
+      } finally {
+        setItemLoadingStates(prev => ({...prev, [itemKey]: false}));
+      }
+    }
+
+    const updatedOrder = ordersList.find(o => o.id === order.id) || order;
+
+    openItemManagement({
+      id: itemKey,
+      materialId: item.material.id,
+      measurementMainID: updatedOrder.measurement_main_id,
+      name: item.material.name,
+      selected: true,
+      quantity: item.ord_qty,
+      maxQuantity: item.ord_qty,
+      orderId: order.orderMain.docno,
+      customerName: order.orderMain.user.fname,
+      orderUniqueId: order.id,
+      orderDetailId: item.id
     });
   };
   
   const handleSelectAllInOrder = (order: OrdersList, selectAll: boolean) => {
     setSelectedItems(prev => {
       const orderItems = order.orderMain.orderDetails.map(item => ({
-        id: `${order.id}-${item.material.id}`,
+        id: `${order.id}-${item.id}`,
         materialId: item.material.id,
         measurementMainID: order.measurement_main_id,
         name: item.material.name,
         selected: true,
-        quantity: 1,
+        quantity: item.ord_qty,
         maxQuantity: item.ord_qty,
         orderId: order.orderMain.docno,
         customerName: order.orderMain.user.fname,
-        orderUniqueId: order.id
+        orderUniqueId: order.id,
+        orderDetailId: item.id
       }));
-  
+
       if (selectAll) {
-        const newItems = orderItems.filter(item => 
-          !prev.some(selected => selected.id === item.id)
+        const filteredPrev = prev.filter(item => 
+          !orderItems.some(orderItem => orderItem.id === item.id)
         );
-        return [...prev, ...newItems];
+        return [...filteredPrev, ...orderItems];
       } else {
         return prev.filter(item => 
           !orderItems.some(orderItem => orderItem.id === item.id)
@@ -556,7 +654,7 @@ const JobOrder = () => {
         }
 
         return {
-          admsite_code: selectedJobber.value,
+          admsite_code: Number(selectedCode),
           order_details_id: item.orderUniqueId || null,
           material_master_id: item.materialId,
           measurement_main_id: item.measurementMainID,
@@ -658,8 +756,12 @@ const JobOrder = () => {
     }
   
     try {
+      const admsiteCode = jobOrderDetails.length > 0 ? jobOrderDetails[0].admsite_code : null;
+
       const paymentData = {
-        docno: selectedJobOrderForPayment.docno || `JOB-${selectedJobOrderForPayment.id}`,
+        user_id: null,
+        job_order_id: Number(selectedJobOrderForPayment.id),
+        admsite_code: Number(admsiteCode),
         payment_date: paymentForm.paymentDate,
         payment_mode: selectedPaymentMode,
         payment_ref: paymentForm.reference || null,
@@ -832,7 +934,7 @@ const JobOrder = () => {
                 <div className="flex justify-content-between align-items-center">
                   <span className="font-bold">{jobOrder.docno || `JOB-${jobOrder.id}`}</span>
                   <Tag 
-                    value={jobOrder.status?.status_name || "Unknown"} 
+                    value={jobOrder.status?.status_name || "Pending"} 
                     severity={getStatusSeverity(jobOrder.status?.status_name)} 
                   />
                 </div>
@@ -951,7 +1053,10 @@ const JobOrder = () => {
               id="jobber"
               value={selectedJobber}
               options={jobbers}
-              onChange={(e) => setSelectedJobber(e.value)}
+              onChange={(e) => {
+                setSelectedJobber(e.value);
+                setSelectedCode(e.value);
+              }}
               optionLabel="label"
               placeholder={loadingJobbers ? "Loading jobbers..." : "Select a jobber"}
               className="w-full"
@@ -1112,7 +1217,7 @@ const JobOrder = () => {
                       <Checkbox 
                         inputId={`select-all-${order.id}`}
                         checked={order.orderMain.orderDetails.every(item => 
-                          selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)
+                          selectedItems.some(selected => selected.id === `${order.id}-${item.id}`)
                         )}
                         onChange={(e) => handleSelectAllInOrder(order, e.checked ?? false)}
                       />
@@ -1121,36 +1226,27 @@ const JobOrder = () => {
                   
                   <div className="grid">
                     {order.orderMain.orderDetails.map((item) => (
-                      <div key={`${order.id}-${item.material.id}`} className="col-12 md:col-6">
+                      <div key={`${order.id}-${item.id}`} className="col-12">
                         <div className="flex align-items-center justify-content-between p-2 border-round surface-50">
                           <div className="flex align-items-center p-2">
                             <Checkbox 
-                              inputId={`item-${order.id}-${item?.material?.id}`}
-                              checked={selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`)}
-                              onChange={() => handleItemSelection(order, item.material, item.ord_qty)}
+                              inputId={`item-${order.id}-${item.id}`}
+                              checked={selectedItems.some(selected => selected.id === `${order.id}-${item.id}`)}
+                              onChange={() => handleItemSelection(order, item)}
                             />
-                            <label htmlFor={`item-${order.id}-${item?.material?.id}`} className="ml-2">
-                              {item?.material?.name}
+                            <label htmlFor={`item-${order.id}-${item.id}`} className="ml-2">
+                              {item.material.name}
                             </label>
                           </div>
-                          
-                          {selectedItems.some(selected => selected.id === `${order.id}-${item.material.id}`) && (
+                        
+                          {selectedItems.some(selected => selected.id === `${order.id}-${item.id}`) && (
                             <Button 
-                              icon="pi pi-plus" 
-                              onClick={() => openItemManagement({
-                                id: `${order.id}-${item.material.id}`,
-                                materialId: item.material.id,
-                                measurementMainID: order.measurement_main_id,
-                                name: item.material.name,
-                                selected: true,
-                                quantity: 1,
-                                maxQuantity: item.ord_qty,
-                                orderId: order.orderMain.docno,
-                                customerName: order.orderMain.user.fname,
-                                orderUniqueId: order.id
-                              })}
+                              icon="pi pi-plus"
+                              onClick={() => handleAddItemClick(order, item)}
                               className="p-button-rounded p-button-text p-button-sm"
                               aria-label="Add item"
+                              disabled={itemLoadingStates[`${order.id}-${item.id}`]}
+                              loading={itemLoadingStates[`${order.id}-${item.id}`]}
                             />
                           )}
                         </div>
@@ -1248,7 +1344,7 @@ const JobOrder = () => {
                   }}
                   className="p-button-rounded p-button-text"
                   disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) >= 
-                            (selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity)}
+                    (selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity)}
                 />
               </div>
             </div>
@@ -1621,7 +1717,7 @@ const JobOrder = () => {
                   <div className="field">
                     <label>Status &nbsp;</label>
                     <Tag 
-                      value={selectedJobOrder.status?.status_name || "Unknown"}
+                      value={selectedJobOrder.status?.status_name || "Pending"}
                       severity={getStatusSeverity(selectedJobOrder.status?.status_name)} 
                     />
                   </div>

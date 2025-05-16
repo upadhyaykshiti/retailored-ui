@@ -8,7 +8,7 @@ declare namespace Demo {
         username?: string;
         alternateContact?: string;
         dob: string;
-        sex: string;
+        gender: string;
         anniversary?: string;
         isCustomer: string;
         active: number;
@@ -27,7 +27,7 @@ declare namespace Demo {
         username?: string;
         alternateContact?: string;
         dob: string;
-        sex: string;
+        gender: string;
         anniversary?: string;
         isCustomer?: string;
         active?: number;
@@ -46,7 +46,7 @@ declare namespace Demo {
         username?: string;
         alternateContact?: string;
         dob?: string;
-        sex?: string;
+        gender?: string;
         anniversary?: string;
         isCustomer?: string;
         active?: number;

@@ -27,6 +27,7 @@ export const PendingPaymentsService = {
             user {
               id
               fname
+              admsite_code
             }
           }
         }
@@ -78,6 +79,7 @@ export const PendingPaymentsService = {
             jobOrderDetails {
               adminSite {
                 sitename
+                code
               }
             }
           }

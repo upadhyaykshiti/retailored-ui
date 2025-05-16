@@ -86,7 +86,7 @@ const Garments = () => {
 
       const { data, paginatorInfo } = await MaterialService.getMaterialMasters(
         debouncedSearchTerm,
-        3,
+        20,
         loadMore ? page + 1 : 1
       );
 

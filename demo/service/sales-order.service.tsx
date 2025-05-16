@@ -30,6 +30,7 @@ export const SalesOrderService = {
             user {
               id
               fname
+              admsite_code
             }
             orderStatus {
               id
@@ -83,6 +84,7 @@ export const SalesOrderService = {
             lname
             email
             mobileNumber
+            admsite_code
           }
         }
       }
@@ -208,6 +210,11 @@ export const SalesOrderService = {
           delivery_date
           desc1
           ext
+          user {
+            id
+            fname
+            admsite_code
+          }
           orderStatus {
             id
             status_name
@@ -237,17 +244,16 @@ export const SalesOrderService = {
 
   async getOrderMeasurements(orderId: string, token?: string): Promise<any> {
     const query = `
-      query OrderMain($id: ID!) {
-        orderMain(id: $id) {
-          orderDetails {
-            measurementMain {
-              measurement_date
-              measurementDetails {
-                measurement_val
-                measurementMaster {
-                  id
-                  measurement_name
-                }
+      query OrderDetail($id: ID!) {
+        orderDetail(id: $id) {
+          id
+          measurementMain {
+            measurement_date
+            measurementDetails {
+              measurement_val
+              measurementMaster {
+                id
+                measurement_name
               }
             }
           }
@@ -263,10 +269,8 @@ export const SalesOrderService = {
     
     return {
       data: {
-        orderMain: {
-          orderDetails: response.orderMain.orderDetails.map((detail: any) => ({
-            measurementMain: detail.measurementMain
-          }))
+        orderDetail: {
+          measurementMain: response.data.orderDetail.measurementMain
         }
       }
     };
@@ -329,7 +333,6 @@ export const SalesOrderService = {
   async createOrderWithDetails(
     input: {
       user_id: number;
-      docno: string;
       order_date: string;
       type_id: number;
       order_details: Array<{
@@ -340,10 +343,13 @@ export const SalesOrderService = {
         ord_qty: number;
         trial_date: string;
         delivery_date: string;
+        item_ref: string;
+        admsite_code: number;
         status_id: number;
+        desc1: string;
+        desc2: string;
         measurement_main: Array<{
           user_id: number;
-          docno: string;
           material_master_id: number;
           measurement_date: string;
           details: Array<{

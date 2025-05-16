@@ -20,11 +20,13 @@ interface PendingPayment {
   jobOrderDetails?: {
     adminSite: {
       sitename: string;
+      code: number;
     };
   }[];
   user?: {
     id: string;
     fname: string;
+    adminsite_code: number;
   };
 }
 
@@ -75,7 +77,7 @@ const PendingPayments = () => {
       
       if (activeTab === 0) {
         const response = await PendingPaymentsService.getPendingReceipts(
-          10,
+          20,
           page,
           searchTerm || null
         );
@@ -103,7 +105,7 @@ const PendingPayments = () => {
         setCurrentPage(response.pagination.currentPage);
       } else {
         const response = await PendingPaymentsService.getPendingPayments(
-          10,
+          20,
           page,
           searchTerm || null
         );
@@ -298,22 +300,77 @@ const PendingPayments = () => {
     setPaymentDialogVisible(true);
   };
 
-  const handlePaymentSubmit = () => {
-    const paymentData = {
-      ...paymentForm,
-      type: activeTab === 0 ? 'receipt' : 'payment',
-      customerId: selectedCustomer?.id,
-    };
-    
-    console.log('Submitting payment:', paymentData);
-    
-    setPaymentDialogVisible(false);
-    setPaymentForm({
-      amount: '',
-      paymentDate: new Date().toISOString().split('T')[0],
-      reference: '',
-      paymentMethod: null
-    });
+  const handlePaymentSubmit = async () => {
+    if (!selectedPaymentForRecord || !paymentForm.paymentMethod) {
+      return;
+    }
+
+    try {
+      const paymentData = {
+        payment_date: paymentForm.paymentDate,
+        payment_mode: paymentForm.paymentMethod,
+        payment_ref: paymentForm.reference || null,
+        payment_amt: Number(paymentForm.amount),
+      };
+
+      if (activeTab === 0) {
+        if (!selectedPaymentForRecord.user) {
+          throw new Error('User information missing for receipt payment');
+        }
+
+        await JobOrderService.createPaymentMain({
+          ...paymentData,
+          user_id: Number(selectedPaymentForRecord.user.id),
+          order_id: Number(selectedPaymentForRecord.id),
+          admsite_code: selectedPaymentForRecord.user.adminsite_code,
+        });
+
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Payment received successfully',
+          life: 3000
+        });
+      } else {
+        if (!selectedPaymentForRecord.jobOrderDetails?.[0]?.adminSite?.code) {
+          throw new Error('Job order site information missing');
+        }
+
+        const adminSiteCode = selectedPaymentForRecord.jobOrderDetails[0].adminSite.code;
+
+        await JobOrderService.createPaymentMain({
+          ...paymentData,
+          user_id: null,
+          job_order_id: Number(selectedPaymentForRecord.id),
+          admsite_code: Number(adminSiteCode),
+        });
+
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Payment recorded successfully',
+          life: 3000
+        });
+      }
+
+      fetchData();
+      setPaymentDialogVisible(false);
+      setDetailsDialogVisible(false);
+      setPaymentForm({
+        amount: '',
+        paymentDate: new Date().toISOString().split('T')[0],
+        reference: '',
+        paymentMethod: null
+      });
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: error instanceof Error ? error.message : 'Failed to process payment',
+        life: 3000
+      });
+    }
   };
 
   return (
@@ -485,7 +542,7 @@ const PendingPayments = () => {
                 Payment Date
               </label>
               <InputText 
-                id="paymentDate" 
+                id="paymentDate"
                 type="date" 
                 className="w-full" 
                 value={paymentForm.paymentDate}

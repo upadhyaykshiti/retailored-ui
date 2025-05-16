@@ -159,32 +159,32 @@ const CreateOrder = () => {
     const fetchCustomers = async (searchTerm = '', page = 1) => {
         setIsLoadingCustomers(true);
         try {
-          const { data, pagination } = await SalesOrderService.getActiveCustomers(
+        const { data, pagination } = await SalesOrderService.getActiveCustomers(
             page,
             20,
             searchTerm || null
-          );
-          
-          if (page === 1) {
+        );
+        
+        if (page === 1) {
             setAllCustomers(data);
-          } else {
+        } else {
             setAllCustomers(prev => [...prev, ...data]);
-          }
-          
-          setCustomerPagination({
+        }
+        
+        setCustomerPagination({
             hasMorePages: pagination.hasMorePages,
             currentPage: pagination.currentPage,
             total: pagination.total
-          });
+        });
         } catch (error) {
-          console.error('Error fetching customers:', error);
-          await Toast.show({
+        console.error('Error fetching customers:', error);
+        await Toast.show({
             text: 'Failed to load customers',
             duration: 'short',
             position: 'top'
-          });
+        });
         } finally {
-          setIsLoadingCustomers(false);
+        setIsLoadingCustomers(false);
         }
     };
       
@@ -197,7 +197,7 @@ const CreateOrder = () => {
         try {
             const response = await SalesOrderService.getActiveMaterials(
                 page,
-                10,
+                20,
                 searchTerm || null
             );
             
@@ -323,9 +323,36 @@ const CreateOrder = () => {
     };
 
     const handleAddOutfit = (garment: Material, index: number) => {
-        setCurrentGarment(garment);
         const instanceId = generateInstanceId(garment, index);
+        
+        setCurrentGarment(garment);
         setCurrentInstanceId(instanceId);
+        
+        if (!itemsData[instanceId]) {
+            setItemsData(prev => ({
+                ...prev,
+                [instanceId]: {
+                    type: 'stitching',
+                    specialInstructions: '',
+                    deliveryDate: null,
+                    trialDate: null,
+                    isPriority: false,
+                    quantity: 1,
+                    stitchingPrice: 0,
+                    inspiration: '',
+                    uploadedImages: [],
+                    additionalCosts: []
+                }
+            }));
+        }
+        
+        if (selectedCustomer && !garmentRefNames[instanceId]) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceId]: selectedCustomer.fname
+            }));
+        }
+        
         setShowCreateDialog(true);
     };
 
@@ -352,32 +379,35 @@ const CreateOrder = () => {
         }));
     };
 
-   const handleOutfitSelection = (garment: Material) => {
-        const newGarments = [...selectedGarments, garment];
-        setSelectedGarments(newGarments);
+    const handleOutfitSelection = (garment: Material) => {
+        const existingCount = selectedGarments.filter(g => g.id === garment.id).length;
+        const instanceId = generateInstanceId(garment, existingCount);
+        
+        setSelectedGarments(prev => [...prev, garment]);
+        
         setShowOutfitSelectionDialog(false);
         setCurrentGarment(garment);
-        
-        const instanceId = generateInstanceId(garment, newGarments.length - 1);
         setCurrentInstanceId(instanceId);
         
-        setItemsData(prev => ({
-            ...prev,
-            [instanceId]: {
-                type: 'stitching',
-                specialInstructions: '',
-                deliveryDate: null,
-                trialDate: null,
-                isPriority: false,
-                quantity: 1,
-                stitchingPrice: 0,
-                inspiration: '',
-                uploadedImages: [],
-                additionalCosts: []
-            }
-        }));
+        if (!itemsData[instanceId]) {
+            setItemsData(prev => ({
+                ...prev,
+                [instanceId]: {
+                    type: 'stitching',
+                    specialInstructions: '',
+                    deliveryDate: null,
+                    trialDate: null,
+                    isPriority: false,
+                    quantity: 1,
+                    stitchingPrice: 0,
+                    inspiration: '',
+                    uploadedImages: [],
+                    additionalCosts: []
+                }
+            }));
+        }
         
-        if (selectedCustomer) {
+        if (selectedCustomer && !garmentRefNames[instanceId]) {
             setGarmentRefNames(prev => ({
                 ...prev,
                 [instanceId]: selectedCustomer.fname
@@ -391,19 +421,29 @@ const CreateOrder = () => {
         const instanceId = generateInstanceId(garment, index);
         setCurrentGarment(garment);
         setCurrentInstanceId(instanceId);
+        
+        if (!garmentRefNames[instanceId] && selectedCustomer) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceId]: selectedCustomer.fname
+            }));
+        }
+        
         await fetchMeasurementData(garment.id);
+        
+        const existingMeasurements = allMeasurements[instanceId] || {};
         
         const initialValues: {[key: string]: string} = {};
         measurementData.forEach(master => {
-          initialValues[master.measurement_name] = 
-            master.measurementDetail?.measurement_val || '';
+            initialValues[master.measurement_name] = 
+                master.measurementDetail?.measurement_val || '';
         });
         
-        const existingMeasurements = allMeasurements[instanceId] || {};
         setCurrentMeasurements({
             ...initialValues,
             ...existingMeasurements
         });
+        
         setVisible(true);
     };
 
@@ -416,35 +456,24 @@ const CreateOrder = () => {
 
     const handleSaveMeasurements = () => {
         if (currentGarment && currentInstanceId) {
-          setAllMeasurements(prev => ({
-            ...prev,
-            [currentInstanceId]: {
-              ...prev[currentInstanceId],
-              ...currentMeasurements
-            }
-          }));
-          
-          setIsMesurementSaved(prev => ({
-            ...prev,
-            [currentInstanceId]: true
-          }));
+            setAllMeasurements(prev => ({
+                ...prev,
+                [currentInstanceId]: {
+                    ...currentMeasurements
+                }
+            }));
+            
+            setIsMesurementSaved(prev => ({
+                ...prev,
+                [currentInstanceId]: true
+            }));
         }
         setVisible(false);
     };
 
     const handleSaveOrder = () => {
-        if (currentGarment && currentInstanceId) {
-            const instanceExists = selectedGarments.some((g, index) => 
-                generateInstanceId(g, index) === currentInstanceId
-            );
-            
-            if (!instanceExists) {
-                setSelectedGarments(prev => [...prev, currentGarment]);
-            }
-            
-            setShowCreateDialog(false);
-            resetDialog();
-        }
+        setShowCreateDialog(false);
+        resetDialog();
     };
 
     const resetDialog = () => {
@@ -603,7 +632,7 @@ const CreateOrder = () => {
         });
     };   
 
-   const handleConfirmOrder = async () => {        
+    const handleConfirmOrder = async () => {        
         try {
             setIsConfirmingOrder(true);
             if (!selectedCustomer) {
@@ -658,12 +687,13 @@ const CreateOrder = () => {
                             user_id: parseInt(selectedCustomer.id),
                             material_master_id: parseInt(garment.id),
                             measurement_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                            details: measurementData
-                                .filter(master => allMeasurements[instanceId]?.[master.measurement_name] !== undefined)
-                                .map(master => ({
-                                    measurement_master_id: parseInt(master.id),
-                                    measurement_val: allMeasurements[instanceId][master.measurement_name] || ''
-                                }))
+                            details: Object.entries(allMeasurements[instanceId] || {}).map(([key, value]) => {
+                                const measurement = measurementData.find(m => m.measurement_name === key);
+                                return {
+                                    measurement_master_id: parseInt(measurement?.id || '0'),
+                                    measurement_val: value || ''
+                                };
+                            })
                         }]
                     };
                 })

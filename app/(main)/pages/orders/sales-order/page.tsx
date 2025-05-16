@@ -36,6 +36,7 @@ interface Order {
   user: {
     id: string;
     fname: string;
+    admsite_code: number;
   }
   orderStatus: {
     id: string;
@@ -226,7 +227,8 @@ const SalesOrder = () => {
     setLoadingMeasurements(true);
     try {
       const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
-      const measurementData = response.data?.orderMain?.orderDetails?.[0]?.measurementMain;
+      const measurementData = response?.measurementMain;
+      console.log("Measurement data:", measurementData);
       
       if (measurementData) {
         setMeasurementData(measurementData);
@@ -378,7 +380,7 @@ const SalesOrder = () => {
     if (item.id) {
       fetchMeasurements(item.id);
     }
-  };  
+  };
 
   const handlePaymentSubmit = async () => {
     if (!selectedOrder || !paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod) {
@@ -392,7 +394,9 @@ const SalesOrder = () => {
   
     try {
       const paymentData = {
-        docno: selectedOrder.docno,
+        user_id: Number(selectedOrder.user?.id),
+        order_id: Number(selectedOrder.id),
+        admsite_code: selectedOrder.user?.admsite_code,
         payment_date: paymentForm.paymentDate,
         payment_mode: paymentForm.paymentMethod,
         payment_ref: paymentForm.reference || null,
@@ -708,7 +712,9 @@ const SalesOrder = () => {
               <div className="col-6">
                 <div className="field">
                   <label>Trial Date</label>
-                  <p className="m-0 font-medium">{formatDate(new Date(selectedOrder.order_date))}</p>
+                  <p className="m-0 font-medium">{selectedOrder.orderDetails?.some(item => item.trial_date) 
+                    ? formatDate(new Date(selectedOrder.orderDetails.find(item => item.trial_date)?.trial_date || '')) 
+                    : 'Not scheduled'}</p>
                 </div>
               </div>
               <div className="col-12">
@@ -749,7 +755,9 @@ const SalesOrder = () => {
                   <div className="col-6">
                     <div className="field">
                       <label>Trial Date</label>
-                      <p className="m-0 font-medium">{formatDate(new Date(selectedOrder.order_date))}</p>
+                      <p className="m-0 font-medium">
+                        {item.trial_date ? formatDate(new Date(item.trial_date)) : 'Not scheduled'}
+                      </p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -802,7 +810,7 @@ const SalesOrder = () => {
 
                   <div className="col-12 mt-2">
                     <Button 
-                      label="Update Status" 
+                      label="Update Status"
                       icon="pi pi-pencil" 
                       onClick={() => openItemActionSidebar(item)}
                       className="w-full"
@@ -1099,7 +1107,7 @@ const SalesOrder = () => {
                   </div>
                 ))}
               </div>
-            ) : measurementData ? (
+            ) : measurementData && measurementData.measurementDetails?.length > 0 ? (
               <>
                 <div className="surface-100 p-3 border-round my-4">
                   <h4 className="m-0">Measurements</h4>

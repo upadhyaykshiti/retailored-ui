@@ -25,8 +25,8 @@ export const JobOrderService = {
     token?: string
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
-      query OrderDetails($first: Int!, $page: Int!, $search: String) {
-        orderDetails(first: $first, page: $page, search: $search) {
+      query OrderMains($first: Int!, $page: Int!, $search: String) {
+        orderMains(first: $first, page: $page, search: $search) {
           paginatorInfo {
             count
             currentPage
@@ -39,48 +39,82 @@ export const JobOrderService = {
           }
           data {
             id
-            order_id
-            measurement_main_id
-            image_url
-            trial_date
-            delivery_date
-            orderMain {
-              docno
-              user {
+            docno
+            orderDetails {
+              id
+              material {
                 id
-                fname
+                name
               }
-              orderDetails {
-                id
-                ord_qty
-                material {
-                  id
-                  name
-                }
-              }
+            }
+            user {
+              id
+              fname
             }
           }
         }
       }
     `;
-  
+
     const variables = {
       first: perPage,
       page: page,
       search: search
     };
-  
+
     const data = await GraphQLService.query<{ 
-      orderDetails: {
+      orderMains: {
         paginatorInfo: any;
         data: any[];
       } 
     }>(query, variables, token);
-  
+
     return {
-      data: data.orderDetails.data,
-      pagination: data.orderDetails.paginatorInfo,
+      data: data.orderMains.data,
+      pagination: data.orderMains.paginatorInfo,
     };
+  },
+
+  async getOrderDetails(
+    orderId: string,
+    token?: string
+  ): Promise<any> {
+    const query = `
+      query OrderDetail($id: ID!) {
+        orderDetail(id: $id) {
+          id
+          image_url
+          measurement_main_id
+          material_master_id
+          admsite_code
+          trial_date
+          delivery_date
+          ord_qty
+          item_ref
+          material {
+            name
+          }
+          measurementMain {
+            id
+            measurementDetails {
+              id
+              measurement_val
+            }
+            user {
+              id
+              fname
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      id: orderId
+    };
+
+    const data = await GraphQLService.query<{ orderDetail: any }>(query, variables, token);
+    return data.orderDetail;
   },
 
   async getJobOrderMains(
@@ -145,6 +179,7 @@ export const JobOrderService = {
         jobOrderMain(id: $id) {
           jobOrderDetails {
             image_url
+            admsite_code
             trial_date
             delivery_date
             item_amt
@@ -209,8 +244,11 @@ export const JobOrderService = {
   },
 
   async createPaymentMain(
-    input: {
-      docno: string;
+    input: {      
+      user_id: number | null,
+      order_id?: number,
+      job_order_id?: number,
+      admsite_code: number,
       payment_date: string;
       payment_mode: string;
       payment_ref?: string | null;
@@ -225,21 +263,35 @@ export const JobOrderService = {
         }
       }
     `;
-  
-    const variables = {
-      input: {
-        docno: input.docno,
-        payment_date: input.payment_date,
-        payment_mode: input.payment_mode,
-        payment_ref: input.payment_ref || null,
-        payment_amt: input.payment_amt
-      }
+
+    const inputData: any = {
+      user_id: input.user_id,
+      admsite_code: input.admsite_code,
+      payment_date: input.payment_date,
+      payment_mode: input.payment_mode,
+      payment_amt: input.payment_amt
     };
-  
+
+    if (input.order_id !== undefined && input.order_id !== null) {
+      inputData.order_id = input.order_id;
+    }
+
+    if (input.job_order_id !== undefined && input.job_order_id !== null) {
+      inputData.job_order_id = input.job_order_id;
+    }
+
+    if (input.payment_ref !== undefined) {
+      inputData.payment_ref = input.payment_ref;
+    }
+
+    const variables = {
+      input: inputData
+    };
+
     const data = await GraphQLService.mutation<{ 
       createPaymentMain: { id: string } 
     }>(mutation, variables, token);
-  
+
     return data.createPaymentMain;
   },
   
@@ -303,10 +355,10 @@ export const JobOrderService = {
       status_id?: string | null;
       docno?: string | null;
       job_details: Array<{
-        admsite_code?: string | null;
+        admsite_code?: number | null;
         order_details_id?: string | null;
         material_master_id: string;
-        measurement_main_id?: string | null;
+        measurement_main_id?: string;
         image_url?: string[] | null;
         item_amt?: number | null;
         ord_qty: number;

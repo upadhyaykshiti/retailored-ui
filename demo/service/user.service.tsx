@@ -30,10 +30,11 @@ export const UserService = {
             username
             alternateContact
             dob
-            sex
+            gender
             anniversary
             isCustomer
             active
+            admsite_code
           }
         }
       }
@@ -55,31 +56,62 @@ export const UserService = {
   
   async createUser(input: Demo.CreateUserInput, token?: string): Promise<Demo.User> {
     const mutation = `
-      mutation CreateCustomer($input: CreateCustomerInput!) {
-        createCustomer(input: $input) {
-          id
-          fname
-          lname
-          email
-          mobileNumber
-          username
-          alternateContact
-          dob
-          sex
-          anniversary
-          isCustomer
-          active
-          rlcode
-          cmpcode
-          admsite_code
-          user_type
-          ext
+      mutation CreateAdminSite($input: AdminSiteInput!) {
+        createAdminSite(input: $input) {
+          code
+          customer {
+            id
+            fname
+            lname
+            email
+            mobileNumber
+            username
+            alternateContact
+            dob
+            gender
+            anniversary
+            isCustomer
+            active
+            rlcode
+            cmpcode
+            admsite_code
+            user_type
+            ext
+          }
         }
       }
     `;
 
-    const data = await GraphQLService.query<{ createCustomer: Demo.User }>(mutation, { input }, token);
-    return data.createCustomer;
+    const transformedInput = {
+      cmpcode: input.cmpcode || 1,
+      sitename: input.fname,
+      site_type: "C",
+      create_customer: true,
+      customer_info: {
+        fname: input.fname,
+        lname: input.lname || null,
+        email: input.email || null,
+        mobileNumber: input.mobileNumber,
+        username: input.mobileNumber,
+        alternateContact: input.alternateContact || null,
+        dob: input.dob || null,
+        gender: input.gender,
+        anniversary: input.anniversary || null,
+        isCustomer: "Y",
+        active: input.active ?? 1,
+        rlcode: input.rlcode || 1,
+        cmpcode: input.cmpcode || null,
+        user_type: input.user_type || "E",
+        ext: input.ext || "N"
+      }
+    };
+
+    const data = await GraphQLService.query<{ createAdminSite: { customer: Demo.User } }>(
+      mutation, 
+      { input: transformedInput }, 
+      token
+    );
+    return data.createAdminSite.customer;
   },
 
   async updateUser(id: string, input: Demo.UpdateUserInput, token?: string): Promise<Demo.User> {
@@ -94,7 +126,7 @@ export const UserService = {
           username
           alternateContact
           dob
-          sex
+          gender
           anniversary
           isCustomer
           active

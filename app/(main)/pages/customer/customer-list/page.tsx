@@ -50,7 +50,7 @@ const CustomerList = () => {
       
       const { data, paginatorInfo } = await UserService.getUsers(
         debouncedSearchTerm,
-        2,
+        20,
         loadMore ? page + 1 : 1
       );
 
@@ -65,7 +65,7 @@ const CustomerList = () => {
           email: user.email,
           dob: user.dob,
           anniversary: user.anniversary || '',
-          sex: user.sex,
+          gender: user.gender,
           active: user.active,
         }));
 
@@ -109,11 +109,11 @@ const CustomerList = () => {
   });
 
   const filteredCustomers = customers.filter(customer => 
-    customer.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer.lname && customer.lname.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    customer.mobileNumber.includes(searchTerm) ||
-    (customer.alternateContact && customer.alternateContact.includes(searchTerm)) ||
-    (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    customer?.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (customer?.lname && customer.lname.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    customer?.mobileNumber.includes(searchTerm) ||
+    (customer?.alternateContact && customer.alternateContact.includes(searchTerm)) ||
+    (customer?.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleCardClick = (customerId: string) => {
@@ -130,7 +130,7 @@ const CustomerList = () => {
       email: '',
       dob: '',
       anniversary: '',
-      sex: 'M',
+      gender: 'M',
       active: 1
     });
     setIsEditMode(false);
@@ -148,7 +148,7 @@ const CustomerList = () => {
     return (
       currentCustomer?.fname?.trim() &&
       currentCustomer?.mobileNumber?.trim()?.length === 10 &&
-      currentCustomer?.sex
+      currentCustomer?.gender
     );
   };
 
@@ -159,7 +159,7 @@ const CustomerList = () => {
     try {
       if (isEditMode && originalCustomer) {
         const payload: Partial<Demo.UpdateUserInput> = {};
-  
+    
         if (currentCustomer.fname !== originalCustomer.fname) payload.fname = currentCustomer.fname;
         if (currentCustomer.lname !== originalCustomer.lname) payload.lname = currentCustomer.lname || '';
         if (currentCustomer.email !== originalCustomer.email) payload.email = currentCustomer.email || '';
@@ -167,14 +167,14 @@ const CustomerList = () => {
         if (currentCustomer.alternateContact !== originalCustomer.alternateContact) payload.alternateContact = currentCustomer.alternateContact || '';
         if (currentCustomer.dob !== originalCustomer.dob) payload.dob = currentCustomer.dob || '';
         if (currentCustomer.anniversary !== originalCustomer.anniversary) payload.anniversary = currentCustomer.anniversary || '';
-        if (currentCustomer.sex !== originalCustomer.sex) payload.sex = currentCustomer.sex;
+        if (currentCustomer.gender !== originalCustomer.gender) payload.gender = currentCustomer.gender;
         if (currentCustomer.active !== originalCustomer.active) payload.active = currentCustomer.active ?? 1;
-  
+    
         const finalPayload = { ...payload };
-  
+    
         const updatedUser = await UserService.updateUser(currentCustomer.id, finalPayload);
         setCustomers(customers.map(c => c.id === updatedUser.id ? updatedUser : c));
-  
+    
         toast.current?.show({
           severity: 'success',
           summary: 'Success',
@@ -187,23 +187,21 @@ const CustomerList = () => {
           lname: currentCustomer.lname || '',
           email: currentCustomer.email || null,
           mobileNumber: currentCustomer.mobileNumber,
-          username: currentCustomer.mobileNumber,
           alternateContact: currentCustomer.alternateContact || null,
-          dob: currentCustomer.dob || '',
+          dob: currentCustomer.dob || null,
           anniversary: currentCustomer.anniversary || null,
-          sex: currentCustomer.sex,
+          gender: currentCustomer.gender,
           active: currentCustomer.active ?? 1,
           isCustomer: "Y",
           rlcode: 1,
           cmpcode: 1,
-          admsite_code: 1,
           user_type: "E",
           ext: "N"
         };
-  
+    
         const newCustomer = await UserService.createUser(payload);
         setCustomers([...customers, newCustomer]);
-  
+    
         toast.current?.show({
           severity: 'success',
           summary: 'Success',
@@ -211,7 +209,7 @@ const CustomerList = () => {
           life: 3000
         });
       }
-  
+    
       setVisible(false);
       fetchCustomers();
     } catch (error) {
@@ -372,7 +370,7 @@ const CustomerList = () => {
                       )}
 
                       <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-user" /> {customer.sex === 'M' ? 'Male' : 'Female'}
+                        <i className="pi pi-user" /> {customer.gender === 'M' ? 'Male' : 'Female'}
                       </div>
                     </div>
 
@@ -552,8 +550,8 @@ const CustomerList = () => {
                                   inputId="male"
                                   name="gender"
                                   value="M"
-                                  onChange={(e) => setCurrentCustomer({...currentCustomer, sex: e.value})}
-                                  checked={currentCustomer.sex === 'M'}
+                                  onChange={(e) => setCurrentCustomer({...currentCustomer, gender: e.value})}
+                                  checked={currentCustomer.gender === 'M'}
                               />
                               <label htmlFor="male" className="ml-2">Male</label>
                           </div>
@@ -562,8 +560,8 @@ const CustomerList = () => {
                                   inputId="female"
                                   name="gender"
                                   value="F"
-                                  onChange={(e) => setCurrentCustomer({...currentCustomer, sex: e.value})}
-                                  checked={currentCustomer.sex === 'F'}
+                                  onChange={(e) => setCurrentCustomer({...currentCustomer, gender: e.value})}
+                                  checked={currentCustomer.gender === 'F'}
                               />
                               <label htmlFor="female" className="ml-2">Female</label>
                           </div>
