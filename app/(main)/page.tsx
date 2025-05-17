@@ -1,60 +1,58 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 import { Chart } from 'primereact/chart';
-import { Menu } from 'primereact/menu';
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ProductService } from '../../demo/service/ProductService';
+import React, { useContext, useEffect, useState } from 'react';
 import { LayoutContext } from '../../layout/context/layoutcontext';
-import { Demo } from '@/types';
 import { ChartData, ChartOptions } from 'chart.js';
 
-const lineData: ChartData = {
-    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
-    datasets: [
-        {
-            label: 'First Dataset',
-            data: [65, 59, 80, 81, 56, 55, 40],
-            fill: false,
-            backgroundColor: '#2f4860',
-            borderColor: '#2f4860',
-            tension: 0.4
-        },
-        {
-            label: 'Second Dataset',
-            data: [28, 48, 40, 19, 86, 27, 90],
-            fill: false,
-            backgroundColor: '#00bb7e',
-            borderColor: '#00bb7e',
-            tension: 0.4
-        }
-    ]
-};
-
 const Dashboard = () => {
-    const [products, setProducts] = useState<Demo.Product[]>([]);
-    const menu1 = useRef<Menu>(null);
-    const menu2 = useRef<Menu>(null);
-    const [lineOptions, setLineOptions] = useState<ChartOptions>({});
     const { layoutConfig } = useContext(LayoutContext);
+    const [lineOptions, setLineOptions] = useState<ChartOptions>({});
+    const [barOptions, setBarOptions] = useState<ChartOptions>({});
 
-     // Properly typed pie chart data
-     const [pieData, setPieData] = useState<ChartData<'pie', number[], string>>({
-        labels: ['Stitching', 'Alteration'],
+    const thisWeeksDelivery = 42;
+    const delayedJobOrders = 8;
+    const pendingOrders = 23;
+    const jobOrders = 15;
+    const customers = ['Nishant Kumar', 'Rahul Sharma', 'Priya Mehta', 'Amit Pramal'];
+    const jobbers = ['Tailor Master', 'Stitch Well', 'Precision Tailors', 'Quick Stitch'];
+
+    const deliveryData: ChartData = {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
         datasets: [
             {
-                data: [12000, 8000],
-                backgroundColor: ['#36A2EB', '#FFCE56'],
-                hoverBackgroundColor: ['#36A2EB', '#FFCE56'],
-                label: 'Sales Split'
+                label: 'This Week Deliveries',
+                data: [5, 7, 8, 6, 10, 6],
+                fill: false,
+                backgroundColor: '#2f4860',
+                borderColor: '#2f4860',
+                tension: 0.4
+            },
+            {
+                label: 'Last Week Deliveries',
+                data: [4, 6, 5, 7, 8, 5],
+                fill: false,
+                backgroundColor: '#00bb7e',
+                borderColor: '#00bb7e',
+                tension: 0.4
             }
         ]
-    });
+    };
 
-    const [pieOptions, setPieOptions] = useState<ChartOptions<'pie'>>({});
-
-    // Format currency for tooltips
-    const formatRupees = (value: number) => {
-        return '₹' + value.toLocaleString('en-IN');
+    const ordersData: ChartData = {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+        datasets: [
+            {
+                label: 'Job Orders',
+                backgroundColor: '#36A2EB',
+                data: [12, 15, 10, 18, 14, 20]
+            },
+            {
+                label: 'Sales Orders',
+                backgroundColor: '#FFCE56',
+                data: [8, 10, 12, 15, 11, 13]
+            }
+        ]
     };
 
     const applyLightTheme = () => {
@@ -86,7 +84,36 @@ const Dashboard = () => {
             }
         };
 
+        const barOptions: ChartOptions = {
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#495057'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#495057'
+                    },
+                    grid: {
+                        color: '#ebedef'
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: '#495057'
+                    },
+                    grid: {
+                        color: '#ebedef'
+                    }
+                }
+            }
+        };
+
         setLineOptions(lineOptions);
+        setBarOptions(barOptions);
     };
 
     const applyDarkTheme = () => {
@@ -118,12 +145,37 @@ const Dashboard = () => {
             }
         };
 
-        setLineOptions(lineOptions);
-    };
+        const barOptions = {
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#ebedef'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#ebedef'
+                    },
+                    grid: {
+                        color: 'rgba(160, 167, 181, .3)'
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: '#ebedef'
+                    },
+                    grid: {
+                        color: 'rgba(160, 167, 181, .3)'
+                    }
+                }
+            }
+        };
 
-    useEffect(() => {
-        ProductService.getProductsSmall().then((data) => setProducts(data));
-    }, []);
+        setLineOptions(lineOptions);
+        setBarOptions(barOptions);
+    };
 
     useEffect(() => {
         if (layoutConfig.colorScheme === 'light') {
@@ -133,92 +185,107 @@ const Dashboard = () => {
         }
     }, [layoutConfig.colorScheme]);
 
-    const formatCurrency = (value: number) => {
-        return value?.toLocaleString('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        });
-    };
-
     return (
         <div className="grid">
-            <div className="col-12 lg:col-6 xl:col-3">
+            <div className="col-12 lg:col-6 xl:col-4">
                 <div className="card mb-0">
                     <div className="flex justify-content-between mb-3">
                         <div>
-                            <span className="block text-500 font-medium mb-3">Amount Received</span>
-                            <div className="text-900 font-medium text-xl">₹ 1800</div>
+                            <span className="block text-500 font-medium mb-3">This Week&apos;s Delivery (Qty)</span>
+                            <div className="text-900 font-medium text-xl">{thisWeeksDelivery}</div>
                         </div>
-                        <div className="flex align-items-center justify-content-center bg-blue-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-wallet text-blue-500 text-xl" />
+                        <div className="flex align-items-center justify-content-center bg-green-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
+                            <i className="pi pi-check-circle text-green-500 text-xl" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="col-12 lg:col-6 xl:col-3">
+            
+            <div className="col-12 lg:col-6 xl:col-4">
                 <div className="card mb-0">
                     <div className="flex justify-content-between mb-3">
                         <div>
-                            <span className="block text-500 font-medium mb-3">Pending Amount (All Time)</span>
-                            <div className="text-900 font-medium text-xl">₹ 1200</div>
+                            <span className="block text-500 font-medium mb-3">Delayed Job Orders (Qty)</span>
+                            <div className="text-900 font-medium text-xl">{delayedJobOrders}</div>
+                        </div>
+                        <div className="flex align-items-center justify-content-center bg-red-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
+                            <i className="pi pi-exclamation-triangle text-red-500 text-xl" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="col-12 lg:col-6 xl:col-4">
+                <div className="card mb-0">
+                    <div className="flex justify-content-between mb-3">
+                        <div>
+                            <span className="block text-500 font-medium mb-3">Total Pending Orders</span>
+                            <div className="text-900 font-medium text-xl">{pendingOrders}</div>
                         </div>
                         <div className="flex align-items-center justify-content-center bg-orange-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-money-bill text-orange-500 text-xl" />
+                            <i className="pi pi-clock text-orange-500 text-xl" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="col-12 lg:col-6 xl:col-3">
+            
+            <div className="col-12 lg:col-6 xl:col-4">
                 <div className="card mb-0">
                     <div className="flex justify-content-between mb-3">
                         <div>
-                            <span className="block text-500 font-medium mb-3">Active Orders (All Time)</span>
-                            <div className="text-900 font-medium text-xl">51</div>
+                            <span className="block text-500 font-medium mb-3">Job Orders</span>
+                            <div className="text-900 font-medium text-xl">{jobOrders}</div>
                         </div>
-                        <div className="flex align-items-center justify-content-center bg-cyan-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-shopping-cart text-cyan-500 text-xl" />
+                        <div className="flex align-items-center justify-content-center bg-blue-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
+                            <i className="pi pi-briefcase text-blue-500 text-xl" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="col-12 lg:col-6 xl:col-3">
+            
+            <div className="col-12 lg:col-6 xl:col-4">
                 <div className="card mb-0">
                     <div className="flex justify-content-between mb-3">
                         <div>
-                            <span className="block text-500 font-medium mb-3">Closed Orders</span>
-                            <div className="text-900 font-medium text-xl">10</div>
+                            <span className="block text-500 font-medium mb-3">Customers This Week</span>
+                            <div className="text-900 font-medium text-sm">
+                                {customers.join(', ')}
+                            </div>
                         </div>
                         <div className="flex align-items-center justify-content-center bg-purple-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi pi-check-circle text-purple-500 text-xl" />
+                            <i className="pi pi-users text-purple-500 text-xl" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="col-12 xl:col-6">
-                <div className="card">
-                    <h5>Reporting Sales</h5>
-                    <Chart type="line" data={lineData} options={lineOptions} />
+            
+            <div className="col-12 lg:col-6 xl:col-4">
+                <div className="card mb-0">
+                    <div className="flex justify-content-between mb-3">
+                        <div>
+                            <span className="block text-500 font-medium mb-3">Jobbers This Week</span>
+                            <div className="text-900 font-medium text-sm">
+                                {jobbers.join(', ')}
+                            </div>
+                        </div>
+                        <div className="flex align-items-center justify-content-center bg-cyan-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
+                            <i className="pi pi-wrench text-cyan-500 text-xl" />
+                        </div>
+                    </div>
                 </div>
             </div>
+
             <div className="col-12 xl:col-6">
                 <div className="card">
-                    <h5>Sales Split</h5>
-                    <Chart 
-                        type="pie" 
-                        data={pieData} 
-                        options={pieOptions} 
-                        style={{ width: '100%' }} 
-                    />
-                    <div className="mt-3 text-center">
-                        <p className="mb-1">
-                            <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1"></span>
-                            Stitching: ₹12,000
-                        </p>
-                        <p>
-                            <span className="inline-block w-3 h-3 rounded-full bg-yellow-400 mr-1"></span>
-                            Alteration: ₹8,000
-                        </p>
-                    </div>
+                    <h5>Weekly Deliveries</h5>
+                    <Chart type="line" data={deliveryData} options={lineOptions} />
+                </div>
+            </div>
+            
+            <div className="col-12 xl:col-6">
+                <div className="card">
+                    <h5>Orders Overview</h5>
+                    <Chart type="bar" data={ordersData} options={barOptions} />
                 </div>
             </div>
         </div>
