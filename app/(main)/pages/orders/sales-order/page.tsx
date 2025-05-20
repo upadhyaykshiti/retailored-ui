@@ -77,9 +77,6 @@ const SalesOrder = () => {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null | undefined>(new Date());
-  const [receivePaymentDialog, setReceivePaymentDialog] = useState(false);
-  const [receiveAmount, setReceiveAmount] = useState('');
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -415,7 +412,9 @@ const SalesOrder = () => {
         reference: '',
         paymentMethod: ''
       });
+      setVisible(false);
       setPaymentDialogVisible(false);
+      await fetchOrders(1, pagination.perPage);
   
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -721,6 +720,7 @@ const SalesOrder = () => {
                   icon="pi pi-wallet"
                   onClick={() => setPaymentDialogVisible(true)}
                   className="mt-3"
+                  disabled={selectedOrder?.amt_due === 0 || selectedOrder?.amt_due === undefined}
                 />
               </div>
             </div>
@@ -864,7 +864,21 @@ const SalesOrder = () => {
               className="w-full" 
               placeholder="Enter amount"
               value={paymentForm.amount}
-              onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+              onChange={(e) => {
+                const enteredAmount = parseFloat(e.target.value) || 0;
+                const maxAllowed = selectedOrder?.amt_due || 0;
+                if (enteredAmount <= maxAllowed) {
+                  setPaymentForm({...paymentForm, amount: e.target.value});
+                } else {
+                  Toast.show({
+                    text: `Amount cannot exceed ₹${maxAllowed}`,
+                    duration: 'short',
+                    position: 'top'
+                  });
+                  setPaymentForm({...paymentForm, amount: maxAllowed.toString()});
+                }
+              }}
+              max={selectedOrder?.amt_due}
             />
           </div>
 
@@ -934,7 +948,7 @@ const SalesOrder = () => {
               icon="pi pi-check" 
               className="p-button-success"
               onClick={handlePaymentSubmit}
-              disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod}
+              disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod || parseFloat(paymentForm.amount) > (selectedOrder?.amt_due || 0)}
             />
           </div>
         </div>

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
+import { useRouter } from 'next/navigation';
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
@@ -84,6 +85,7 @@ interface StitchOptions {
 }
 
 const CreateOrder = () => {
+    const router = useRouter();
     const [visible, setVisible] = useState(false);
     const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -690,6 +692,7 @@ const CreateOrder = () => {
             setIsMesurementSaved({});
             setStitchOptions({});
             
+            router.push('/pages/orders/sales-order');
             return response;
         } catch (error) {
             console.error('Error confirming order:', error);

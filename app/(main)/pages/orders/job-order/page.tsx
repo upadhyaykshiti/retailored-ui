@@ -114,6 +114,7 @@ interface OrderItemDetails {
   makingCharge: number;
   image: File | null;
   selectedImages?: string[];
+  allImages ?: string[];
 }
 
 const JobOrder = () => {
@@ -622,6 +623,15 @@ const JobOrder = () => {
         orderUniqueId: order.id,
         orderDetailId: item.id
       });
+
+      setItemDetails(prev => ({
+        ...prev,
+        [itemKey]: {
+          ...(prev[itemKey] || { quantity: details?.ord_qty || 1, makingCharge: 0 }),
+          selectedImages: [],
+          allImages: details?.image_url || []
+        }
+      }));
 
       setTrialDate(details?.trial_date ? new Date(details.trial_date) : null);
       setDeliveryDate(details?.delivery_date ? new Date(details.delivery_date) : null);
@@ -1428,17 +1438,15 @@ const JobOrder = () => {
                 <i className="pi pi-image mr-2"></i>
                 Select Images from Order
               </label>
-              
+
               <div className="border-1 surface-border border-round p-3">
                 {currentlyEditingItem.orderUniqueId && (
                   <div className="flex flex-column gap-3">
                     {(() => {
-                      const order = ordersList.find(o => o.id === currentlyEditingItem.orderUniqueId);
-                      const images = order?.image_url 
-                        ? (Array.isArray(order.image_url) ? order.image_url : [order.image_url])
-                        : [];
-                      
-                      if (images.length === 0) {
+                      const allImages = itemDetails[currentlyEditingItem.id]?.allImages || [];
+                      const selectedImages = itemDetails[currentlyEditingItem.id]?.selectedImages || [];
+
+                      if (allImages.length === 0) {
                         return (
                           <div className="text-center p-4 surface-50 border-round">
                             <i className="pi pi-image text-2xl mb-2" />
@@ -1446,86 +1454,103 @@ const JobOrder = () => {
                           </div>
                         );
                       }
-                      
+
                       return (
                         <>
                           <div className="flex justify-content-between align-items-center">
                             <span>Select All</span>
-                            <Checkbox 
+                            <Checkbox
                               inputId="select-all-images"
-                              checked={images.every(image =>
-                                itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(image)
-                              )}
+                              checked={
+                                allImages.length > 0 &&
+                                allImages.every((image) => selectedImages.includes(image))
+                              }
                               onChange={(e) => {
-                                setItemDetails(prev => {
-                                  const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
-                                  
+                                setItemDetails((prev) => {
+                                  const current = prev[currentlyEditingItem.id] || {
+                                    quantity: 1,
+                                    makingCharge: 0,
+                                  };
+
                                   return {
                                     ...prev,
                                     [currentlyEditingItem.id]: {
                                       ...current,
-                                      selectedImages: e.checked ? images : []
-                                    }
+                                      selectedImages: e.checked ? [...allImages] : [],
+                                    },
                                   };
                                 });
                               }}
                             />
                           </div>
-                          
+
                           <div className="grid">
-                            {images.map((imageUrl, index) => {                              
-                              return (
-                                <div key={index} className="col-6 md:col-4">
-                                  <div className="border-1 surface-border border-round p-2 flex flex-column align-items-center">
-                                    <img 
-                                      src={imageUrl} 
-                                      alt={`Order image ${index + 1}`}
-                                      className="w-full mb-2 border-round cursor-pointer"
-                                      style={{ 
-                                        height: '100px',
-                                        objectFit: 'cover',
-                                        aspectRatio: '1/1'
-                                      }}
-                                      onClick={() => {
-                                        setImages(images.map(img => ({
-                                          itemImageSrc: img
-                                        })));
-                                        setActiveImageIndex(index);
-                                        setImagePreviewVisible(true);
-                                      }}
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src = 'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
-                                      }}
-                                    />
-                                    <Checkbox 
-                                      inputId={`order-image-${index}`}
-                                      checked={itemDetails[currentlyEditingItem.id]?.selectedImages?.includes(imageUrl) || false}
-                                      onChange={(e) => {
-                                        setItemDetails(prev => {
-                                          const current = prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 };
-                                          const selectedImages = current.selectedImages || [];
-                                          
-                                          let updatedImages;
-                                          if (e.checked) {
-                                            updatedImages = [...selectedImages, imageUrl];
-                                          } else {
-                                            updatedImages = selectedImages.filter(img => img !== imageUrl);
-                                          }
-                                          
-                                          return {
-                                            ...prev,
-                                            [currentlyEditingItem.id]: {
-                                              ...current,
-                                              selectedImages: updatedImages
-                                            }
+                            {allImages.map((imageUrl, index) => (
+                              <div key={index} className="col-6 md:col-4">
+                                <div
+                                  className={`border-1 surface-border border-round p-2 flex flex-column align-items-center ${
+                                    selectedImages.includes(imageUrl) ? 'bg-primary-100' : ''
+                                  }`}
+                                >
+                                  <img
+                                    src={imageUrl}
+                                    alt={`Order image ${index + 1}`}
+                                    className="w-full mb-2 border-round cursor-pointer"
+                                    style={{
+                                      height: '100px',
+                                      objectFit: 'cover',
+                                      aspectRatio: '1/1',
+                                    }}
+                                    onClick={() => {
+                                      setImages(
+                                        allImages.map((img) => ({
+                                          itemImageSrc: img,
+                                        }))
+                                      );
+                                      setActiveImageIndex(index);
+                                      setImagePreviewVisible(true);
+                                    }}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src =
+                                        'https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg';
+                                    }}
+                                  />
+                                  <Checkbox
+                                    inputId={`order-image-${index}`}
+                                    checked={selectedImages.includes(imageUrl)}
+                                    onChange={(e) => {
+                                      setItemDetails((prev) => {
+                                        const current =
+                                          prev[currentlyEditingItem.id] || {
+                                            quantity: 1,
+                                            makingCharge: 0,
                                           };
-                                        });
-                                      }}
-                                    />
-                                  </div>
+                                        let updatedImages;
+
+                                        if (e.checked) {
+                                          updatedImages = [
+                                            ...(current.selectedImages || []),
+                                            imageUrl,
+                                          ];
+                                        } else {
+                                          updatedImages = (current.selectedImages || []).filter(
+                                            (img) => img !== imageUrl
+                                          );
+                                        }
+
+                                        return {
+                                          ...prev,
+                                          [currentlyEditingItem.id]: {
+                                            ...current,
+                                            selectedImages: updatedImages,
+                                          },
+                                        };
+                                      });
+                                    }}
+                                  />
                                 </div>
-                              );
-                            })}
+                              </div>
+                            ))}
                           </div>
                         </>
                       );
