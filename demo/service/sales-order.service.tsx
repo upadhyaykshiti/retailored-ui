@@ -259,20 +259,18 @@ export const SalesOrderService = {
         }
       }
     `;
-  
+
     const variables = {
       id: orderId
     };
-  
-    const response = await GraphQLService.query<any>(query, variables, token);
-    
-    return {
-      data: {
-        orderDetail: {
-          measurementMain: response.data.orderDetail.measurementMain
-        }
-      }
-    };
+
+    try {
+      const response = await GraphQLService.query<any>(query, variables, token);
+      return response?.data || { orderDetail: null };
+    } catch (error) {
+      console.error('Error fetching measurements:', error);
+      return { orderDetail: null };
+    }
   },
 
   async markOrderDelivered(

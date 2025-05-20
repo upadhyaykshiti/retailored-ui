@@ -42,6 +42,7 @@ export const JobOrderService = {
             docno
             orderDetails {
               id
+              measurement_main_id
               material {
                 id
                 name
@@ -356,9 +357,9 @@ export const JobOrderService = {
       docno?: string | null;
       job_details: Array<{
         admsite_code?: number | null;
-        order_details_id?: string | null;
-        material_master_id: string;
-        measurement_main_id?: string;
+        order_details_id?: number | null;
+        material_master_id: number;
+        measurement_main_id?: number;
         image_url?: string[] | null;
         item_amt?: number | null;
         ord_qty: number;

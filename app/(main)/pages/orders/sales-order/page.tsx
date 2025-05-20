@@ -226,15 +226,13 @@ const SalesOrder = () => {
   const fetchMeasurements = async (measurementMainId: string) => {
     setLoadingMeasurements(true);
     try {
+      console.log("Fetching measurements for ID:", measurementMainId); 
       const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
-      const measurementData = response.data.orderDetail.measurementMain;
+      console.log("Full response:", response);
+      const measurementData = response?.orderDetail?.measurementMain || null;
       console.log("Measurement data:", measurementData);
       
-      if (measurementData) {
-        setMeasurementData(measurementData);
-      } else {
-        setMeasurementData(null);
-      }
+      setMeasurementData(measurementData);
     } catch (error) {
       console.error('Failed to load measurements:', error);
       setMeasurementData(null);

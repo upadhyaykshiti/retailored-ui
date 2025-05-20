@@ -239,14 +239,13 @@ const JobOrder = () => {
     const fetchJobbers = async () => {
       try {
         const response = await JobOrderService.getJobberList();
-        const formattedJobbers = response.map(jobber => ({
+        response.map(jobber => ({
           label: jobber.sitename,
           value: {
             ...jobber,
             code: jobber.code
           }
         }));
-        console.log('Formatted Jobbers:', formattedJobbers);
       } catch (error) {
         console.error('Error fetching jobbers:', error);
         toast.current?.show({
@@ -276,7 +275,7 @@ const JobOrder = () => {
       const transformedData = data.map(order => ({
         id: order.id,
         order_id: order.id,
-        measurement_main_id: '',
+        measurement_main_id:order.measurement_main_id = order.orderDetails[0]?.measurement_main_id || '',
         image_url: [],
         trial_date: '',
         delivery_date: '',
@@ -327,30 +326,22 @@ const JobOrder = () => {
           if (item.id === orderDetailId) {
             return {
               ...item,
-              ord_qty: details?.ord_qty || 0
+              ord_qty: details?.ord_qty || 0,
+              image_url: details?.image_url || [],
+              trial_date: details?.trial_date || '',
+              delivery_date: details?.delivery_date || '',
+              measurement_main_id: details?.measurement_main_id || ''
             };
           }
           return item;
         });
 
-        const hasDetail = order.orderMain.orderDetails.some(d => d.id === orderDetailId);
-        
         return {
           ...order,
           orderMain: {
             ...order.orderMain,
             orderDetails: updatedOrderDetails
-          },
-          measurement_main_id: hasDetail ? (details?.measurement_main_id || '') : order.measurement_main_id,
-          image_url: hasDetail ? 
-            (details?.image_url 
-              ? (Array.isArray(details.image_url) 
-                ? details.image_url 
-                : [details.image_url])
-              : [])
-            : order.image_url,
-          trial_date: hasDetail ? (details?.trial_date || '') : order.trial_date,
-          delivery_date: hasDetail ? (details?.delivery_date || '') : order.delivery_date
+          }
         };
       }));
     } catch (error) {
@@ -545,16 +536,19 @@ const JobOrder = () => {
     return date.toLocaleDateString('en-IN');
   };
 
-  const handleItemSelection = (order: OrdersList, item: { id: string; material: { id: string; name: string; }; ord_qty: number; }) => {
+  const handleItemSelection = (
+    order: OrdersList,
+    item: { id: string; material: { id: string; name: string; }; ord_qty: number; }
+  ) => {
     const itemKey = `${order.id}-${item.id}`;
-    
+
     setSelectedItems(prev => {
       const existingIndex = prev.findIndex(selected => selected.id === itemKey);
-      
+
       if (existingIndex >= 0) {
         return prev.filter(item => item.id !== itemKey);
       } else {
-        return [...prev, {
+        const selectedItem = {
           id: itemKey,
           materialId: item.material.id,
           measurementMainID: order.measurement_main_id || '',
@@ -566,17 +560,23 @@ const JobOrder = () => {
           customerName: order.orderMain.user.fname,
           orderUniqueId: order.id,
           orderDetailId: item.id
-        }];
+        };
+
+        return [...prev, selectedItem];
       }
     });
   };
 
-  const handleAddItemClick = async (order: OrdersList, item: { id: string; material: { id: string; name: string; }; ord_qty: number; }) => {
+
+  const handleAddItemClick = async (
+    order: OrdersList,
+    item: { id: string; material: { id: string; name: string }; ord_qty: number }
+  ) => {
     const itemKey = `${order.id}-${item.id}`;
-    
-    if (!order.measurement_main_id && order.image_url.length === 0) {
-      setItemLoadingStates(prev => ({...prev, [itemKey]: true}));
-      
+
+    if (order.image_url.length === 0) {
+      setItemLoadingStates(prev => ({ ...prev, [itemKey]: true }));
+
       try {
         await fetchOrderDetails(item.id);
       } catch (error) {
@@ -587,17 +587,14 @@ const JobOrder = () => {
           life: 3000
         });
       } finally {
-        setItemLoadingStates(prev => ({...prev, [itemKey]: false}));
+        setItemLoadingStates(prev => ({ ...prev, [itemKey]: false }));
       }
     }
-
-    const updatedOrder = ordersList.find(o => o.id === order.id) || order;
-    const measurementMainID = updatedOrder.measurement_main_id || '';
 
     openItemManagement({
       id: itemKey,
       materialId: item.material.id,
-      measurementMainID: measurementMainID,
+      measurementMainID: '',
       name: item.material.name,
       selected: true,
       quantity: item.ord_qty,
@@ -608,13 +605,13 @@ const JobOrder = () => {
       orderDetailId: item.id
     });
   };
-  
+
   const handleSelectAllInOrder = (order: OrdersList, selectAll: boolean) => {
     setSelectedItems(prev => {
       const orderItems = order.orderMain.orderDetails.map(item => ({
         id: `${order.id}-${item.id}`,
         materialId: item.material.id,
-        measurementMainID: order.measurement_main_id,
+        measurementMainID: order.measurement_main_id || '',
         name: item.material.name,
         selected: true,
         quantity: item.ord_qty,
@@ -663,9 +660,9 @@ const JobOrder = () => {
 
         return {
           admsite_code: Number(selectedCode),
-          order_details_id: item.orderDetailId || null,
-          material_master_id: item.materialId,
-          measurement_main_id: item.measurementMainID,
+          order_details_id: Number(item.orderDetailId) || null,
+          material_master_id: Number(item.materialId),
+          measurement_main_id: Number(item.measurementMainID),
           image_url: allImages.length > 0 ? allImages : null,
           item_amt: itemDetail.makingCharge || 0,
           ord_qty: itemDetail.quantity || 1,
