@@ -317,34 +317,46 @@ const JobOrder = () => {
     }
   }, []);
 
-  const fetchOrderDetails = async (orderDetailId: string) => {
+  const fetchOrderDetails = async (orderDetailId: string, onSuccess?: (details: any) => void) => {
     try {
       const details = await JobOrderService.getOrderDetails(orderDetailId);
-      
-      setOrdersList(prev => prev.map(order => {
-        const updatedOrderDetails = order.orderMain.orderDetails.map(item => {
-          if (item.id === orderDetailId) {
-            return {
-              ...item,
-              ord_qty: details?.ord_qty || 0,
-              image_url: details?.image_url || [],
-              trial_date: details?.trial_date || '',
-              delivery_date: details?.delivery_date || '',
-              measurement_main_id: details?.measurement_main_id || ''
-            };
-          }
-          return item;
+
+      setOrdersList(prev => {
+        const updated = prev.map(order => {
+          const updatedOrderDetails = order.orderMain.orderDetails.map(item => {
+            if (item.id === orderDetailId) {
+              return {
+                ...item,
+                ord_qty: details?.ord_qty || 0,
+                maxQuantity: details?.ord_qty || 0,
+                quantity: details?.ord_qty || 0, 
+                image_url: details?.image_url || [],
+                trial_date: details?.trial_date || '',
+                delivery_date: details?.delivery_date || '',
+                measurement_main_id: details?.measurement_main_id || ''
+              };
+            }
+            return item;
+          });
+
+          return {
+            ...order,
+            orderMain: {
+              ...order.orderMain,
+              orderDetails: updatedOrderDetails
+            }
+          };
         });
 
-        return {
-          ...order,
-          orderMain: {
-            ...order.orderMain,
-            orderDetails: updatedOrderDetails
-          }
-        };
-      }));
+        setTrialDate(details?.trial_date ? new Date(details.trial_date) : null);
+        setDeliveryDate(details?.delivery_date ? new Date(details.delivery_date) : null);
+        return updated;
+      });
+
+      onSuccess?.(details);
+
     } catch (error) {
+      console.error("Failed to fetch order details:", error);
       toast.current?.show({
         severity: 'error',
         summary: 'Error',
@@ -451,19 +463,27 @@ const JobOrder = () => {
 
   const openItemManagement = (item: OrderItem) => {
     setCurrentlyEditingItem(item);
+    
+    setItemDetails(prev => ({
+      ...prev,
+      [item.id]: {
+        ...(prev[item.id] || {quantity: 1, image: null}),
+        quantity: item.quantity
+      }
+    }));
+    
     setItemManagementSidebarVisible(true);
   };
-  
+    
   const handleQuantityChange = (newQuantity: number) => {
     if (!currentlyEditingItem) return;
     
-    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
-    const clampedQty = Math.min(Math.max(1, newQuantity), maxQty);
+    const clampedQty = Math.min(Math.max(1, newQuantity), currentlyEditingItem.maxQuantity);
     
     setItemDetails(prev => ({
       ...prev,
       [currentlyEditingItem.id]: {
-        ...prev[currentlyEditingItem.id],
+        ...(prev[currentlyEditingItem.id] || {quantity: 1, image: null}),
         quantity: clampedQty
       }
     }));
@@ -481,9 +501,20 @@ const JobOrder = () => {
   };
 
   const handleItemImageUpload = async (file: File | null) => {
-    if (!currentlyEditingItem || !file) return;
+    if (!currentlyEditingItem) return;
 
     try {
+      if (file === null) {
+        setItemDetails(prev => ({
+          ...prev,
+          [currentlyEditingItem.id]: {
+            ...(prev[currentlyEditingItem.id] || { quantity: 1, makingCharge: 0 }),
+            image: null
+          }
+        }));
+        return;
+      }
+      
       const MAX_SIZE_MB = 1;
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
         const compressedFile = await compressImage(file, MAX_SIZE_MB);
@@ -573,37 +604,38 @@ const JobOrder = () => {
     item: { id: string; material: { id: string; name: string }; ord_qty: number }
   ) => {
     const itemKey = `${order.id}-${item.id}`;
+    setItemLoadingStates(prev => ({ ...prev, [itemKey]: true }));
 
-    if (order.image_url.length === 0) {
-      setItemLoadingStates(prev => ({ ...prev, [itemKey]: true }));
+    try {
+      const details = await JobOrderService.getOrderDetails(item.id);
 
-      try {
-        await fetchOrderDetails(item.id);
-      } catch (error) {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load order details',
-          life: 3000
-        });
-      } finally {
-        setItemLoadingStates(prev => ({ ...prev, [itemKey]: false }));
-      }
+      openItemManagement({
+        id: itemKey,
+        materialId: item.material.id,
+        measurementMainID: details?.measurement_main_id || '',
+        name: item.material.name,
+        selected: true,
+        quantity: details?.ord_qty || 1,
+        maxQuantity: details?.ord_qty || 1,
+        orderId: order.orderMain.docno,
+        customerName: order.orderMain.user.fname,
+        orderUniqueId: order.id,
+        orderDetailId: item.id
+      });
+
+      setTrialDate(details?.trial_date ? new Date(details.trial_date) : null);
+      setDeliveryDate(details?.delivery_date ? new Date(details.delivery_date) : null);
+
+    } catch (error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to load order details',
+        life: 3000
+      });
+    } finally {
+      setItemLoadingStates(prev => ({ ...prev, [itemKey]: false }));
     }
-
-    openItemManagement({
-      id: itemKey,
-      materialId: item.material.id,
-      measurementMainID: '',
-      name: item.material.name,
-      selected: true,
-      quantity: item.ord_qty,
-      maxQuantity: item.ord_qty,
-      orderId: order.orderMain.docno,
-      customerName: order.orderMain.user.fname,
-      orderUniqueId: order.id,
-      orderDetailId: item.id
-    });
   };
 
   const handleSelectAllInOrder = (order: OrdersList, selectAll: boolean) => {
@@ -1325,7 +1357,7 @@ const JobOrder = () => {
               <div className="flex align-items-center justify-content-between bg-gray-100 p-2 border-round">
                 <Button
                   icon="pi pi-minus" 
-                  onClick={() => handleQuantityChange(Math.max(1, (itemDetails[currentlyEditingItem.id]?.quantity || 1) - 1))}
+                  onClick={() => handleQuantityChange((itemDetails[currentlyEditingItem.id]?.quantity || 1) - 1)}
                   className="p-button-rounded p-button-text"
                   disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) <= 1}
                 />
@@ -1333,8 +1365,7 @@ const JobOrder = () => {
                   value={String(itemDetails[currentlyEditingItem.id]?.quantity || 1)}
                   onChange={(e) => {
                     const newValue = Math.max(1, parseInt(e.target.value) || 1);
-                    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
-                    handleQuantityChange(Math.min(newValue, maxQty));
+                    handleQuantityChange(Math.min(newValue, currentlyEditingItem.maxQuantity));
                   }}
                   className="text-center mx-2 bg-white"
                   style={{ width: '60px' }}
@@ -1342,14 +1373,9 @@ const JobOrder = () => {
                 />
                 <Button 
                   icon="pi pi-plus" 
-                  onClick={() => {
-                    const currentQty = itemDetails[currentlyEditingItem.id]?.quantity || 1;
-                    const maxQty = selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity;
-                    handleQuantityChange(Math.min(currentQty + 1, maxQty));
-                  }}
+                  onClick={() => handleQuantityChange((itemDetails[currentlyEditingItem.id]?.quantity || 1) + 1)}
                   className="p-button-rounded p-button-text"
-                  disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) >= 
-                    (selectedItems.find(item => item.id === currentlyEditingItem.id)?.maxQuantity || Infinity)}
+                  disabled={(itemDetails[currentlyEditingItem.id]?.quantity || 1) >= currentlyEditingItem.maxQuantity}
                 />
               </div>
             </div>
@@ -1635,7 +1661,7 @@ const JobOrder = () => {
                   style={{ width: '60px' }}
                   keyfilter="int"
                 />
-                <Button 
+                <Button
                   icon="pi pi-plus" 
                   onClick={() => handleStatusQuantityChange(quantity + 1)}
                   className="p-button-rounded p-button-text"
