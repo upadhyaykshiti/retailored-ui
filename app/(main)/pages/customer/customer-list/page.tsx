@@ -11,7 +11,6 @@ import { ToggleButton } from 'primereact/togglebutton';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { UserService } from '@/demo/service/user.service';
 import { Skeleton } from 'primereact/skeleton';
-import { Toast } from 'primereact/toast';
 import { useRef } from 'react';
 import { Calendar } from 'primereact/calendar';
 import { RadioButton } from 'primereact/radiobutton';
@@ -19,10 +18,10 @@ import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 import { useDebounce } from 'use-debounce';
 import { Demo } from '@/types';
+import { Toast } from '@capacitor/toast';
 
 const CustomerList = () => {
   const router = useRouter();
-  const toast = useRef<Toast>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [customers, setCustomers] = useState<Demo.User[]>([]);
@@ -78,11 +77,10 @@ const CustomerList = () => {
     } catch (err) {
       console.error('Failed to fetch customers:', err);
       setError('Failed to load customers. Please try again.');
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load customers',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to load customers',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setIsInitialLoading(false);
@@ -174,12 +172,11 @@ const CustomerList = () => {
     
         const updatedUser = await UserService.updateUser(currentCustomer.id, finalPayload);
         setCustomers(customers.map(c => c.id === updatedUser.id ? updatedUser : c));
-    
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Customer updated successfully',
-          life: 3000
+
+        await Toast.show({
+          text: 'Customer updated successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       } else {
         const payload = {
@@ -201,12 +198,10 @@ const CustomerList = () => {
     
         const newCustomer = await UserService.createUser(payload);
         setCustomers([...customers, newCustomer]);
-    
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Customer created successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Customer created successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       }
     
@@ -214,11 +209,10 @@ const CustomerList = () => {
       fetchCustomers();
     } catch (error) {
       console.error('Error saving customer:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to save customer',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to save customer',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setListLoading(false);
@@ -242,13 +236,12 @@ const CustomerList = () => {
       header: 'Confirm Status Change',
       icon: 'pi pi-info-circle',
       acceptClassName: isActive ? 'p-button-danger' : 'p-button-success',
-      accept: () => {
+      accept: async () => {
         toggleCustomerStatus(customerId);
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Status Updated',
-          detail: `Customer marked as ${isActive ? 'inactive' : 'active'}`,
-          life: 3000
+        await Toast.show({
+          text: `Customer marked as ${isActive ? 'inactive' : 'active'}`,
+          duration: 'short',
+          position: 'bottom'
         });
       }
     });
@@ -308,14 +301,12 @@ const CustomerList = () => {
   return (
     <>
       {listLoading && <FullPageLoader />}
-      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <Toast ref={toast} />
-        
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Customers</h2>
           <span className="p-input-icon-left w-full">
             <i className="pi pi-search" />
-            <InputText 
+            <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name, phone or email"

@@ -5,21 +5,24 @@ import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
 import { Tag } from 'primereact/tag';
-import { useState, useEffect, useRef, useCallback } from 'react';
 import { InputText } from 'primereact/inputtext';
+import { InputNumber } from 'primereact/inputnumber';
+import { InputTextarea } from 'primereact/inputtextarea';
 import { Dropdown } from 'primereact/dropdown';
 import { Checkbox } from 'primereact/checkbox';
 import { ScrollPanel } from 'primereact/scrollpanel';
 import { Sidebar } from 'primereact/sidebar';
 import { Calendar } from 'primereact/calendar';
 import { JobOrderService } from '@/demo/service/job-order.service';
-import { Toast } from 'primereact/toast';
 import { Skeleton } from 'primereact/skeleton';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { compressImage } from '@/demo/utils/imageCompressUtils';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { convertImageToBase64, convertImagesToBase64 } from '@/demo/utils/imageUtils';
 import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
+import { Toast } from '@capacitor/toast';
 
 interface JobOrderMain {
   id: string;
@@ -46,6 +49,9 @@ interface MeasurementDetail {
 }
 
 interface JobOrderDetail {
+  id: number;
+  job_order_main_id: number;
+  order_details_id: number;
   image_url: string[] | null;
   admsite_code: number | null;
   trial_date: string | null;
@@ -151,6 +157,7 @@ const JobOrder = () => {
   const [selectedDetail, setSelectedDetail] = useState<JobOrderDetail | null>(null);
   const [confirmDeliveredVisible, setConfirmDeliveredVisible] = useState(false);
   const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
+  const [isCreateOrderLoading, setIsCreateOrderLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [trialDate, setTrialDate] = useState<Date | null>(new Date());
   const [deliveryDate, setDeliveryDate] = useState<Date | null>(new Date());
@@ -160,7 +167,15 @@ const JobOrder = () => {
   const [itemLoadingStates, setItemLoadingStates] = useState<{[key: string]: boolean}>({});
   const [loadingJobbers, setLoadingJobbers] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editDialogVisible, setEditDialogVisible] = useState(false);
+  const [editForm, setEditForm] = useState({
+    trial_date: '',
+    delivery_date: '',
+    item_amt: 0,
+    desc1: '',
+  });
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     paymentDate: new Date().toISOString().split('T')[0],
@@ -181,7 +196,6 @@ const JobOrder = () => {
     perPage: 50,
     total: 0
   });
-  const toast = useRef<Toast>(null);
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
   
@@ -203,11 +217,10 @@ const JobOrder = () => {
         total: paginationData.total
       });
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch job orders',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch job orders',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setLoading(false);
@@ -224,11 +237,10 @@ const JobOrder = () => {
       const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
       setJobOrderDetails(response.jobOrderDetails);
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch job order details',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch job order details',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setLoadingDetails(false);
@@ -249,11 +261,10 @@ const JobOrder = () => {
         }));
       } catch (error) {
         console.error('Error fetching jobbers:', error);
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to fetch jobbers',
-          life: 3000
+        await Toast.show({
+          text: 'Failed to fetch jobbers',
+          duration: 'short',
+          position: 'bottom'
         });
       } finally {
         setLoadingJobbers(false);
@@ -307,11 +318,10 @@ const JobOrder = () => {
       });
 
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch orders',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch orders',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setLoadingOrders(false);
@@ -358,11 +368,10 @@ const JobOrder = () => {
 
     } catch (error) {
       console.error("Failed to fetch order details:", error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load order details',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to load order details',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
@@ -373,11 +382,10 @@ const JobOrder = () => {
       setPaymentModes(modes);
     } catch (error) {
       console.error('Error fetching payment modes:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch payment methods',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch payment methods',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   }, []);
@@ -521,21 +529,19 @@ const JobOrder = () => {
         const compressedFile = await compressImage(file, MAX_SIZE_MB);
         
         if (!compressedFile) {
-          toast.current?.show({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to compress image',
-            life: 3000
+          await Toast.show({
+            text: 'Failed to compress image',
+            duration: 'short',
+            position: 'bottom'
           });
           return;
         }
 
         if (compressedFile.size > MAX_SIZE_MB * 1024 * 1024) {
-          toast.current?.show({
-            severity: 'error',
-            summary: 'Error',
-            detail: `Image is too large after compression (max ${MAX_SIZE_MB}MB allowed)`,
-            life: 3000
+          await Toast.show({
+            text: `Image is too large after compression (max ${MAX_SIZE_MB}MB allowed)`,
+            duration: 'short',
+            position: 'bottom'
           });
           return;
         }
@@ -553,11 +559,10 @@ const JobOrder = () => {
 
     } catch (error) {
       console.error('Error processing image:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Error processing image',
-        life: 3000
+      await Toast.show({
+        text: 'Error processing image',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
@@ -599,7 +604,6 @@ const JobOrder = () => {
     });
   };
 
-
   const handleAddItemClick = async (
     order: OrdersList,
     item: { id: string; material: { id: string; name: string }; ord_qty: number }
@@ -637,11 +641,10 @@ const JobOrder = () => {
       setDeliveryDate(details?.delivery_date ? new Date(details.delivery_date) : null);
 
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load order details',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to load order details',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setItemLoadingStates(prev => ({ ...prev, [itemKey]: false }));
@@ -720,11 +723,10 @@ const JobOrder = () => {
         job_details: jobDetails
       });
 
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Job order created successfully',
-        life: 3000
+      await Toast.show({
+        text: 'Job order created successfully',
+        duration: 'short',
+        position: 'bottom'
       });
 
       setCreateOrderVisible(false);
@@ -734,12 +736,10 @@ const JobOrder = () => {
       
       fetchJobOrders(1, searchTerm);
     } catch (error) {
-      console.error('Error creating job order:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to create job order',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to create job order',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setCreatingOrder(false);
@@ -752,11 +752,10 @@ const JobOrder = () => {
       await fetchOrdersList(1);
       setOrderSidebarVisible(true);
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load orders',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to load orders',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setLoadingOrdersButton(false);
@@ -764,6 +763,7 @@ const JobOrder = () => {
   };
 
   const openCreateOrderDialog = async () => {
+    setIsCreateOrderLoading(true);
     try {
       const jobbersResponse = await JobOrderService.getJobberList();
       const formattedJobbers = jobbersResponse.map(jobber => ({
@@ -771,16 +771,64 @@ const JobOrder = () => {
         value: jobber.code,
         ...jobber
       }));
-      setJobbers(formattedJobbers);      
+      setJobbers(formattedJobbers);
       setCreateOrderVisible(true);
     } catch (error) {
       console.error('Error:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to initialize order creation',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to initialize order creation',
+        duration: 'short',
+        position: 'bottom'
       });
+    } finally {
+      setIsCreateOrderLoading(false);
+    }
+  };
+
+  const handleEditJobOrder = (detail: JobOrderDetail) => {
+    setSelectedDetail(detail);
+    setEditForm({
+      trial_date: detail.trial_date || '',
+      delivery_date: detail.delivery_date || '',
+      item_amt: detail.item_amt || 0,
+      desc1: detail.desc1 || '',
+    });
+    setEditDialogVisible(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!selectedJobOrder || !selectedDetail) return;
+
+    setIsSubmitting(true);
+    try {
+      await JobOrderService.updateJobOrderDetails(
+        Number(selectedJobOrder.id),
+        Number(selectedDetail.order_details_id),
+        {
+          trial_date: editForm.trial_date || null,
+          delivery_date: editForm.delivery_date || null,
+          item_amt: editForm.item_amt || null,
+          desc1: editForm.desc1 || null
+        }
+      );
+
+      await Toast.show({
+        text: 'Job order details updated successfully',
+        duration: 'short',
+        position: 'bottom'
+      });
+
+      await fetchJobOrderDetails(selectedJobOrder.id);
+      setEditDialogVisible(false);
+    } catch (error) {
+      console.error('Error updating job order details:', error);
+      await Toast.show({
+        text: 'Failed to update job order details',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -790,18 +838,28 @@ const JobOrder = () => {
     setPaymentDialogVisible(true);
   };
   
-  
   const handlePaymentSubmit = async () => {
     if (!selectedJobOrderForPayment || !paymentForm.amount || !paymentForm.paymentDate || !selectedPaymentMode) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Please fill all required fields',
-        life: 3000
+      await Toast.show({
+        text: 'Please fill all required fields',
+        duration: 'short',
+        position: 'bottom'
       });
       return;
     }
-  
+
+    const pendingAmount = jobOrderDetails.reduce((total, detail) => total + detail.item_amt, 0);
+    const paymentAmount = parseFloat(paymentForm.amount);
+
+    if (paymentAmount > pendingAmount) {
+      await Toast.show({
+        text: `Payment amount cannot exceed pending amount of ₹${pendingAmount}`,
+        duration: 'short',
+        position: 'bottom'
+      });
+      return;
+    }
+
     try {
       const admsiteCode = jobOrderDetails.length > 0 ? jobOrderDetails[0].admsite_code : null;
 
@@ -812,18 +870,17 @@ const JobOrder = () => {
         payment_date: paymentForm.paymentDate,
         payment_mode: selectedPaymentMode,
         payment_ref: paymentForm.reference || null,
-        payment_amt: parseFloat(paymentForm.amount)
+        payment_amt: paymentAmount
       };
-  
+
       await JobOrderService.createPaymentMain(paymentData);
-      
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Payment recorded successfully',
-        life: 3000
+
+      await Toast.show({
+        text: `Payment recorded successfully`,
+        duration: 'short',
+        position: 'bottom'
       });
-  
+
       setPaymentForm({
         amount: '',
         paymentDate: new Date().toISOString().split('T')[0],
@@ -835,14 +892,13 @@ const JobOrder = () => {
       if (selectedJobOrder) {
         await fetchJobOrderDetails(selectedJobOrder.id);
       }
-  
+
     } catch (error) {
       console.error('Error recording payment:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to record payment',
-        life: 3000
+      await Toast.show({
+        text: `Failed to record payment`,
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
@@ -868,22 +924,20 @@ const JobOrder = () => {
         selectedJobOrder.id,
         quantity,
       );
-      
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Item marked as delivered',
-        life: 3000
+
+      await Toast.show({
+        text: 'Item marked as delivered',
+        duration: 'short',
+        position: 'bottom'
       });
       
       await fetchJobOrderDetails(selectedJobOrder.id);
       setItemActionSidebarVisible(false);
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to update delivery status',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to update delivery status',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
@@ -896,22 +950,20 @@ const JobOrder = () => {
         selectedJobOrder.id,
         quantity
       );
-      
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Item marked as cancelled',
-        life: 3000
+
+      await Toast.show({
+        text: 'Item marked as cancelled',
+        duration: 'short',
+        position: 'bottom'
       });
       
       await fetchJobOrderDetails(selectedJobOrder.id);
       setItemActionSidebarVisible(false);
     } catch (error) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to update cancellation status',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to update cancellation status',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
@@ -944,12 +996,11 @@ const JobOrder = () => {
         </div>
       </div>
     );
-  } 
+  }
 
   return (
     <div className="p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <Toast ref={toast} position="top-right" />
-
+      {(creatingOrder || isSubmitting) && <FullPageLoader />}
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0 mb-3">Job Orders</h2>
         <span className="p-input-icon-left w-full">
@@ -966,10 +1017,11 @@ const JobOrder = () => {
         </span>
         <Button 
           label="Create Job Order" 
-          icon="pi pi-plus" 
+          icon={isCreateOrderLoading ? 'pi pi-spin pi-spinner' : 'pi pi-plus'}
           onClick={openCreateOrderDialog}
           className="w-full md:w-auto"
           size="small"
+          disabled={isCreateOrderLoading}
         />
       </div>
     
@@ -1829,12 +1881,24 @@ const JobOrder = () => {
                         <p className="m-0 font-medium">{detail.item_amt}</p>
                       </div>
                     </div>
-                    <div className="col-12">
-                      <div className="field">
-                        <label>Notes</label>
-                        <p className="m-0 font-medium">{detail?.desc1 || 'No notes'}</p>
+
+                    <div className="col-12 mt-2">
+                    <div className="grid align-items-start">
+                      <div className="col-9">
+                        <div className="field">
+                          <label>Notes</label>
+                          <p className="m-0 font-medium">{detail?.desc1 || 'No Notes Available'}</p>
+                        </div>
+                      </div>
+                      <div className="col-3 flex justify-content-end pt-4">
+                        <Button 
+                          icon="pi pi-pencil" 
+                          onClick={() => handleEditJobOrder(detail)}
+                          className="p-button-rounded p-button"
+                        />
                       </div>
                     </div>
+                  </div>
                     
                     {detail.image_url && detail.image_url.length > 0 && (
                       <div className="col-12 mt-2">
@@ -1864,6 +1928,7 @@ const JobOrder = () => {
                           icon="pi pi-money-bill" 
                           onClick={() => handleJobberPayment(selectedJobOrder!)}
                           className="p-button-success"
+                          disabled={jobOrderDetails.reduce((total, detail) => total + detail.item_amt, 0) <= 0}
                         />
                     </div>
                     <div className="col-12 mt-2">
@@ -1880,6 +1945,97 @@ const JobOrder = () => {
             </div>
           )
         )}
+      </Dialog>
+
+      <Dialog 
+        header="Edit Job Order Details"
+        visible={editDialogVisible}
+        onHide={() => setEditDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+        footer={
+          <div>
+            <Button 
+              label="Update" 
+              icon="pi pi-check"
+              onClick={handleEditSubmit} 
+              autoFocus
+              className="w-full"
+              loading={isSubmitting} 
+              disabled={isSubmitting}
+            />
+          </div>
+        }
+      >
+        <div className="p-fluid">
+          <div className="field my-4">
+            <label htmlFor="trialDate" className="font-bold block mb-2">
+              Trial Date
+            </label>
+            <Calendar
+              id="trialDate"
+              value={editForm.trial_date ? new Date(editForm.trial_date) : null}
+              onChange={(e) =>
+                setEditForm({
+                  ...editForm,
+                  trial_date: e.value ? (e.value as Date).toLocaleDateString('en-CA') : ''
+                })
+              }
+              dateFormat="dd/mm/yy"
+              className="w-full"
+              showIcon
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="deliveryDate" className="font-bold block mb-2">
+              Delivery Date
+            </label>
+            <Calendar
+              id="deliveryDate"
+              value={editForm.delivery_date ? new Date(editForm.delivery_date) : null}
+              onChange={(e) =>
+              setEditForm({
+                  ...editForm,
+                  delivery_date: e.value ? (e.value as Date).toLocaleDateString('en-CA') : ''
+                })
+              }
+              dateFormat="dd/mm/yy"
+              className="w-full"
+              showIcon
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="makingCharge" className="font-bold block mb-2">
+              Making Charges (₹)
+            </label>
+            <InputNumber
+              id="makingCharge"
+              value={editForm.item_amt}
+              onValueChange={(e) => setEditForm({...editForm, item_amt: e.value || 0})}
+              mode="currency"
+              currency="INR"
+              locale="en-IN"
+              className="w-full"
+            />
+          </div>
+
+          <div className="field mb-4">
+            <label htmlFor="notes" className="font-bold block mb-2">
+              Notes
+            </label>
+            <InputTextarea
+              id="notes"
+              value={editForm.desc1}
+              onChange={(e) => setEditForm({...editForm, desc1: e.target.value})}
+              rows={3}
+              className="w-full"
+            />
+          </div>
+        </div>
       </Dialog>
 
       <Dialog 

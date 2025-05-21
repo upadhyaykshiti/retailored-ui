@@ -5,13 +5,13 @@ import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Toast } from 'primereact/toast';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import { TabView, TabPanel } from 'primereact/tabview';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import { PendingPaymentsService } from '@/demo/service/pending-transactions'; 
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { Toast } from '@capacitor/toast';
 
 interface PendingPayment {
   id: string;
@@ -46,7 +46,6 @@ const PendingPayments = () => {
   const [selectedPaymentForRecord, setSelectedPaymentForRecord] = useState<PendingPayment | null>(null);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
   const [activeTab, setActiveTab] = useState(0);
-  const toast = useRef<Toast>(null);
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     paymentDate: new Date().toISOString().split('T')[0],
@@ -135,11 +134,10 @@ const PendingPayments = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
       setApiError(true);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch data',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch data',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       if (isLoadMore) {
@@ -172,11 +170,10 @@ const PendingPayments = () => {
       setPaymentModes(modes);
     } catch (error) {
       console.error('Error fetching payment modes:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch payment methods',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch payment methods',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   }, []);
@@ -300,8 +297,23 @@ const PendingPayments = () => {
     setPaymentDialogVisible(true);
   };
 
+  const validatePaymentAmount = (amount: string, amtDue: number) => {
+    const amountNum = Number(amount);
+    return amountNum > 0 && amountNum <= amtDue;
+  };
+
   const handlePaymentSubmit = async () => {
     if (!selectedPaymentForRecord || !paymentForm.paymentMethod) {
+      return;
+    }
+
+    const amountNum = Number(paymentForm.amount);
+    if (amountNum > selectedPaymentForRecord.amt_due) {
+      await Toast.show({
+        text: `Amount cannot exceed ${formatCurrency(selectedPaymentForRecord.amt_due)}`,
+        duration: 'short',
+        position: 'bottom'
+      });
       return;
     }
 
@@ -325,11 +337,10 @@ const PendingPayments = () => {
           admsite_code: selectedPaymentForRecord.user.adminsite_code,
         });
 
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Payment received successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Payment received successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       } else {
         if (!selectedPaymentForRecord.jobOrderDetails?.[0]?.adminSite?.code) {
@@ -345,11 +356,10 @@ const PendingPayments = () => {
           admsite_code: Number(adminSiteCode),
         });
 
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Payment recorded successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Payment recorded successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       }
 
@@ -364,18 +374,16 @@ const PendingPayments = () => {
       });
     } catch (error) {
       console.error('Error processing payment:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: error instanceof Error ? error.message : 'Failed to process payment',
-        life: 3000
+      await Toast.show({
+        text: error instanceof Error ? error.message : 'Failed to process payment',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   };
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <Toast ref={toast} />
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Pending Transactions</h2>
         <span className="p-input-icon-left w-full md:w-30rem">
@@ -533,8 +541,17 @@ const PendingPayments = () => {
                 className="w-full" 
                 placeholder="Enter amount"
                 value={paymentForm.amount}
-                onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+                onChange={(e) => {
+                  const amount = e.target.value;
+                  setPaymentForm({...paymentForm, amount});
+                }}
               />
+              {paymentForm.amount && 
+                !validatePaymentAmount(paymentForm.amount, selectedPaymentForRecord.amt_due) && (
+                <small className="p-error block mt-1">
+                  Amount cannot exceed {formatCurrency(selectedPaymentForRecord.amt_due)}
+                </small>
+              )}
             </div>
 
             <div className="field mb-4">
@@ -593,7 +610,12 @@ const PendingPayments = () => {
                 icon="pi pi-check" 
                 className="p-button-success"
                 onClick={handlePaymentSubmit}
-                disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod}
+                disabled={
+                  !paymentForm.amount || 
+                  !paymentForm.paymentDate || 
+                  !paymentForm.paymentMethod ||
+                  !validatePaymentAmount(paymentForm.amount, selectedPaymentForRecord.amt_due)
+                }
               />
             </div>
           </div>

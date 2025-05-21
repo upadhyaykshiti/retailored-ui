@@ -233,6 +233,10 @@ export const SalesOrderService = {
             cancelled_qty
             desc1
             ext
+            material {
+              id
+              name
+            }
           }
         }
       }
@@ -242,7 +246,7 @@ export const SalesOrderService = {
     return data.orderMain;
   },
 
-  async getOrderMeasurements(orderId: string, token?: string): Promise<any> {
+  async getOrderMeasurements(orderId: number, token?: string): Promise<any> {
     const query = `
       query OrderDetail($id: ID!) {
         orderDetail(id: $id) {
@@ -250,9 +254,11 @@ export const SalesOrderService = {
             measurement_date
             measurementDetails {
               measurement_val
+              measurement_main_id
               measurementMaster {
                 id
                 measurement_name
+                data_type
               }
             }
           }
@@ -266,11 +272,68 @@ export const SalesOrderService = {
 
     try {
       const response = await GraphQLService.query<any>(query, variables, token);
-      return response?.data || { orderDetail: null };
+      const result = response || { orderDetail: null };
+      return result;
     } catch (error) {
       console.error('Error fetching measurements:', error);
       return { orderDetail: null };
     }
+  },
+
+  async updateMeasurementsDetails(
+    id: number,
+    input: {
+      measurement_main_id: number | null;
+      measurement_master_id: number | null;
+      measurement_val: string | null;
+    }[],
+    token?: string
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateMeasurementsDetails($id: ID!, $input: [UpdateMeasurementDetailInput!]!) {
+        updateMeasurementsDetails(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+    const data = await GraphQLService.query<{ updateMeasurementsDetails: any }>(mutation, variables, token);
+    return data.updateMeasurementsDetails;
+  },
+
+  async updateOrderDetails(
+    id: string | number,
+    input: {
+      order_id: number | null;
+      measurement_main_id: number | null;
+      material_master_id: number | null;
+      trial_date: string | null;
+      delivery_date: string | null;
+      item_amt: number | null;
+      ord_qty: number | null;
+      desc1: string | null;
+      admsite_code: string | null;
+    },
+    token?: string
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateOrderDetails($id: ID!, $input: UpdateOrderDetailInput!) {
+        updateOrderDetails(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateOrderDetails: any }>(
+      mutation,
+      variables,
+      token
+    );
+
+    return data.updateOrderDetails;
   },
 
   async markOrderDelivered(

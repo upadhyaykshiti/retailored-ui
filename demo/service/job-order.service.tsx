@@ -179,6 +179,9 @@ export const JobOrderService = {
       query JobOrderMain($id: ID!) {
         jobOrderMain(id: $id) {
           jobOrderDetails {
+            id
+            job_order_main_id
+            order_details_id
             image_url
             admsite_code
             trial_date
@@ -294,6 +297,44 @@ export const JobOrderService = {
     }>(mutation, variables, token);
 
     return data.createPaymentMain;
+  },
+
+  async updateJobOrderDetails(
+    jobMainId: number | string,
+    oDetailsId: number | string,
+    input: {
+      trial_date: string | null;
+      delivery_date: string | null;
+      item_amt: number | null;
+      desc1: string | null;
+    },
+    token?: string
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateJobOrderDetails(
+        $jobMainId: ID!,
+        $oDetailsId: ID!,
+        $input: UpdateJobDetailsInput!
+      ) {
+        updateJobOrderDetails(
+          jobMainId: $jobMainId,
+          oDetailsId: $oDetailsId,
+          input: $input
+        ) {
+          id
+        }
+      }
+    `;
+
+    const variables = { jobMainId, oDetailsId, input };
+
+    const data = await GraphQLService.query<{ updateJobOrderDetails: any }>(
+      mutation,
+      variables,
+      token
+    );
+
+    return data.updateJobOrderDetails;
   },
   
   async markJobOrderDelivered(

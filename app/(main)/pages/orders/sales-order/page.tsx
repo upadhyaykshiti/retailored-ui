@@ -9,10 +9,13 @@ import { Tag } from 'primereact/tag';
 import { Calendar } from 'primereact/calendar';
 import { Skeleton } from 'primereact/skeleton';
 import { InputText } from 'primereact/inputtext';
+import { InputNumber } from 'primereact/inputnumber';
+import { InputTextarea } from 'primereact/inputtextarea';
 import { Sidebar } from 'primereact/sidebar';
 import { Dropdown } from 'primereact/dropdown';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
@@ -48,14 +51,18 @@ interface Order {
     measurement_main_id: string;
     image_url: string[] | null;
     material_master_id: string;
-    trial_date: string;
-    delivery_date: string;
+    trial_date: string | null;
+    delivery_date: string | null;
     item_amt: number;
     ord_qty: number;
     delivered_qty: number;
     cancelled_qty: number;
     desc1: string | null;
     ext: string;
+    material: {
+        id: string;
+        name: string;
+    }
   }[];
 }
 
@@ -63,9 +70,11 @@ interface MeasurementData {
   measurement_date: string;
   measurementDetails: {
     measurement_val: string;
+    measurement_main_id: string;
     measurementMaster: {
       id: string;
       measurement_name: string;
+      data_type: string;
     };
   }[];
 }
@@ -80,8 +89,12 @@ const SalesOrder = () => {
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editOrderDetailDialogVisible, setEditOrderDetailDialogVisible] = useState(false);
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order['orderDetails'][0] | null>(null);
   const [measurementData, setMeasurementData] = useState<MeasurementData | null>(null);
   const [loadingMeasurements, setLoadingMeasurements] = useState(false);
+  const [editMeasurementDialogVisible, setEditMeasurementDialogVisible] = useState(false);
+  const [editedMeasurements, setEditedMeasurements] = useState<{id: string, name: string, value: string}[]>([]);
   const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
@@ -94,6 +107,8 @@ const SalesOrder = () => {
   const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -147,19 +162,13 @@ const SalesOrder = () => {
         total: response.pagination.total,
         hasMorePages: response.pagination.hasMorePages
       });
-
-      await Toast.show({
-        text: `Loaded ${newOrders.length} orders`,
-        duration: 'short',
-        position: 'top'
-      });
     } catch (error) {
       console.error('Error fetching sales orders:', error);
       setError('Failed to fetch orders');
       await Toast.show({
         text: 'Failed to load orders',
-        duration: 'long',
-        position: 'top'
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       if (loadMore) {
@@ -220,18 +229,20 @@ const SalesOrder = () => {
     }
   };
 
-  const fetchMeasurements = async (measurementMainId: string) => {
+  const fetchMeasurements = async (OrderID: number) => {
     setLoadingMeasurements(true);
     try {
-      console.log("Fetching measurements for ID:", measurementMainId); 
-      const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
-      console.log("Full response:", response);
+      const response = await SalesOrderService.getOrderMeasurements(OrderID);
+      
+      if (!response) {
+        setMeasurementData(null);
+        return;
+      }
+
       const measurementData = response?.orderDetail?.measurementMain || null;
-      console.log("Measurement data:", measurementData);
       
       setMeasurementData(measurementData);
     } catch (error) {
-      console.error('Failed to load measurements:', error);
       setMeasurementData(null);
     } finally {
       setLoadingMeasurements(false);
@@ -311,6 +322,67 @@ const SalesOrder = () => {
     router.push('/pages/orders/create-order');
   };
 
+  const formatDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  };
+
+  const handleEditOrderDetail = (detail: Order['orderDetails'][0]) => {
+    setSelectedOrderDetail(detail);
+    setEditOrderDetailDialogVisible(true);
+  };
+
+  const handleUpdateOrderDetail = async () => {
+    if (!selectedOrderDetail || !selectedOrder || !selectedOrderDetail.id) {
+      await Toast.show({
+        text: 'Invalid order details for update',
+        duration: 'short',
+        position: 'bottom'
+      });
+      return;
+    }
+    
+    try {
+      setIsSavingDetails(true);
+
+      await SalesOrderService.updateOrderDetails(
+        selectedOrderDetail.id,
+        {
+          order_id: Number(selectedOrderDetail.order_id),
+          measurement_main_id: Number(selectedOrderDetail.measurement_main_id),
+          material_master_id: Number(selectedOrderDetail.material_master_id),
+          trial_date: formatDateTime(selectedOrderDetail.trial_date),
+          delivery_date: formatDateTime(selectedOrderDetail.delivery_date),
+          item_amt: selectedOrderDetail.item_amt,
+          ord_qty: selectedOrderDetail.ord_qty,
+          desc1: selectedOrderDetail.desc1,
+          admsite_code: selectedOrder?.user?.admsite_code.toString() || null
+        }
+      );
+
+      await Toast.show({
+        text: 'Order details updated successfully',
+        duration: 'short',
+        position: 'bottom'
+      });
+
+      await fetchOrderDetails(selectedOrder.id);
+      await fetchOrders(pagination.currentPage, pagination.perPage);
+      setEditOrderDetailDialogVisible(false);
+    } catch (error) {
+      console.error('Error updating order details:', error);
+      await Toast.show({
+        text: 'Failed to update order details',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setIsSavingDetails(false);
+    }
+  };
+
   const filteredOrders = orders.filter((order) =>
     order.docno.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -373,7 +445,64 @@ const SalesOrder = () => {
     setSelectedItem(item);
     setMeasurementDialogVisible(true);
     if (item.id) {
-      fetchMeasurements(item.id);
+      fetchMeasurements(Number(item.id));
+    }
+  };
+
+  const handleEditMeasurement = () => {
+    if (!measurementData) return;
+    
+    const measurementsToEdit = measurementData.measurementDetails.map(detail => ({
+      id: detail.measurementMaster.id,
+      name: detail.measurementMaster.measurement_name,
+      value: detail.measurement_val
+    }));
+    
+    setEditedMeasurements(measurementsToEdit);
+    setEditMeasurementDialogVisible(true);
+  };
+
+  const handleMeasurementValueChange = (id: string, value: string) => {
+    setEditedMeasurements(prev => 
+      prev.map(item => 
+        item.id === id ? { ...item, value } : item
+      )
+    );
+  };
+
+  const saveEditedMeasurements = async () => {
+    try {
+      if (!selectedItem?.id || !measurementData) return;
+
+      setIsSaving(true);
+
+      const id = Number(measurementData.measurementDetails[0]?.measurement_main_id);
+
+      const measurementUpdates = editedMeasurements.map((item) => ({
+        measurement_main_id: id,
+        measurement_master_id: Number(item.id),
+        measurement_val: item.value,
+      }));
+
+      await SalesOrderService.updateMeasurementsDetails(id, measurementUpdates);
+
+      await Toast.show({
+        text: 'Measurements updated successfully',
+        duration: 'short',
+        position: 'bottom',
+      });
+
+      fetchMeasurements(Number(selectedItem.id));
+      setEditMeasurementDialogVisible(false);
+    } catch (error) {
+      console.error('Error updating measurements:', error);
+      await Toast.show({
+        text: 'Failed to update measurements',
+        duration: 'short',
+        position: 'bottom',
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -382,7 +511,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Please fill all required fields',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       return;
     }
@@ -403,7 +532,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Payment recieved successfully',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
   
       setPaymentForm({
@@ -421,7 +550,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Failed to record payment',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
     }
   };
@@ -451,7 +580,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Item marked as delivered',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       
       await fetchOrderDetails(selectedOrder.id);
@@ -460,7 +589,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Failed to update delivery status',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
     }
   };
@@ -477,7 +606,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Item marked as cancelled',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       
       await fetchOrderDetails(selectedOrder.id);
@@ -486,7 +615,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Failed to update cancellation status',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
     }
   };
@@ -554,6 +683,7 @@ const SalesOrder = () => {
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      {(isSaving || isSavingDetails) && <FullPageLoader />}
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Sales Orders</h2>
         <span className="p-input-icon-left w-full">
@@ -735,7 +865,7 @@ const SalesOrder = () => {
                   <div className="col-6">
                     <div className="field">
                       <label>Item Name</label>
-                      <p className="m-0 font-medium">Kurta</p>
+                      <p className="m-0 font-medium">{item.material?.name || 'Not Available'}</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -747,7 +877,7 @@ const SalesOrder = () => {
                   <div className="col-6">
                     <div className="field">
                       <label>Jobber Name</label>
-                      <p className="m-0 font-medium">Amit Kumar</p>
+                      <p className="m-0 font-medium">Not Assigned</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -770,10 +900,21 @@ const SalesOrder = () => {
                       <p className="m-0 font-medium">{item.cancelled_qty}</p>
                     </div>
                   </div>
-                  <div className="col-12">
-                    <div className="field">
-                      <label>Notes</label>
-                      <p className="m-0 font-medium">{item.desc1 || 'No Notes Available'}</p>
+                  <div className="col-12 mt-2">
+                    <div className="grid align-items-start">
+                      <div className="col-9">
+                        <div className="field">
+                          <label>Notes</label>
+                          <p className="m-0 font-medium">{item.desc1 || 'No Notes Available'}</p>
+                        </div>
+                      </div>
+                      <div className="col-3 flex justify-content-end pt-4">
+                        <Button 
+                          icon="pi pi-pencil" 
+                          onClick={() => handleEditOrderDetail(item)}
+                          className="p-button-rounded p-button"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -873,7 +1014,7 @@ const SalesOrder = () => {
                   Toast.show({
                     text: `Amount cannot exceed ₹${maxAllowed}`,
                     duration: 'short',
-                    position: 'top'
+                    position: 'bottom'
                   });
                   setPaymentForm({...paymentForm, amount: maxAllowed.toString()});
                 }
@@ -1071,7 +1212,129 @@ const SalesOrder = () => {
       </Sidebar>
 
       <Dialog 
-        header="Measurement Details" 
+        header="Edit Order Details"
+        visible={editOrderDetailDialogVisible}
+        onHide={() => setEditOrderDetailDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+        footer={
+          <div>
+            <Button 
+              label="Update" 
+              icon="pi pi-check" 
+              onClick={handleUpdateOrderDetail}
+              autoFocus 
+              className="w-full"
+              loading={isSavingDetails} 
+              disabled={isSavingDetails}
+            />
+          </div>
+        }
+      >
+        {selectedOrderDetail && (
+          <div className="p-fluid my-4">
+            <div className="field">
+              <label htmlFor="trialDate">Trial Date</label>
+              <Calendar 
+                id="trialDate"
+                value={selectedOrderDetail?.trial_date ? new Date(selectedOrderDetail.trial_date) : null}
+                onChange={(e) => {
+                  if (!selectedOrderDetail) return;
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    trial_date: e.value ? e.value.toISOString() : null
+                  });
+                }}
+                dateFormat="dd/mm/yy"
+                showTime
+                hourFormat="12"
+                showIcon
+                placeholder="Select Trial Date & Time"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="deliveryDate">Delivery Date</label>
+              <Calendar 
+                id="deliveryDate"
+                value={selectedOrderDetail?.delivery_date ? new Date(selectedOrderDetail.delivery_date) : null}
+                onChange={(e) => {
+                  if (!selectedOrderDetail) return;
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    delivery_date: e.value ? e.value.toISOString() : null
+                  });
+                }}
+                dateFormat="dd/mm/yy"
+                showTime
+                hourFormat="12"
+                showIcon
+                placeholder="Select Delivery Date & Time"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="itemAmt">Item Amount</label>
+              <InputNumber 
+                id="itemAmt"
+                value={selectedOrderDetail.item_amt}
+                onValueChange={(e) => setSelectedOrderDetail({
+                  ...selectedOrderDetail,
+                  item_amt: e.value || 0
+                })}
+                mode="currency" 
+                currency="INR" 
+                locale="en-IN"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="ordQty">Order Qty</label>
+              <InputNumber 
+                id="ordQty"
+                value={selectedOrderDetail.ord_qty}
+                onValueChange={(e) => setSelectedOrderDetail({
+                  ...selectedOrderDetail,
+                  ord_qty: e.value || 0
+                })}
+                min={0}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="desc1">Special Instruction</label>
+              <InputTextarea 
+                id="desc1"
+                value={selectedOrderDetail.desc1 || ''} 
+                onChange={(e) =>
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    desc1: e.target.value,
+                  })
+                }
+                rows={4}
+                autoResize
+              />
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog 
+        header={
+          <div className="flex align-items-center w-full">
+            <span>Measurement Details</span>
+            <Button 
+              icon="pi pi-pencil" 
+              onClick={handleEditMeasurement}
+              className="p-button-rounded p-button-text"
+              disabled={!measurementData}
+              style={{ marginLeft: '0.5rem' }}
+            />
+          </div>
+        }
         visible={measurementDialogVisible} 
         onHide={() => {
           setMeasurementDialogVisible(false);
@@ -1088,14 +1351,14 @@ const SalesOrder = () => {
               <div className="col-6 font-bold text-600">Customer Name:</div>
               <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
               
-              <div className="col-6 font-bold text-600">Delivery Date:</div>
+            <div className="col-6 font-bold text-600">Delivery Date:</div>
               <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem?.delivery_date))}
+                {selectedItem.delivery_date ? formatDate(new Date(selectedItem.delivery_date)) : 'Not scheduled'}
               </div>
               
               <div className="col-6 font-bold text-600">Trial Date:</div>
               <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem.trial_date))}
+                {selectedItem.trial_date ? formatDate(new Date(selectedItem.trial_date)) : 'Not scheduled'}
               </div>
             </div>
 
@@ -1182,6 +1445,53 @@ const SalesOrder = () => {
             </div>
           </div>
         )}
+      </Dialog>
+
+      <Dialog 
+        header="Edit Measurement Details"
+        visible={editMeasurementDialogVisible}
+        onHide={() => setEditMeasurementDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+        footer={
+          <div>
+            <Button 
+              label="Update" 
+              icon="pi pi-check" 
+              onClick={saveEditedMeasurements}
+              autoFocus
+              className="w-full"
+              loading={isSaving} 
+              disabled={isSaving}
+            />
+          </div>
+        }
+      >
+        <div className="p-fluid">
+          {editedMeasurements.map((measurement) => {
+            const measurementDetail = measurementData?.measurementDetails.find(
+              detail => detail.measurementMaster.id === measurement.id
+            );
+            
+            const dataType = measurementDetail?.measurementMaster.data_type || 'text';
+            
+            return (
+              <div key={measurement.id} className="field my-3">
+                <label htmlFor={`measurement-${measurement.id}`} className="font-bold block mb-1">
+                  {measurement.name} <span className="text-500 font-normal">({dataType})</span>
+                </label>
+                <InputText
+                  id={`measurement-${measurement.id}`}
+                  value={measurement.value}
+                  onChange={(e) => handleMeasurementValueChange(measurement.id, e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            );
+          })}
+        </div>
       </Dialog>
 
       <Dialog 

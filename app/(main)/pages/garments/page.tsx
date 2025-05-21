@@ -13,10 +13,10 @@ import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import FullPageLoader from '@/demo/components/FullPageLoader';
-import { Toast } from 'primereact/toast';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 import { useDebounce } from 'use-debounce';
 import { Demo } from '@/types';
+import { Toast } from '@capacitor/toast';
 
 type Measurement = {
   id?: number;
@@ -61,7 +61,6 @@ const Garments = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
-  const toast = useRef<Toast>(null);
   const [currentGarment, setCurrentGarment] = useState<Garment>({
     id: 0,
     name: '',
@@ -112,11 +111,10 @@ const Garments = () => {
     } catch (err) {
       console.error('Failed to fetch products:', err);
       setError('Failed to fetch products. Please try again.');
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch products',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch products',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setIsInitialLoading(false);
@@ -176,12 +174,20 @@ const Garments = () => {
 
   const handleSave = async () => {
     if (!currentGarment.name) {
-      toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Garment name is required', life: 3000 });
+      await Toast.show({
+        text: 'Garment name is required',
+        duration: 'short',
+        position: 'bottom'
+      });
       return;
     }
 
     if (currentGarment.measurements.length === 0) {
-      toast.current?.show({ severity: 'error', summary: 'Error', detail: 'At least one measurement is required', life: 3000 });
+      await Toast.show({
+        text: 'At least one measurement is required',
+        duration: 'short',
+        position: 'bottom'
+      });
       return;
     }
 
@@ -197,7 +203,11 @@ const Garments = () => {
         console.log("Update Payload:", payload);
   
         await MaterialService.updateMaterialWithMeasurements(String(currentGarment.id), payload);
-        toast.current?.show({ severity: 'success', summary: 'Updated', detail: 'Garment updated successfully', life: 3000 });
+        await Toast.show({
+          text: 'Garment updated successfully',
+          duration: 'short',
+          position: 'bottom'
+        });
       } else {
         const payload = {
           name: currentGarment.name,
@@ -213,30 +223,37 @@ const Garments = () => {
         console.log("🆕 Create Payload:", payload);
   
         await MaterialService.createMaterialWithMeasurements(payload);
-        toast.current?.show({ severity: 'success', summary: 'Created', detail: 'Garment created successfully', life: 3000 });
+        await Toast.show({
+          text: 'Garment created successfully',
+          duration: 'short',
+          position: 'bottom'
+        });
       }  
 
       setShowDialog(false);
       fetchMaterials();
     } catch (err) {
-      toast.current?.show({ severity: 'error', summary: 'Failed', detail: 'Failed to save garment', life: 3000 });
+      await Toast.show({
+        text: 'Failed to save garment',
+        duration: 'short',
+        position: 'bottom'
+      });
       console.error(err);
     } finally {
       setListLoading(false);
     }
   };
 
-  const addMeasurement = () => {
+  const addMeasurement = async () => {
     const trimmedName = newMeasurement.measurement_name.trim();
     const lowerCaseName = trimmedName.toLowerCase();
     const type = newMeasurement.data_type;
   
     if (!trimmedName) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Missing Name',
-        detail: 'Measurement name is required.',
-        life: 3000,
+      await Toast.show({
+        text: 'Measurement name is required.',
+        duration: 'short',
+        position: 'bottom'
       });
       return;
     }
@@ -248,11 +265,10 @@ const Garments = () => {
     );
   
     if (isDuplicate) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Duplicate Measurement',
-        detail: 'This measurement name with the same data type already exists.',
-        life: 3000,
+      await Toast.show({
+        text: 'This measurement name with the same data type already exists.',
+        duration: 'short',
+        position: 'bottom'
       });
       return;
     }
@@ -393,9 +409,7 @@ const Garments = () => {
   return (
     <>
       {listLoading && <FullPageLoader />}
-      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <Toast ref={toast} />
-        
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Products</h2>
           <span className="p-input-icon-left w-full">

@@ -14,6 +14,7 @@ import { Checkbox } from 'primereact/checkbox';
 import { Galleria } from 'primereact/galleria';
 import { Sidebar } from 'primereact/sidebar';
 import { useState, useEffect, useRef } from 'react';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
@@ -740,6 +741,7 @@ const CreateOrder = () => {
 
     return (
         <div className="flex flex-column p-3 lg:p-5 mb-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            {(isConfirmingOrder) && <FullPageLoader />}
             <h2 className="text-2xl m-0 mb-3">Create Order</h2>
             <Card className="mb-4">
                 <div className="flex flex-column gap-2 p-3 surface-50 border-round">
