@@ -59,6 +59,10 @@ interface Order {
     cancelled_qty: number;
     desc1: string | null;
     ext: string;
+    orderStatus: {
+      id: string;
+      status_name: string;
+    } | null;
     material: {
         id: string;
         name: string;
@@ -129,9 +133,9 @@ const SalesOrder = () => {
   const availableStatuses = [
     { id: '1', name: 'Pending' },
     { id: '2', name: 'In Progress' },
-    { id: '3', name: 'Ready for Trial' },
-    { id: '4', name: 'Completed' },
-    { id: '5', name: 'Cancelled' }
+    { id: '5', name: 'Ready for Trial' },
+    { id: '3', name: 'Completed' },
+    { id: '4', name: 'Cancelled' }
   ];
 
   const fetchOrders = useCallback(async (page: number, perPage: number, loadMore = false) => {
@@ -391,52 +395,32 @@ const SalesOrder = () => {
     return `₹${order.amt_due} (₹${order.ord_amt})`;
   };
 
-  const handleStatusUpdate = async (newStatus: string) => {
+  const handleItemStatusUpdate = async (statusId: number) => {
+    if (!selectedDetail || !selectedOrder) return;
+
     try {
-      if (!selectedOrder) return;
-  
-      setOrders(orders.map(order => 
-        order.id === selectedOrder.id 
-          ? { 
-              ...order, 
-              orderStatus: order.orderStatus 
-                ? { 
-                    ...order.orderStatus, 
-                    status_name: newStatus 
-                  } 
-                : { 
-                    id: availableStatuses.find(s => s.name === newStatus)?.id || '', 
-                    status_name: newStatus 
-                  }
-            } 
-          : order
-      ));
-      
-      setSelectedOrder({
-        ...selectedOrder,
-        orderStatus: selectedOrder.orderStatus
-          ? {
-              ...selectedOrder.orderStatus,
-              status_name: newStatus
-            }
-          : {
-              id: availableStatuses.find(s => s.name === newStatus)?.id || '',
-              status_name: newStatus
-            }
+      setLoading(true);
+      await SalesOrderService.updateSalesOrderStatus(selectedDetail.id, {
+        status_id: statusId,
       });
-      
+
+      const newStatus = availableStatuses.find(s => parseInt(s.id) === statusId)?.name;
+
       await Toast.show({
-        text: `Status updated to ${newStatus}`,
-        duration: 'long'
+        text: `Item status updated to ${newStatus || 'selected status'}`,
+        duration: 'short',
+        position: 'bottom'
       });
-      
+
+      await fetchOrderDetails(selectedOrder.id);
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('Error updating item status:', error);
       await Toast.show({
-        text: 'Failed to update status',
-        duration: 'short'
+        text: 'Failed to update item status',
+        duration: 'short',
       });
     } finally {
+      setLoading(false);
       setStatusSidebarVisible(false);
     }
   };
@@ -920,10 +904,13 @@ const SalesOrder = () => {
 
                   <div className="col-12 mt-2">
                     <Button
-                      label={`Status (${selectedOrder.orderStatus?.status_name || 'Unknown'})`}
+                      label={`Status (${item.orderStatus?.status_name || 'Unknown'})`}
                       icon="pi pi-sync"
-                      onClick={() => setStatusSidebarVisible(true)}
-                      severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
+                      onClick={() => {
+                        setSelectedDetail(item);
+                        setStatusSidebarVisible(true);
+                      }}
+                      severity={getStatusSeverity(item.orderStatus?.status_name) || undefined}
                     />
                   </div>
 
@@ -1183,7 +1170,7 @@ const SalesOrder = () => {
         }}
         header={
           <div className="sticky top-0 bg-white z-1 p-3 border-bottom-1 surface-border flex justify-content-between align-items-center">
-            <span className="font-bold text-xl">Update Order Status</span>
+            <span className="font-bold text-xl">Update Item Status</span>
           </div>
         }
         className="p-0"
@@ -1194,7 +1181,7 @@ const SalesOrder = () => {
               <div key={status.id} className="col-12 md:col-6 lg:col-4 p-2">
                 <Button
                   label={status.name}
-                  onClick={() => handleStatusUpdate(status.name)}
+                  onClick={() => handleItemStatusUpdate(parseInt(status.id))}
                   severity={getStatusSeverity(status.name) || undefined}
                   className="w-full p-3 text-lg justify-content-start p-button-outlined"
                   icon={

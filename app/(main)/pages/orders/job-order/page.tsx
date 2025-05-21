@@ -62,6 +62,10 @@ interface JobOrderDetail {
   delivered_qty: number;
   cancelled_qty: number;
   desc1: string | null;
+  status: {
+    id: string;
+    status_name: string;
+  } | null;
   orderDetail: {
     material: {
       name: string;
@@ -134,6 +138,7 @@ const JobOrder = () => {
   const [itemManagementSidebarVisible, setItemManagementSidebarVisible] = useState(false);
   const [currentlyEditingItem, setCurrentlyEditingItem] = useState<OrderItem | null>(null);
   const [uploadingImages, setUploadingImages] = useState<{[key: string]: File | null}>({});
+  const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [selectedMaterialName, setSelectedMaterialName] = useState('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrderMain | null>(null);
@@ -198,6 +203,14 @@ const JobOrder = () => {
   });
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
+
+  const availableStatuses = [
+    { id: '1', name: 'Pending' },
+    { id: '2', name: 'In Progress' },
+    { id: '5', name: 'Ready for Trial' },
+    { id: '3', name: 'Completed' },
+    { id: '4', name: 'Cancelled' }
+  ];
   
   const fetchJobOrders = useCallback(async (page: number = 1, search: string = '') => {
     try {
@@ -718,7 +731,7 @@ const JobOrder = () => {
 
       await JobOrderService.createJobOrderwithInput({
         job_date: new Date().toISOString().split('T')[0],
-        status_id: null,
+        status_id: 1,
         docno: docno,
         job_details: jobDetails
       });
@@ -914,6 +927,48 @@ const JobOrder = () => {
     if (!selectedDetail) return;
     const maxQty = selectedDetail.ord_qty - selectedDetail.delivered_qty - selectedDetail.cancelled_qty;
     setQuantity(Math.min(Math.max(1, value), maxQty));
+  };
+
+  const handleStatusUpdate = async (statusId: number) => {
+    if (!selectedJobOrder || !selectedDetail) return;
+
+    try {
+      const statusName = availableStatuses.find(s => Number(s.id) === statusId)?.name;
+
+      if (!statusName) {
+        await Toast.show({
+          text: 'Invalid status selected',
+          duration: 'short',
+          position: 'bottom'
+        });
+        return;
+      }
+
+      await JobOrderService.updateJobOrderStatus(
+        selectedDetail.id,
+        {
+          status_id: statusId
+        }
+      );
+
+      await Toast.show({
+        text: `Status updated to ${statusName}`,
+        duration: 'short',
+        position: 'bottom'
+      });
+
+      await fetchJobOrderDetails(selectedJobOrder.id);
+
+    } catch (error) {
+      console.error('Error updating status:', error);
+      await Toast.show({
+        text: 'Failed to update status',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setStatusSidebarVisible(false);
+    }
   };
 
   const handleDelivered = async () => {
@@ -1854,7 +1909,7 @@ const JobOrder = () => {
                     <div className="col-6">
                       <div className="field">
                         <label>Sales Order No</label>
-                        <p className="m-0 font-medium">{detail.orderDetail?.measurementMain.docno}</p>
+                        <p className="m-0 font-medium">{detail.order_details_id}</p>
                       </div>
                     </div>
                     <div className="col-6">
@@ -1899,6 +1954,18 @@ const JobOrder = () => {
                       </div>
                     </div>
                   </div>
+
+                    <div className="col-12 mt-2">
+                      <Button
+                        label={`Status (${detail.status?.status_name || 'Pending'})`}
+                        icon="pi pi-sync"
+                        onClick={() => {
+                          setSelectedDetail(detail);
+                          setStatusSidebarVisible(true);
+                        }}
+                        severity={getStatusSeverity(detail.status?.status_name || 'Pending') || undefined}
+                      />
+                    </div>
                     
                     {detail.image_url && detail.image_url.length > 0 && (
                       <div className="col-12 mt-2">
@@ -2236,6 +2303,48 @@ const JobOrder = () => {
           </div>
         </div>
       </Dialog>
+
+      <Sidebar 
+        visible={statusSidebarVisible} 
+        onHide={() => setStatusSidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100%',
+          height: 'auto',
+          maxHeight: '62vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        header={
+          <div className="sticky top-0 bg-white z-1 p-3 border-bottom-1 surface-border flex justify-content-between align-items-center">
+            <span className="font-bold text-xl">Update Order Status</span>
+          </div>
+        }
+        className="p-0"
+      >
+        <div className="p-3">
+          <div className="grid">
+            {availableStatuses.map(status => (
+              <div key={status.id} className="col-12 md:col-6 lg:col-4 p-2">
+                <Button
+                  label={status.name}
+                  onClick={() => handleStatusUpdate(Number(status.id))}
+                  severity={getStatusSeverity(status.name) || undefined}
+                  className="w-full p-3 text-lg justify-content-start p-button-outlined"
+                  icon={
+                    status.name === 'Completed' ? 'pi pi-check-circle' :
+                    status.name === 'In Progress' ? 'pi pi-spinner' :
+                    status.name === 'Pending' ? 'pi pi-clock' :
+                    status.name === 'Cancelled' ? 'pi pi-times-circle' :
+                    'pi pi-info-circle'
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sidebar>
 
       <Dialog 
         header="Confirm Delivery"

@@ -192,6 +192,10 @@ export const JobOrderService = {
             delivered_qty
             cancelled_qty
             desc1
+            status {
+              id
+              status_name
+            }
             orderDetail {
               material {
                 name
@@ -336,6 +340,32 @@ export const JobOrderService = {
 
     return data.updateJobOrderDetails;
   },
+
+  async updateJobOrderStatus(
+    id: number | string,
+    input: {
+      status_id: number | null;
+    },
+    token?: string
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateJobOrderStatus($id: ID!, $input: JobOrderStatusInput!) {
+        updateJobOrderStatus(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateJobOrderStatus: any }>(
+      mutation,
+      variables,
+      token
+    );
+
+    return data.updateJobOrderStatus;
+  },
   
   async markJobOrderDelivered(
     id: string,
@@ -394,7 +424,7 @@ export const JobOrderService = {
   async createJobOrderwithInput(
     input: {
       job_date?: string | null;
-      status_id?: string | null;
+      status_id?: number;
       docno?: string | null;
       job_details: Array<{
         admsite_code?: number | null;

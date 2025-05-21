@@ -233,6 +233,10 @@ export const SalesOrderService = {
             cancelled_qty
             desc1
             ext
+            orderStatus {
+              id
+              status_name
+            }
             material {
               id
               name
@@ -336,31 +340,57 @@ export const SalesOrderService = {
     return data.updateOrderDetails;
   },
 
+  async updateSalesOrderStatus(
+    id: number | string,
+    input: {
+      status_id: number | null;
+    },
+    token?: string
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateSalesOrderStatus($id: ID!, $input: OrderStatusInput!) {
+        updateSalesOrderStatus(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateSalesOrderStatus: any }>(
+      mutation,
+      variables,
+      token
+    );
+
+    return data.updateSalesOrderStatus;
+  },
+
   async markOrderDelivered(
-      id: string,
-      delivered_qty: number,
-      token?: string
+    id: string,
+    delivered_qty: number,
+    token?: string
   ): Promise<{ id: string }> {
       const mutation = `
-          mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
-              markOrderDelivered(input: $input, id: $id) {
-                  id
-              }
-          }
-      `;
+        mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
+            markOrderDelivered(input: $input, id: $id) {
+                id
+            }
+        }
+    `;
 
-      const variables = {
-          id: id,
-          input: {
-              delivered_qty: delivered_qty
-          }
-      };
+    const variables = {
+      id: id,
+      input: {
+          delivered_qty: delivered_qty
+      }
+    };
 
-      const data = await GraphQLService.mutation<{ 
-          markOrderDelivered: { id: string } 
-      }>(mutation, variables, token);
+    const data = await GraphQLService.mutation<{ 
+        markOrderDelivered: { id: string } 
+    }>(mutation, variables, token);
 
-      return data.markOrderDelivered;
+    return data.markOrderDelivered;
   },
 
   async markOrderCancelled(
