@@ -142,7 +142,7 @@ const JobOrder = () => {
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [selectedMaterialName, setSelectedMaterialName] = useState('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrderMain | null>(null);
-  const [selectedCode, setSelectedCode] = useState<number | null>(null);
+  const [selectedCode, setSelectedCode] = useState<string>();
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
@@ -717,10 +717,10 @@ const JobOrder = () => {
         }
 
         return {
-          admsite_code: Number(selectedCode),
-          order_details_id: Number(item.orderDetailId) || null,
-          material_master_id: Number(item.materialId),
-          measurement_main_id: Number(item.measurementMainID),
+          admsite_code: selectedCode,
+          order_details_id: item.orderDetailId || null,
+          material_master_id: item.materialId,
+          measurement_main_id: item.measurementMainID,
           image_url: allImages.length > 0 ? allImages : null,
           item_amt: itemDetail.makingCharge || 0,
           ord_qty: itemDetail.quantity || 1,

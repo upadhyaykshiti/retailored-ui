@@ -744,9 +744,9 @@ const CreateOrder = () => {
             {(isConfirmingOrder) && <FullPageLoader />}
             <h2 className="text-2xl m-0 mb-3">Create Order</h2>
             <Card className="mb-4">
-                <div className="flex flex-column gap-2 p-3 surface-50 border-round">
+                <div className="flex flex-column gap-1 surface-50 border-round">
                     {selectedCustomer ? (
-                        <div className="flex flex-column gap-2">
+                        <div className="flex flex-column gap-1">
                             <div className="flex justify-content-between align-items-center">
                                 <div className="flex align-items-center gap-2">
                                     <i className="pi pi-user text-500"></i>

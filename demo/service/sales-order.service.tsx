@@ -322,8 +322,8 @@ export const SalesOrderService = {
     token?: string
   ): Promise<any> {
     const mutation = `
-      mutation UpdateOrderDetails($id: ID!, $input: UpdateOrderDetailInput!) {
-        updateOrderDetails(id: $id, input: $input) {
+      mutation UpdateOrderDetail($id: ID!, $input: UpdateOrderDetailInput!) {
+        updateOrderDetail(id: $id, input: $input) {
           id
         }
       }

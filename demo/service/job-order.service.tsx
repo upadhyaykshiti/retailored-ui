@@ -427,10 +427,10 @@ export const JobOrderService = {
       status_id?: number;
       docno?: string | null;
       job_details: Array<{
-        admsite_code?: number | null;
-        order_details_id?: number | null;
-        material_master_id: number;
-        measurement_main_id?: number;
+        admsite_code?: string;
+        order_details_id?: string | null;
+        material_master_id: string;
+        measurement_main_id?: string;
         image_url?: string[] | null;
         item_amt?: number | null;
         ord_qty: number;
