@@ -28,7 +28,7 @@ const AppMenu = () => {
                 { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/garments' },
                 { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list' },
                 { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' },
-                { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
+                // { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
             ]
         },
         {
