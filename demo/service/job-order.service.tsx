@@ -143,12 +143,19 @@ export const JobOrderService = {
             status_id
             docno
             ord_qty
+            amt_paid,
+            amt_due,
             delivered_qty
             cancelled_qty
             desc1
             status {
               id
               status_name
+            }
+            jobOrderDetails {
+              adminSite {
+                sitename
+              }
             }
           }
         }
@@ -436,6 +443,7 @@ export const JobOrderService = {
         ord_qty: number;
         trial_date: string | null;
         delivery_date: string | null;
+        status_id?: number;
       }>;
     },
     token?: string
@@ -463,6 +471,7 @@ export const JobOrderService = {
           ord_qty: detail.ord_qty,
           trial_date: detail.trial_date,
           delivery_date: detail.delivery_date,
+          status_id: input.status_id || null,
         }))
       }
     };

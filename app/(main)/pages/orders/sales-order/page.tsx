@@ -67,6 +67,11 @@ interface Order {
         id: string;
         name: string;
     }
+    jobOrderDetails: {
+      adminSite?: {
+        sitename: string;
+      };
+    }[];
   }[];
 }
 
@@ -116,7 +121,7 @@ const SalesOrder = () => {
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
-    perPage: 2,
+    perPage: 20,
     total: 0,
     hasMorePages: true
   });
@@ -268,13 +273,14 @@ const SalesOrder = () => {
       case 'In Progress': return 'info';
       case 'Pending': return 'warning';
       case 'Cancelled': return 'danger';
+      case 'Partial': return 'warning';
+      case 'Unknown': return 'info';
       default: return null;
     }
   };
 
   const openOrderDetails = (order: Order) => {
     fetchOrderDetails(order.id);
-    fetchPaymentModes();
     setSelectedOrder(order);
     setVisible(true);
   };
@@ -412,7 +418,10 @@ const SalesOrder = () => {
         position: 'bottom'
       });
 
-      await fetchOrderDetails(selectedOrder.id);
+      await Promise.all([
+        fetchOrderDetails(selectedOrder.id),
+        fetchOrders(pagination.currentPage, pagination.perPage)
+      ]);
     } catch (error) {
       console.error('Error updating item status:', error);
       await Toast.show({
@@ -487,6 +496,19 @@ const SalesOrder = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePaymentClick = () => {
+    if (selectedOrder) {
+        setPaymentForm({
+            amount: selectedOrder.amt_due.toString(),
+            paymentDate: new Date().toISOString().split('T')[0],
+            paymentMethod: '',
+            reference: ''
+        });
+        setPaymentDialogVisible(true);
+        fetchPaymentModes();
     }
   };
 
@@ -832,7 +854,7 @@ const SalesOrder = () => {
                 <Button
                   label="Receive Payment"
                   icon="pi pi-wallet"
-                  onClick={() => setPaymentDialogVisible(true)}
+                  onClick={handlePaymentClick}
                   className="mt-3"
                   disabled={selectedOrder?.amt_due === 0 || selectedOrder?.amt_due === undefined}
                 />
@@ -861,7 +883,7 @@ const SalesOrder = () => {
                   <div className="col-6">
                     <div className="field">
                       <label>Jobber Name</label>
-                      <p className="m-0 font-medium">Not Assigned</p>
+                      <p className="m-0 font-medium">{item.jobOrderDetails?.[0]?.adminSite?.sitename || 'Not assigned'}</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -1239,6 +1261,7 @@ const SalesOrder = () => {
                 hourFormat="12"
                 showIcon
                 placeholder="Select Trial Date & Time"
+                minDate={new Date()}
               />
             </div>
 
@@ -1259,6 +1282,7 @@ const SalesOrder = () => {
                 hourFormat="12"
                 showIcon
                 placeholder="Select Delivery Date & Time"
+                minDate={new Date()}
               />
             </div>
 

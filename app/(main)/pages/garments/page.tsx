@@ -346,16 +346,34 @@ const Garments = () => {
     });
   };
 
-  const confirmStatusChange = (garmentId: number, newStatus: Ext) => {
+  const confirmStatusChange = async (garmentId: number, newStatus: Ext) => {
     confirmDialog({
       message: `Are you sure you want to mark this garment as ${newStatus === 'N' ? 'Active' : 'Inactive'}?`,
       header: 'Confirm Status Change',
       icon: 'pi pi-info-circle',
-      accept: () => {
-        setGarments(garments.map(g => 
-          g.id === garmentId ? { ...g, ext: newStatus } : g
-        ));
-      }
+      accept: async () => {
+        try {
+          setListLoading(true);
+          await MaterialService.updateMaterialStatus(String(garmentId), { ext: newStatus });
+          
+          await fetchMaterials();
+          
+          await Toast.show({
+            text: `Garment status updated to ${newStatus === 'N' ? 'Active' : 'Inactive'}`,
+            duration: 'short',
+            position: 'bottom'
+          });
+        } catch (err) {
+          console.error('Failed to update status:', err);
+          await Toast.show({
+            text: 'Failed to update garment status',
+            duration: 'short',
+            position: 'bottom'
+          });
+        } finally {
+          setListLoading(false);
+        }
+      },
     });
   };
 

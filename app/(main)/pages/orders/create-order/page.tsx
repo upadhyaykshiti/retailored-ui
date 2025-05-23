@@ -334,11 +334,6 @@ const CreateOrder = () => {
 
     const handleClearCustomer = () => {
         setSelectedCustomer(null);
-        setGarmentRefNames({});
-        setSelectedGarments([]);
-        setAllMeasurements({});
-        setIsMesurementSaved({});
-        setStitchOptions({});
     };
 
     const handleRefNameChange = (garmentId: string, newName: string) => {
@@ -1274,6 +1269,7 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Delivery Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
 
@@ -1300,6 +1296,7 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Trial Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
                     </div>
@@ -1332,7 +1329,7 @@ const CreateOrder = () => {
                             <label htmlFor="quantity">Quantity</label>
                             <InputNumber 
                                 id="quantity"
-                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1} 
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1}
                                 onValueChange={(e) => {
                                     if (currentInstanceId) {
                                         setItemsData(prev => ({
@@ -1347,7 +1344,7 @@ const CreateOrder = () => {
                                 mode="decimal" 
                                 showButtons 
                                 min={1} 
-                                max={100} 
+                                max={1000}
                                 className="w-full" 
                             />
                         </div>
@@ -1470,8 +1467,7 @@ const CreateOrder = () => {
                                 e.value?.toString() || ''
                                 )}
                                 mode="decimal" 
-                                min={0} 
-                                max={100}
+                                min={1} 
                                 className="w-full"
                             />
                             ) : (

@@ -294,6 +294,12 @@ const PendingPayments = () => {
 
   const openPaymentDialog = (payment: PendingPayment) => {
     setSelectedPaymentForRecord(payment);
+      setPaymentForm({
+      amount: payment.amt_due.toString(),
+      paymentDate: new Date().toISOString().split('T')[0],
+      reference: '',
+      paymentMethod: null
+    });
     setPaymentDialogVisible(true);
   };
 
@@ -542,16 +548,22 @@ const PendingPayments = () => {
                 placeholder="Enter amount"
                 value={paymentForm.amount}
                 onChange={(e) => {
-                  const amount = e.target.value;
-                  setPaymentForm({...paymentForm, amount});
+                  const enteredAmount = parseFloat(e.target.value) || 0;
+                  const maxAllowed = selectedPaymentForRecord?.amt_due || 0;
+                  
+                  if (enteredAmount <= maxAllowed) {
+                    setPaymentForm({...paymentForm, amount: e.target.value});
+                  } else {
+                    Toast.show({
+                      text: `Amount cannot exceed ${formatCurrency(maxAllowed)}`,
+                      duration: 'short',
+                      position: 'bottom'
+                    });
+                    setPaymentForm({...paymentForm, amount: maxAllowed.toString()});
+                  }
                 }}
+                max={selectedPaymentForRecord?.amt_due}
               />
-              {paymentForm.amount && 
-                !validatePaymentAmount(paymentForm.amount, selectedPaymentForRecord.amt_due) && (
-                <small className="p-error block mt-1">
-                  Amount cannot exceed {formatCurrency(selectedPaymentForRecord.amt_due)}
-                </small>
-              )}
             </div>
 
             <div className="field mb-4">
@@ -614,7 +626,8 @@ const PendingPayments = () => {
                   !paymentForm.amount || 
                   !paymentForm.paymentDate || 
                   !paymentForm.paymentMethod ||
-                  !validatePaymentAmount(paymentForm.amount, selectedPaymentForRecord.amt_due)
+                  parseFloat(paymentForm.amount) > (selectedPaymentForRecord?.amt_due || 0) ||
+                  parseFloat(paymentForm.amount) <= 0
                 }
               />
             </div>

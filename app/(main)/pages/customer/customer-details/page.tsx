@@ -18,7 +18,6 @@ interface Customer {
     phone: string;
     dob: string;
     address: string;
-    profileImage: string;
 }
 
 interface Order {
@@ -48,18 +47,17 @@ interface MeasurementValues {
 const CustomerDetails = () => {
     const customer: Customer = {
         id: 1,
-        name: 'Nishant Kumar',
-        email: 'nishantkr090@gmail.com',
+        name: 'Rajesh Kumar',
+        email: 'rajesh@gmail.com',
         phone: '+911234567890',
         dob: '2000-03-01',
         address: 'Address not available',
-        profileImage: '/demo/images/avatar.png'
     };
 
     const orders: Order[] = [
-        { id: 1001, cName: 'Nishant Kumar', orderType: 'Shirt', trialDate: '2023-05-15', deliveryDate: '2023-05-20', status: 'In Progress', amount: 1200, type: 'Active' },
-        { id: 1002, cName: 'Nishant Kumar', orderType: 'Pant', trialDate: '2023-06-20', deliveryDate: '2023-06-25', status: 'Completed', amount: 800, type: 'Delivered' },
-        { id: 1003, cName: 'Nishant Kumar', orderType: 'Kurta Pajama', trialDate: '', deliveryDate: '', status: 'Pending', amount: 1500, type: 'Draft' },
+        { id: 1001, cName: 'Ramesh Kumar', orderType: 'Shirt', trialDate: '2023-05-15', deliveryDate: '2023-05-20', status: 'In Progress', amount: 1200, type: 'Active' },
+        { id: 1002, cName: 'Rahul Kumar', orderType: 'Pant', trialDate: '2023-06-20', deliveryDate: '2023-06-25', status: 'Completed', amount: 800, type: 'Delivered' },
+        { id: 1003, cName: 'Sahil Kumar', orderType: 'Kurta Pajama', trialDate: '', deliveryDate: '', status: 'Pending', amount: 1500, type: 'Draft' },
     ];
 
     const [garments, setGarments] = useState<Garment[]>(() => {
@@ -165,10 +163,10 @@ const CustomerDetails = () => {
                 <Card className="h-full">
                     <div className="flex flex-column align-items-center gap-3 mb-2">
                         <Avatar 
-                            image={customer.profileImage} 
+                            label={customer.name.charAt(0).toUpperCase()}
                             size="xlarge" 
                             shape="circle" 
-                            className="shadow-4" 
+                            className="shadow-4 text-xl font-semibold bg-primary text-white" 
                         />
                         <span className="text-2xl font-bold">{customer.name}</span>
                         
@@ -177,28 +175,11 @@ const CustomerDetails = () => {
                                 icon="pi pi-whatsapp" 
                                 rounded 
                                 severity="success"
-                                tooltip="WhatsApp"
-                                tooltipOptions={{ position: 'bottom' }}
                             />
                             <Button 
                                 icon="pi pi-envelope" 
                                 rounded 
-                                tooltip="Send Email"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
-                            <Button 
-                                icon="pi pi-pencil" 
-                                rounded 
                                 severity="info"
-                                tooltip="Edit Profile"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
-                            <Button 
-                                icon="pi pi-trash" 
-                                rounded 
-                                severity="danger"
-                                tooltip="Delete Profile"
-                                tooltipOptions={{ position: 'bottom' }}
                             />
                         </div>
                     </div>

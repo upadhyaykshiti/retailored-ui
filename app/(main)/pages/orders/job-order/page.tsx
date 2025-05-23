@@ -30,6 +30,8 @@ interface JobOrderMain {
   status_id: string;
   docno: string | null;
   ord_qty: number;
+  amt_paid: number;
+  amt_due: number;
   delivered_qty: number;
   cancelled_qty: number;
   desc1: string | null;
@@ -37,6 +39,11 @@ interface JobOrderMain {
     id: string;
     status_name: string;
   };
+  jobOrderDetails: {
+    adminSite?: {
+      sitename: string;
+    };
+  }[];
 }
 
 interface MeasurementDetail {
@@ -428,6 +435,7 @@ const JobOrder = () => {
       case 'In Progress': return 'info';
       case 'Pending': return 'warning';
       case 'Cancelled': return 'danger';
+      case 'Partial': return 'warning';
       case 'Unknown': return 'info';
       default: return null;
     }
@@ -712,8 +720,7 @@ const JobOrder = () => {
         }
 
         if (itemDetail.selectedImages?.length) {
-          const selectedImagesBase64 = await convertImagesToBase64(itemDetail.selectedImages);
-          allImages = [...allImages, ...selectedImagesBase64];
+          allImages = [...allImages, ...itemDetail.selectedImages];
         }
 
         return {
@@ -725,7 +732,8 @@ const JobOrder = () => {
           item_amt: itemDetail.makingCharge || 0,
           ord_qty: itemDetail.quantity || 1,
           trial_date: trialDate ? trialDate.toISOString().split('T')[0] : null,
-          delivery_date: deliveryDate ? deliveryDate.toISOString().split('T')[0] : null
+          delivery_date: deliveryDate ? deliveryDate.toISOString().split('T')[0] : null,
+          status_id: 1,
         };
       }));
 
@@ -847,6 +855,12 @@ const JobOrder = () => {
 
   const handleJobberPayment = async (jobOrder: JobOrderMain) => {
     setSelectedJobOrderForPayment(jobOrder);
+    setPaymentForm({
+      amount: jobOrder.amt_due?.toString() || '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMethod: '',
+      reference: '',
+    });
     await fetchPaymentModes();
     setPaymentDialogVisible(true);
   };
@@ -902,10 +916,13 @@ const JobOrder = () => {
       });
       setSelectedPaymentMode(null);
       setPaymentDialogVisible(false);
+      await fetchJobOrders(1);
       if (selectedJobOrder) {
-        await fetchJobOrderDetails(selectedJobOrder.id);
+        setSelectedJobOrder(prev => prev ? {
+          ...prev,
+          amt_due: prev.amt_due - paymentAmount
+        } : null);
       }
-
     } catch (error) {
       console.error('Error recording payment:', error);
       await Toast.show({
@@ -929,7 +946,7 @@ const JobOrder = () => {
     setQuantity(Math.min(Math.max(1, value), maxQty));
   };
 
-  const handleStatusUpdate = async (statusId: number) => {
+  const handleItemStatusUpdate = async (statusId: number) => {
     if (!selectedJobOrder || !selectedDetail) return;
 
     try {
@@ -957,7 +974,32 @@ const JobOrder = () => {
         position: 'bottom'
       });
 
-      await fetchJobOrderDetails(selectedJobOrder.id);
+      const { jobOrderDetails: updatedDetails } = await JobOrderService.getJobOrdersDetails(selectedJobOrder.id);
+      setJobOrderDetails(updatedDetails);
+
+      const allSameStatus = updatedDetails.every((detail: { status: { id: string; }; }) => 
+        detail.status?.id === String(statusId)
+      );
+
+      if (allSameStatus) {
+        setSelectedJobOrder(prev => prev ? {
+          ...prev,
+          status: {
+            id: String(statusId),
+            status_name: statusName
+          }
+        } : null);
+      } else {
+        setSelectedJobOrder(prev => prev ? {
+          ...prev,
+          status: {
+            id: '6',
+            status_name: 'Partial'
+          }
+        } : null);
+      }
+
+      await fetchJobOrders(pagination.currentPage, searchTerm);
 
     } catch (error) {
       console.error('Error updating status:', error);
@@ -1088,7 +1130,7 @@ const JobOrder = () => {
                 <div className="flex justify-content-between align-items-center">
                   <span className="font-bold">{jobOrder.docno || `JOB-${jobOrder.id}`}</span>
                   <Tag 
-                    value={jobOrder.status?.status_name || "Pending"} 
+                    value={jobOrder.status?.status_name || "Unknown"} 
                     severity={getStatusSeverity(jobOrder.status?.status_name)} 
                   />
                 </div>
@@ -1096,16 +1138,14 @@ const JobOrder = () => {
                 <Divider className="my-2" />
                 
                 <div className="flex flex-column gap-1">
-                <div className="flex justify-content-between">
+                  <div className="flex justify-content-between">
                     <span className="text-600">Jobber:</span>
-                    <span>Rajesh Tailor</span>
+                    <span>
+                      {jobOrder.jobOrderDetails?.[0]?.adminSite?.sitename || 'Not Available'}
+                    </span>
                   </div>
                   <div className="flex justify-content-between">
                     <span className="text-600">Job Date:</span>
-                    <span>{formatDate(jobOrder.job_date)}</span>
-                  </div>
-                  <div className="flex justify-content-between">
-                    <span className="text-600">Trial Date:</span>
                     <span>{formatDate(jobOrder.job_date)}</span>
                   </div>
                   <div className="flex justify-content-between">
@@ -1147,7 +1187,6 @@ const JobOrder = () => {
         <div className="w-full p-4 text-center surface-100 border-round">
           <i className="pi pi-search text-3xl mb-2" />
           <h4>No job orders found</h4>
-          <p>Try adjusting your search or create a new job order</p>
         </div>
       )}
 
@@ -1522,6 +1561,7 @@ const JobOrder = () => {
                   dateFormat="dd/mm/yy"
                   className="w-full"
                   showIcon
+                  minDate={new Date()}
               />
             </div>
 
@@ -1537,6 +1577,7 @@ const JobOrder = () => {
                 dateFormat="dd/mm/yy"
                 className="w-full"
                 showIcon
+                minDate={new Date()}
               />
             </div>
 
@@ -1880,16 +1921,25 @@ const JobOrder = () => {
                   <div className="field">
                     <label>Status &nbsp;</label>
                     <Tag 
-                      value={selectedJobOrder.status?.status_name || "Pending"}
+                      value={selectedJobOrder.status?.status_name || "Unknown"}
                       severity={getStatusSeverity(selectedJobOrder.status?.status_name)} 
                     />
                   </div>
                 </div>
                 <div className="col-6">
                   <div className="field">
-                    <label>Trial Date</label>
-                    <p className="m-0 font-medium">{formatDate(selectedJobOrder.job_date)}</p>
+                    <label>Pending Amount</label>
+                      <p className="m-0 font-medium">₹ {selectedJobOrder?.amt_due ?? '0.00'}</p>
                   </div>
+                </div>
+                <div className="col-12">
+                  <Button 
+                      label="Record Payment" 
+                      icon="pi pi-money-bill" 
+                      onClick={() => handleJobberPayment(selectedJobOrder!)}
+                      className="p-button-success"
+                      disabled={selectedJobOrder?.amt_due === 0}
+                    />
                 </div>
               </div>
               
@@ -1932,8 +1982,8 @@ const JobOrder = () => {
                     </div>
                     <div className="col-6">
                       <div className="field">
-                        <label>Pending Amount</label>
-                        <p className="m-0 font-medium">{detail.item_amt}</p>
+                        <label>Making Charge</label>
+                        <p className="m-0 font-medium">₹ {detail.item_amt}</p>
                       </div>
                     </div>
 
@@ -1957,13 +2007,13 @@ const JobOrder = () => {
 
                     <div className="col-12 mt-2">
                       <Button
-                        label={`Status (${detail.status?.status_name || 'Pending'})`}
+                        label={`Status (${detail.status?.status_name || 'Unknown'})`}
                         icon="pi pi-sync"
                         onClick={() => {
                           setSelectedDetail(detail);
                           setStatusSidebarVisible(true);
                         }}
-                        severity={getStatusSeverity(detail.status?.status_name || 'Pending') || undefined}
+                        severity={getStatusSeverity(detail.status?.status_name || 'Unknown') || undefined}
                       />
                     </div>
                     
@@ -1988,15 +2038,6 @@ const JobOrder = () => {
                         )}
                         className="p-button-outlined"
                       />
-                    </div>
-                    <div className="col-12 mt-2">
-                      <Button 
-                          label="Record Payment" 
-                          icon="pi pi-money-bill" 
-                          onClick={() => handleJobberPayment(selectedJobOrder!)}
-                          className="p-button-success"
-                          disabled={jobOrderDetails.reduce((total, detail) => total + detail.item_amt, 0) <= 0}
-                        />
                     </div>
                     <div className="col-12 mt-2">
                       <Button 
@@ -2053,6 +2094,7 @@ const JobOrder = () => {
               dateFormat="dd/mm/yy"
               className="w-full"
               showIcon
+              minDate={new Date()}
             />
           </div>
 
@@ -2072,6 +2114,7 @@ const JobOrder = () => {
               dateFormat="dd/mm/yy"
               className="w-full"
               showIcon
+              minDate={new Date()}
             />
           </div>
 
@@ -2329,7 +2372,7 @@ const JobOrder = () => {
               <div key={status.id} className="col-12 md:col-6 lg:col-4 p-2">
                 <Button
                   label={status.name}
-                  onClick={() => handleStatusUpdate(Number(status.id))}
+                  onClick={() => handleItemStatusUpdate(Number(status.id))}
                   severity={getStatusSeverity(status.name) || undefined}
                   className="w-full p-3 text-lg justify-content-start p-button-outlined"
                   icon={

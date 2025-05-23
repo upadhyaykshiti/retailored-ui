@@ -358,11 +358,6 @@ const CreateOrder = () => {
 
     const handleClearCustomer = () => {
         setSelectedCustomer(null);
-        setGarmentRefNames({});
-        setSelectedGarments([]);
-        setAllMeasurements({});
-        setIsMesurementSaved({});
-        setStitchOptions({});
     };
 
     const handleRefNameChange = (garmentId: string, newName: string) => {
@@ -1299,6 +1294,7 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Delivery Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
 
@@ -1325,6 +1321,7 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Trial Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
                     </div>
@@ -1372,7 +1369,7 @@ const CreateOrder = () => {
                                 mode="decimal" 
                                 showButtons 
                                 min={1} 
-                                max={100} 
+                                max={1000}
                                 className="w-full" 
                             />
                         </div>
@@ -1496,7 +1493,6 @@ const CreateOrder = () => {
                                 )}
                                 mode="decimal" 
                                 min={0} 
-                                max={100}
                                 className="w-full"
                             />
                             ) : (

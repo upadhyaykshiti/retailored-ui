@@ -6,280 +6,434 @@ import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
 import { Dialog } from 'primereact/dialog';
 import { ToggleButton } from 'primereact/togglebutton';
-import { Chips } from 'primereact/chips';
-import { useState } from 'react';
-import { ConfirmDialog } from 'primereact/confirmdialog';
+import { useState, useEffect, useRef } from 'react';
+import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
+import { Skeleton } from 'primereact/skeleton';
+import { useDebounce } from 'use-debounce';
+import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { VendorService } from '@/demo/service/vendor.service';
+import { Toast } from '@capacitor/toast';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 
-type VendorStatus = 'active' | 'inactive';
+type VendorStatus = 'Y' | 'N';
 
 interface Vendor {
-  id: number;
-  name: string;
-  contactPerson: string;
-  mobile: string;
-  email: string;
-  services: string[];
-  status: VendorStatus;
+  code: string;
+  sitename: string;
+  site_type: string;
+  ext: VendorStatus;
+  cmpcode?: string;
+  contact_person?: string;
+  mobileNumber?: string;
+  email?: string;
 }
 
 const Vendors = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [vendors, setVendors] = useState<Vendor[]>([
-    { 
-      id: 1, 
-      name: 'Tailor Master', 
-      contactPerson: 'Rajesh Kumar', 
-      mobile: '+91 9876543210', 
-      email: 'tailormaster@example.com',
-      services: ['Stitching', 'Alterations'],
-      status: 'active',
-    },
-    { 
-      id: 2, 
-      name: 'Fabric House', 
-      contactPerson: 'Mohan Singh', 
-      mobile: '+91 8765432109', 
-      email: 'fabric@example.com',
-      services: ['Fabric Supply', 'Material'],
-      status: 'active' 
-    },
-    { 
-      id: 3, 
-      name: 'Button World', 
-      contactPerson: 'Sunil Sharma', 
-      mobile: '+91 7654321098', 
-      email: 'buttons@example.com',
-      services: ['Buttons', 'Accessories'],
-      status: 'inactive' 
-    },
-  ]);
-
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [visible, setVisible] = useState(false);
-  const [currentVendor, setCurrentVendor] = useState<Vendor | null>(null);
-  const [isMaximized, setIsMaximized] = useState(true);
+  const [currentVendor, setCurrentVendor] = useState<Partial<Vendor>>({
+    sitename: '',
+    ext: 'N',
+    site_type: 'V',
+    cmpcode: '2',
+    contact_person: '',
+    mobileNumber: '',
+    email: '',
+  });
   const [isEditMode, setIsEditMode] = useState(false);
+  const [paginatorInfo, setPaginatorInfo] = useState<any>(null);
+  const [isMaximized, setIsMaximized] = useState(true);
+  const [hasMorePages, setHasMorePages] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  const handleCardClick = (vendorId: number) => {
+  const fetchVendors = async (loadMore = false) => {
+    try {
+      if (loadMore) {
+        setIsLoadingMore(true);
+      } else if (!searchTerm) {
+        setIsInitialLoading(true);
+      }
+
+      const { data, paginatorInfo } = await VendorService.getVendors(
+        20,
+        loadMore ? page + 1 : 1
+      );
+
+      setVendors(prev => loadMore ? [...prev, ...data] : data);
+      setPaginatorInfo(paginatorInfo);
+      setHasMorePages(paginatorInfo.hasMorePages);
+      if (loadMore) setPage(prev => prev + 1);
+      
+    } catch (err) {
+      console.error('Failed to fetch vendors:', err);
+      await Toast.show({
+        text: 'Failed to fetch vendors',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      setListLoading(false);
+    }
   };
+
+  useEffect(() => {
+    setPage(1);
+    fetchVendors();
+  }, [debouncedSearchTerm]);
+
+  const handleSearch = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setPage(1);
+      fetchVendors();
+    }
+  };
+
+  useInfiniteObserver({
+    targetRef: observerTarget,
+    hasMorePages,
+    isLoading: isLoadingMore,
+    onIntersect: () => {
+      if (hasMorePages) {
+        fetchVendors(true);
+      }
+    },
+    deps: [hasMorePages, searchTerm]
+  });
 
   const showAddDialog = () => {
     setCurrentVendor({
-      id: vendors.length + 1,
-      name: '',
-      contactPerson: '',
-      mobile: '',
-      email: '',
-      services: [],
-      status: 'active'
+      sitename: '',
+      ext: 'N',
+      site_type: 'V',
+      cmpcode: '2',
+      contact_person: '',
+      mobileNumber: '',
+      email: ''
     });
     setIsEditMode(false);
     setVisible(true);
   };
 
   const showEditDialog = (vendor: Vendor) => {
-    setCurrentVendor({ ...vendor });
+    setCurrentVendor({ 
+      ...vendor,
+      contact_person: vendor.contact_person || '',
+      mobileNumber: vendor.mobileNumber || '',
+      email: vendor.email || '',
+    });
     setIsEditMode(true);
     setVisible(true);
   };
 
-  const handleSave = () => {
-    if (!currentVendor) return;
-
-    if (isEditMode) {
-      setVendors(vendors.map(v => v.id === currentVendor.id ? currentVendor : v));
-    } else {
-      setVendors([...vendors, currentVendor]);
+   const handleSave = async () => {
+    if (!currentVendor.sitename) {
+      await Toast.show({
+        text: 'Vendor name is required',
+        duration: 'short',
+        position: 'bottom'
+      });
+      return;
     }
-    setVisible(false);
+
+    setListLoading(true);
+    try {
+      const payload = {
+        sitename: currentVendor.sitename,
+        site_type: 'V',
+        ext: currentVendor.ext || 'N',
+        cmpcode: '2',
+        mobileNumber: currentVendor.mobileNumber || '',
+        email: currentVendor.email || ''
+      };
+
+      if (isEditMode && currentVendor.code) {
+        await VendorService.updateVendor(currentVendor.code, payload);
+        await Toast.show({
+          text: 'Vendor updated successfully',
+          duration: 'short',
+          position: 'bottom'
+        });
+      } else {
+        await VendorService.createVendor(payload);
+        await Toast.show({
+          text: 'Vendor created successfully',
+          duration: 'short',
+          position: 'bottom'
+        });
+      }
+
+      setVisible(false);
+      fetchVendors();
+    } catch (err) {
+      await Toast.show({
+        text: 'Failed to save vendor',
+        duration: 'short',
+        position: 'bottom'
+      });
+      console.error(err);
+    } finally {
+      setListLoading(false);
+    }
   };
 
-  const filteredVendors = vendors.filter(vendor => 
-    vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vendor.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vendor.mobile.includes(searchTerm) ||
-    vendor.services.some(service => 
-      service.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  const confirmStatusChange = async (vendorCode: string, currentStatus: VendorStatus) => {
+    const newStatus = currentStatus === 'N' ? 'Y' : 'N';
+    
+    confirmDialog({
+      message: `Are you sure you want to ${newStatus === 'N' ? 'activate' : 'deactivate'} this vendor?`,
+      header: 'Confirm Status Change',
+      icon: 'pi pi-info-circle',
+      accept: async () => {
+        try {
+          setListLoading(true);
+          await VendorService.updateVendor(vendorCode, { ext: newStatus });
+          await Toast.show({
+            text: `Vendor ${newStatus === 'N' ? 'activated' : 'deactivated'} successfully`,
+            duration: 'short',
+            position: 'bottom'
+          });
+          fetchVendors();
+        } catch (err) {
+          console.error('Failed to update status:', err);
+          await Toast.show({
+            text: 'Failed to update vendor status',
+            duration: 'short',
+            position: 'bottom'
+          });
+        } finally {
+          setListLoading(false);
+        }
+      },
+    });
+  };
 
-  const footerContent = (
-    <div>
-      <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
-      <Button label="Save" icon="pi pi-check" onClick={handleSave} autoFocus />
-    </div>
-  );
-
-  return (
-    <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
-        <h2 className="text-2xl m-0">Vendors</h2>
-        <span className="p-input-icon-left w-full">
-          <i className="pi pi-search" />
-          <InputText 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search"
-            className="w-full"
-          />
-        </span>
-        <Button 
-          label="Add Vendor" 
-          icon="pi pi-plus" 
-          onClick={showAddDialog}
-          className="w-full md:w-auto"
-          size="small"
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-3 lg:justify-content-start">
-        {filteredVendors.length > 0 ? (
-          filteredVendors.map((vendor) => (
-            <Card 
-              key={vendor.id} 
-              className="flex flex-column w-full sm:w-20rem lg:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
-              onClick={() => handleCardClick(vendor.id)}
-            >
+  if (isInitialLoading) {
+    return (
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
+          <Skeleton width="10rem" height="1.5rem" />
+          <Skeleton width="100%" height="2rem" className="md:w-20rem" />
+          <Skeleton width="100%" height="2rem" />
+        </div>
+  
+        <div className="flex flex-wrap gap-3 justify-content-start">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="flex flex-column w-full sm:w-20rem lg:w-22rem">
               <div className="flex justify-content-between align-items-start mb-3">
                 <div>
-                  <h3 className="text-xl m-0">{vendor.name}</h3>
-                  <p className="text-sm text-500 mt-1">{vendor.contactPerson}</p>
+                  <Skeleton width="12rem" height="1.75rem" className="mb-1" />
                 </div>
-                <Tag 
-                  value={vendor.status === 'active' ? 'Active' : 'Inactive'}
-                  severity={vendor.status === 'active' ? 'success' : 'danger'}
-                  className="align-self-start"
-                />
+                <Skeleton width="5rem" height="1.5rem" borderRadius="1rem" />
               </div>
 
               <div className="flex flex-column gap-2 mb-3">
                 <div className="flex align-items-center gap-2">
-                  <i className="pi pi-phone text-sm" />
-                  <span className="text-sm">{vendor.mobile}</span>
+                  <Skeleton width="10rem" height="1rem" />
                 </div>
                 <div className="flex align-items-center gap-2">
-                  <i className="pi pi-envelope text-sm" />
-                  <span className="text-sm">{vendor.email}</span>
+                  <Skeleton width="10rem" height="1rem" />
                 </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-3">
-                {vendor.services.map((service, index) => (
-                  <Tag 
-                    key={index} 
-                    value={service} 
-                    rounded 
-                    className="text-xs"
-                  />
-                ))}
+                <div className="flex align-items-start gap-2">
+                  <Skeleton width="10rem" height="1rem" />
+                </div>
               </div>
 
               <div className="flex justify-content-end gap-1">
-                <Button 
-                  icon="pi pi-pencil" 
-                  rounded 
-                  text 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    showEditDialog(vendor);
-                  }}
-                  severity="secondary"
-                  tooltip="Edit vendor"
-                  tooltipOptions={{ position: 'top' }}
-                />
-                <Button 
-                  icon={vendor.status === 'active' ? 'pi pi-trash' : 'pi pi-replay'} 
-                  rounded 
-                  text 
-                  severity={vendor.status === 'active' ? 'danger' : 'warning'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                />
+                <Skeleton shape="circle" size="2rem" />
+                <Skeleton shape="circle" size="2rem" />
               </div>
             </Card>
-          ))
-        ) : (
-          <div className="w-full p-4 text-center surface-100 border-round">
-            <i className="pi pi-search text-3xl mb-2" />
-            <h4>No vendors found</h4>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
+    );
+  }
 
-      <Dialog 
-        header={isEditMode ? "Edit Vendor" : "Add New Vendor"} 
-        visible={visible} 
-        onHide={() => setVisible(false)}
-        maximized={isMaximized}
-        onMaximize={(e) => setIsMaximized(e.maximized)}
-        className="w-full"
-        blockScroll
-        footer={footerContent}
-      >
-        {currentVendor && (
-          <div className="p-fluid grid">
-            <div className="field col-12 md:col-6">
-              <label htmlFor="name">Vendor Name</label>
-              <InputText 
-                id="name" 
-                value={currentVendor.name} 
-                onChange={(e) => setCurrentVendor({...currentVendor, name: e.target.value})} 
-              />
+  return (
+    <>
+      {listLoading && <FullPageLoader />}
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <ConfirmDialog />
+        
+        <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
+          <h2 className="text-2xl m-0">Vendors</h2>
+          <span className="p-input-icon-left w-full">
+            <i className="pi pi-search" />
+            <InputText 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearch}
+              placeholder="Search"
+              className="w-full"
+            />
+          </span>
+          <Button 
+            label="Add Vendor" 
+            icon="pi pi-plus" 
+            onClick={showAddDialog}
+            className="w-full md:w-auto"
+            size="small"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-3 justify-content-start">
+          {vendors.length > 0 ? (
+            <>
+              {vendors.map((vendor) => (
+                <Card 
+                  key={vendor.code} 
+                  className="flex flex-column w-full sm:w-20rem lg:w-22rem transition-all transition-duration-200 hover:shadow-4"
+                >
+                  <div className="flex justify-content-between align-items-start mb-3">
+                    <div>
+                      <h3 className="text-xl m-0">{vendor.sitename || 'Unnamed Vendor'}</h3>
+                      <p className="text-sm text-500 mt-1">{vendor.contact_person || 'Contact Person Unvailable'}</p>
+                    </div>
+                    <Tag 
+                      value={vendor.ext === 'N' ? 'Active' : 'Inactive'}
+                      severity={vendor.ext === 'N' ? 'success' : 'danger'}
+                      className="align-self-start"
+                    />
+                  </div>
+
+                  <div className="flex flex-column gap-2 mb-3">
+                    <div className="flex align-items-center gap-2">
+                      <i className="pi pi-phone text-sm" />
+                      <span className="text-sm">Mobile: {vendor.mobileNumber || 'Not Available'}</span>
+                    </div>
+                    <div className="flex align-items-center gap-2">
+                      <i className="pi pi-envelope text-sm" />
+                      <span className="text-sm">Email: {vendor.email || 'Not Available'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-content-end gap-1">
+                    <Button 
+                      icon="pi pi-pencil" 
+                      rounded 
+                      text 
+                      onClick={() => showEditDialog(vendor)}
+                      severity="secondary"
+                      tooltip="Edit vendor"
+                      tooltipOptions={{ position: 'top' }}
+                    />
+                    <Button 
+                      icon={vendor.ext === 'N' ? 'pi pi-trash' : 'pi pi-replay'} 
+                      rounded 
+                      text 
+                      severity={vendor.ext === 'N' ? 'danger' : 'success'}
+                      onClick={() => confirmStatusChange(vendor.code, vendor.ext)}
+                      tooltip={vendor.ext === 'N' ? 'Deactivate' : 'Activate'}
+                      tooltipOptions={{ position: 'top' }}
+                    />
+                  </div>
+                </Card>
+              ))}
+              <div ref={observerTarget} className="w-full flex justify-content-center p-3">
+                {isLoadingMore && (
+                  <div className="flex align-items-center gap-2">
+                    <i className="pi pi-spinner pi-spin" />
+                    <span>Loading more vendors...</span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="w-full p-4 text-center surface-100 border-round">
+              <i className="pi pi-search text-3xl mb-2" />
+              <h4>No vendors found</h4>
+              {searchTerm && (
+                <Button 
+                  label="Clear search" 
+                  className="mt-3" 
+                  onClick={() => setSearchTerm('')}
+                  size="small"
+                />
+              )}
             </div>
-            <div className="field col-12 md:col-6">
-              <label htmlFor="contact">Contact Person</label>
-              <InputText 
-                id="contact" 
-                value={currentVendor.contactPerson} 
-                onChange={(e) => setCurrentVendor({...currentVendor, contactPerson: e.target.value})} 
-              />
+          )}
+        </div>
+
+        <Dialog 
+          header={isEditMode ? "Edit Vendor" : "Add New Vendor"} 
+          visible={visible}
+          onHide={() => setVisible(false)}
+          maximized={isMaximized}
+          onMaximize={(e) => setIsMaximized(e.maximized)}
+          className={isMaximized ? 'maximized-dialog' : ''}
+          blockScroll
+          footer={
+            <div>
+              <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
+              <Button label="Save" icon="pi pi-check" onClick={handleSave} disabled={!currentVendor.sitename} />
             </div>
-            <div className="field col-12 md:col-6">
-              <label htmlFor="mobile">Mobile</label>
-              <InputText 
-                id="mobile" 
-                value={currentVendor.mobile} 
-                onChange={(e) => setCurrentVendor({...currentVendor, mobile: e.target.value})} 
-              />
+          }
+        >
+          {currentVendor && (
+            <div className="p-fluid grid my-3">
+              <div className="field col-12">
+                <label htmlFor="sitename">Vendor Name</label>
+                <InputText 
+                  id="sitename" 
+                  value={currentVendor.sitename || ''} 
+                  onChange={(e) => setCurrentVendor({...currentVendor, sitename: e.target.value})} 
+                  required
+                />
+              </div>
+              <div className="field col-12">
+                <label htmlFor="sitename">Contact Person</label>
+                <InputText 
+                  id="contact_person" 
+                  value={currentVendor.contact_person || ''} 
+                  onChange={(e) => setCurrentVendor({...currentVendor, contact_person: e.target.value})} 
+                  required
+                />
+              </div>
+              <div className="field col-12">
+                <label htmlFor="mobile">Mobile</label>
+                <InputText 
+                  id="mobile" 
+                  value={currentVendor.mobileNumber || ''} 
+                  onChange={(e) => setCurrentVendor({...currentVendor, mobileNumber: e.target.value})}
+                />
+              </div>
+              <div className="field col-12">
+                <label htmlFor="email">Email</label>
+                <InputText 
+                  id="email" 
+                  value={currentVendor.email || ''} 
+                  onChange={(e) => setCurrentVendor({...currentVendor, email: e.target.value})}
+                />
+              </div>
+              <div className="field col-12 md:col-6">
+                <label htmlFor="status">Status</label>
+                <ToggleButton
+                  id="status"
+                  onLabel="Active"
+                  offLabel="Inactive"
+                  onIcon="pi pi-check"
+                  offIcon="pi pi-times"
+                  checked={currentVendor.ext === 'N'}
+                  onChange={(e) => setCurrentVendor({
+                    ...currentVendor, 
+                    ext: e.value ? 'N' : 'Y'
+                  })}
+                  className="w-full md:w-10rem"
+                />
+              </div>
             </div>
-            <div className="field col-12 md:col-6">
-              <label htmlFor="email">Email</label>
-              <InputText 
-                id="email" 
-                value={currentVendor.email} 
-                onChange={(e) => setCurrentVendor({...currentVendor, email: e.target.value})} 
-              />
-            </div>
-            <div className="field col-12">
-              <label htmlFor="services">Services (comma separated)</label>
-              <Chips
-                id="services"
-                value={currentVendor.services}
-                onChange={(e) => setCurrentVendor({...currentVendor, services: e.value || []})}
-                separator=","
-              />
-            </div>
-            <div className="field col-12">
-              <label htmlFor="status">Status</label>
-              <ToggleButton
-                id="status"
-                onLabel="Active"
-                offLabel="Inactive"
-                onIcon="pi pi-check"
-                offIcon="pi pi-times"
-                checked={currentVendor.status === 'active'}
-                onChange={(e) => setCurrentVendor({
-                  ...currentVendor, 
-                  status: e.value ? 'active' : 'inactive'
-                })}
-                className="w-full md:w-10rem"
-              />
-            </div>
-          </div>
-        )}
-      </Dialog>
-      <ConfirmDialog />
-    </div>
+          )}
+        </Dialog>
+      </div>
+    </>
   );
 };
 

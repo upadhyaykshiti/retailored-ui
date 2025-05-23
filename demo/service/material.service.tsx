@@ -112,4 +112,19 @@ export const MaterialService = {
     const data = await GraphQLService.query<{ updateMaterialMaster: any }>(mutation, variables, token);
     return data.updateMaterialMaster;
   },
+
+  async updateMaterialStatus(id: string, input: {
+    ext: string;
+  }, token?: string): Promise<any> {
+    const mutation = `
+      mutation UpdateMaterialMaster($id: ID!, $input: UpdateMaterialMasterInput!) {
+        updateMaterialMaster(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+    const variables = { id, input };
+    const data = await GraphQLService.query<{ updateMaterialMaster: any }>(mutation, variables, token);
+    return data.updateMaterialMaster;
+  },
 };

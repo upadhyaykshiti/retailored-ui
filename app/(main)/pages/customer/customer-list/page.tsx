@@ -218,31 +218,39 @@ const CustomerList = () => {
       setListLoading(false);
     }
   };
-
-  const toggleCustomerStatus = (customerId: string) => {
-    setCustomers(customers.map(customer => 
-      customer.id === customerId 
-        ? { ...customer, active: customer.active === 1 ? 0 : 1 } 
-        : customer
-    ));
-  };
-
-  const confirmStatusChange = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    const isActive = customer?.active === 1;
   
+  const confirmStatusChange = async (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+
+    const newStatus = customer.active === 1 ? 0 : 1;
+    const statusText = newStatus === 1 ? 'activate' : 'deactivate';
+
     confirmDialog({
-      message: `Are you sure you want to mark this customer as ${isActive ? 'inactive' : 'active'}?`,
+      message: `Are you sure you want to ${statusText} this customer?`,
       header: 'Confirm Status Change',
       icon: 'pi pi-info-circle',
-      acceptClassName: isActive ? 'p-button-danger' : 'p-button-success',
+      acceptClassName: newStatus === 1 ? 'p-button-success' : 'p-button-danger',
       accept: async () => {
-        toggleCustomerStatus(customerId);
-        await Toast.show({
-          text: `Customer marked as ${isActive ? 'inactive' : 'active'}`,
-          duration: 'short',
-          position: 'bottom'
-        });
+        try {
+          setListLoading(true);
+          await UserService.updateUser(customerId, { active: newStatus });
+          fetchCustomers();
+          await Toast.show({
+            text: `Customer ${statusText}d successfully`,
+            duration: 'short',
+            position: 'bottom'
+          });
+        } catch (err) {
+          console.error('Failed to update status:', err);
+          await Toast.show({
+            text: 'Failed to update customer status',
+            duration: 'short',
+            position: 'bottom'
+          });
+        } finally {
+          setListLoading(false);
+        }
       }
     });
   };

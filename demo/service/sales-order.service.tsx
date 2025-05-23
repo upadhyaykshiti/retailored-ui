@@ -241,6 +241,11 @@ export const SalesOrderService = {
               id
               name
             }
+            jobOrderDetails {
+              adminSite {
+                  sitename
+              }
+            }
           }
         }
       }
