@@ -19,7 +19,7 @@ import FullPageLoader from '@/demo/components/FullPageLoader';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { compressImage } from '@/demo/utils/imageCompressUtils';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { convertImageToBase64, convertImagesToBase64 } from '@/demo/utils/imageUtils';
+import { convertImageToBase64 } from '@/demo/utils/imageUtils';
 import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
 import { Toast } from '@capacitor/toast';
@@ -165,6 +165,7 @@ const JobOrder = () => {
   const [orderSidebarVisible, setOrderSidebarVisible] = useState(false);
   const [loadingOrdersButton, setLoadingOrdersButton] = useState(false);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [debouncedOrderSearchTerm] = useDebounce(orderSearchTerm, 500);
   const [itemActionSidebarVisible, setItemActionSidebarVisible] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<JobOrderDetail | null>(null);
   const [confirmDeliveredVisible, setConfirmDeliveredVisible] = useState(false);
@@ -248,8 +249,8 @@ const JobOrder = () => {
   }, []);
 
   useEffect(() => {
-    fetchJobOrders(1, searchTerm);
-  }, [searchTerm, fetchJobOrders]);
+    fetchJobOrders(1, debouncedSearchTerm);
+  }, [debouncedSearchTerm, fetchJobOrders]);
 
   const fetchJobOrderDetails = async (jobOrderId: string) => {
     try {
@@ -347,6 +348,10 @@ const JobOrder = () => {
       setLoadingOrders(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchOrdersList(1, debouncedOrderSearchTerm);
+  }, [debouncedOrderSearchTerm, fetchOrdersList]);
 
   const fetchOrderDetails = async (orderDetailId: string, onSuccess?: (details: any) => void) => {
     try {
@@ -1065,7 +1070,7 @@ const JobOrder = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !debouncedSearchTerm) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -1100,14 +1105,11 @@ const JobOrder = () => {
       {(creatingOrder || isSubmitting) && <FullPageLoader />}
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0 mb-3">Job Orders</h2>
-        <span className="p-input-icon-left w-full">
-          <i className="pi pi-search" />
+        <span className="p-input-icon-right w-full">
+          <i className={loading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
           <InputText 
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              fetchJobOrders(1, e.target.value);
-            }}
+            onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search"
             className="w-full"
           />
@@ -1199,7 +1201,7 @@ const JobOrder = () => {
             className="p-button-text"
           />
         )}
-        {loading && pagination.currentPage > 1 && <ProgressSpinner style={{width: '50px', height: '50px'}} strokeWidth="8" />}
+        {loading && pagination.currentPage > 1 && <ProgressSpinner style={{width: '30px', height: '30px'}} strokeWidth="6" />}
       </div>
 
       <Dialog 
@@ -1383,10 +1385,7 @@ const JobOrder = () => {
               <i className="pi pi-search" />
               <InputText
                 value={orderSearchTerm}
-                onChange={(e) => {
-                  setOrderSearchTerm(e.target.value);
-                  fetchOrdersList(1, e.target.value);
-                }}
+                onChange={(e) => setOrderSearchTerm(e.target.value)}
                 placeholder="Search"
                 className="w-full"
               />

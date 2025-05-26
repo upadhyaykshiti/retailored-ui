@@ -17,6 +17,7 @@ import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useDebounce } from 'use-debounce';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
@@ -93,11 +94,12 @@ const SalesOrder = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [editOrderDetailDialogVisible, setEditOrderDetailDialogVisible] = useState(false);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order['orderDetails'][0] | null>(null);
   const [measurementData, setMeasurementData] = useState<MeasurementData | null>(null);
@@ -151,7 +153,7 @@ const SalesOrder = () => {
         setLoading(true);
       }
 
-      const response = await SalesOrderService.getSalesOrders(page, perPage);
+      const response = await SalesOrderService.getSalesOrders(page, perPage, debouncedSearchTerm);
       const newOrders = response.data.map((res: any) => ({
         ...res,
         customer: res.user.fname,
@@ -186,11 +188,11 @@ const SalesOrder = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [debouncedSearchTerm]);
 
   useEffect(() => {
     fetchOrders(1, pagination.perPage);
-  }, [fetchOrders, pagination.perPage]);
+  }, [fetchOrders, pagination.perPage, debouncedSearchTerm]);
 
   useEffect(() => {
     if (!pagination.hasMorePages || loading || isFetchingMore) return;
@@ -392,10 +394,6 @@ const SalesOrder = () => {
       setIsSavingDetails(false);
     }
   };
-
-  const filteredOrders = orders.filter((order) =>
-    order.docno.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const getPendingAmountSummary = (order: Order) => {
     return `₹${order.amt_due} (₹${order.ord_amt})`;
@@ -626,7 +624,7 @@ const SalesOrder = () => {
     }
   };
 
-  if (loading && !isFetchingMore) {
+  if (loading && !isFetchingMore && !debouncedSearchTerm) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -692,8 +690,8 @@ const SalesOrder = () => {
       {(isSaving || isSavingDetails) && <FullPageLoader />}
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Sales Orders</h2>
-        <span className="p-input-icon-left w-full">
-          <i className="pi pi-search" />
+        <span className="p-input-icon-right w-full">
+          <i className={loading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
           <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -711,12 +709,12 @@ const SalesOrder = () => {
       </div>
       
       <div className="grid">
-        {filteredOrders.length > 0 ? (
-          filteredOrders.map((order, index) => (
+        {orders.length > 0 ? (
+          orders.map((order, index) => (
             <div 
               key={order.id} 
               className="col-12 md:col-6 lg:col-4"
-              ref={index === filteredOrders.length - 1 ? lastOrderRef : null}
+              ref={index === orders.length - 1 ? lastOrderRef : null}
             >
               <Card className="h-full">
                 <div className="flex flex-column gap-2">

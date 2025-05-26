@@ -128,13 +128,6 @@ const Garments = () => {
     fetchMaterials();
   }, [debouncedSearchTerm]);
 
-  const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      setPage(1);
-      fetchMaterials();
-    }
-  };
-
   useInfiniteObserver({
     targetRef: observerTarget,
     hasMorePages,
@@ -430,12 +423,11 @@ const Garments = () => {
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Products</h2>
-          <span className="p-input-icon-left w-full">
-            <i className="pi pi-search" />
+          <span className="p-input-icon-right w-full">
+            <i className={listLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleSearch}
               placeholder="Search"
               className="w-full"
             />

@@ -1,10 +1,10 @@
 import { GraphQLService } from './graphql.service';
 
 export const SalesOrderService = {
-  async getSalesOrders( page: number = 1, perPage: number = 2, token?: string): Promise<{ data: any[]; pagination: any }> {
+  async getSalesOrders( page: number = 1, perPage: number = 4, search: string = '', token?: string): Promise<{ data: any[]; pagination: any }> {
     const query = `
-      query OrderMains($first: Int!, $page: Int!) {
-        orderMains(first: $first, page: $page) {
+      query OrderMains($first: Int!, $page: Int!, $search: String) {
+        orderMains(first: $first, page: $page, search: $search) {
           paginatorInfo {
             count
             currentPage
@@ -43,7 +43,8 @@ export const SalesOrderService = {
     
     const variables = {
       first: perPage,
-      page: page
+      page: page,
+      search: search || null
     };
 
     const data = await GraphQLService.query<{ 

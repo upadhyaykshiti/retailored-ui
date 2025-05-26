@@ -62,7 +62,8 @@ const Jobbers = () => {
 
       const { data, paginatorInfo } = await JobberService.getJobbers(
         5,
-        loadMore ? page + 1 : 1
+        loadMore ? page + 1 : 1,
+        debouncedSearchTerm || undefined
       );
 
       setJobbers(prev => loadMore ? [...prev, ...data] : data);
@@ -88,13 +89,6 @@ const Jobbers = () => {
     setPage(1);
     fetchJobbers();
   }, [debouncedSearchTerm]);
-
-  const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      setPage(1);
-      fetchJobbers();
-    }
-  };
 
   useInfiniteObserver({
     targetRef: observerTarget,
@@ -274,12 +268,11 @@ const Jobbers = () => {
         
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Jobbers</h2>
-          <span className="p-input-icon-left w-full">
-            <i className="pi pi-search" />
+          <span className="p-input-icon-right w-full">
+            <i className={listLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleSearch}
               placeholder="Search"
               className="w-full"
             />

@@ -4,13 +4,14 @@ import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
-import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import { TabView, TabPanel } from 'primereact/tabview';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import { PendingPaymentsService } from '@/demo/service/pending-transactions'; 
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { useDebounce } from 'use-debounce';
 import { Toast } from '@capacitor/toast';
 
 interface PendingPayment {
@@ -39,6 +40,7 @@ interface Customer {
 
 const PendingPayments = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [isMaximized, setIsMaximized] = useState(true);
   const [detailsDialogVisible, setDetailsDialogVisible] = useState(false);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
@@ -78,7 +80,7 @@ const PendingPayments = () => {
         const response = await PendingPaymentsService.getPendingReceipts(
           20,
           page,
-          searchTerm || null
+          debouncedSearchTerm || null
         );
         
         if (isLoadMore) {
@@ -146,7 +148,7 @@ const PendingPayments = () => {
         setIsLoading(false);
       }
     }
-  }, [activeTab, searchTerm, currentPage]);
+  }, [activeTab, debouncedSearchTerm, currentPage]);
 
   useInfiniteObserver({
     targetRef: observerTarget,
@@ -162,7 +164,12 @@ const PendingPayments = () => {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, searchTerm]);
+  }, [activeTab, debouncedSearchTerm]);
+
+  useEffect(() => {
+    setSearchTerm('');
+    setCurrentPage(1);
+  }, [activeTab]);
 
   const fetchPaymentModes = useCallback(async () => {
     try {
@@ -177,11 +184,6 @@ const PendingPayments = () => {
       });
     }
   }, []);
-
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.mobile.includes(searchTerm)
-  );
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -222,7 +224,7 @@ const PendingPayments = () => {
   const renderCustomerCards = (type: 'receipt' | 'payment') => {
     return (
       <div className="flex flex-wrap gap-3 lg:justify-content-start">
-        {filteredCustomers
+        {customers
           .filter(customer => customer.type === type)
           .map((customer) => {
             const customerPayments = getCustomerPayments(customer.id, type);
@@ -268,7 +270,7 @@ const PendingPayments = () => {
               </Card>
             );
           })}
-        {filteredCustomers.filter(customer => 
+        {customers.filter(customer => 
           customer.type === type && getCustomerPayments(customer.id, type).length > 0
         ).length === 0 && (
           <div className="w-full text-center py-5">
@@ -392,12 +394,12 @@ const PendingPayments = () => {
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Pending Transactions</h2>
-        <span className="p-input-icon-left w-full md:w-30rem">
-          <i className="pi pi-search" />
-          <InputText
+        <span className="p-input-icon-right w-full">
+          <i className={isLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
+          <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name or mobile"
+            placeholder="Search"
             className="w-full"
           />
         </span>

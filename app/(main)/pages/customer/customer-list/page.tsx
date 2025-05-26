@@ -106,14 +106,6 @@ const CustomerList = () => {
     deps: [hasMorePages, searchTerm]
   });
 
-  const filteredCustomers = customers.filter(customer => 
-    customer?.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer?.lname && customer.lname.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    customer?.mobileNumber.includes(searchTerm) ||
-    (customer?.alternateContact && customer.alternateContact.includes(searchTerm)) ||
-    (customer?.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
   const handleCardClick = (customerId: string) => {
     router.push(`/pages/customer/customer-details?id=${customerId}`);
   };
@@ -312,12 +304,12 @@ const CustomerList = () => {
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Customers</h2>
-          <span className="p-input-icon-left w-full">
-            <i className="pi pi-search" />
-            <InputText
+          <span className="p-input-icon-right w-full">
+            <i className={listLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
+            <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, phone or email"
+              placeholder="Search"
               className="w-full"
             />
           </span>
@@ -331,9 +323,9 @@ const CustomerList = () => {
         </div>
 
         <div className="flex flex-wrap gap-3 lg:justify-content-start">
-          {filteredCustomers.length > 0 ? (
+          {customers.length > 0 ? (
             <>
-              {filteredCustomers.map((customer) => (
+              {customers.map((customer) => (
                 <Card 
                   key={customer.id} 
                   className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"

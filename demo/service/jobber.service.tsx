@@ -4,6 +4,7 @@ export const JobberService = {
   async getJobbers(
     first: number = 5,
     page: number = 1,
+    search?: string,
     token?: string
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
@@ -33,7 +34,7 @@ export const JobberService = {
       }
     `;
 
-    const variables = { first, page };
+    const variables = { first, page, search };
     const data = await GraphQLService.query<{ 
       jobberPaginateList: {
         paginatorInfo: any;
