@@ -1,7 +1,7 @@
 import { GraphQLService } from "./graphql.service";
 
 export const JobOrderService = {
-  async getJobberList(token?: string): Promise<any[]> {
+  async getJobberList(): Promise<any[]> {
     const query = `
       query JobberList {
         jobberList {
@@ -13,7 +13,7 @@ export const JobOrderService = {
       }
     `;
 
-    const data = await GraphQLService.query<{ jobberList: any[] }>(query, undefined, token);
+    const data = await GraphQLService.query<{ jobberList: any[] }>(query);
 
     return data.jobberList;
   },
@@ -21,8 +21,7 @@ export const JobOrderService = {
   async getOrdersList(
     page: number = 1,
     perPage: number = 10,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query OrderMains($first: Int!, $page: Int!, $search: String) {
@@ -68,7 +67,7 @@ export const JobOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.orderMains.data,
@@ -77,8 +76,7 @@ export const JobOrderService = {
   },
 
   async getOrderDetails(
-    orderId: string,
-    token?: string
+    orderId: string
   ): Promise<any> {
     const query = `
       query OrderDetail($id: ID!) {
@@ -114,15 +112,14 @@ export const JobOrderService = {
       id: orderId
     };
 
-    const data = await GraphQLService.query<{ orderDetail: any }>(query, variables, token);
+    const data = await GraphQLService.query<{ orderDetail: any }>(query, variables);
     return data.orderDetail;
   },
 
   async getJobOrderMains(
     page: number = 1,
     perPage: number = 10,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query JobOrderMains($first: Int!, $page: Int!, $search: String) {
@@ -173,7 +170,7 @@ export const JobOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
   
     return {
       data: data.jobOrderMains.data,
@@ -181,7 +178,7 @@ export const JobOrderService = {
     };
   },
   
-  async getJobOrdersDetails(jobOrderId: string, token?: string): Promise<any> {
+  async getJobOrdersDetails(jobOrderId: string): Promise<any> {
     const query = `
       query JobOrderMain($id: ID!) {
         jobOrderMain(id: $id) {
@@ -233,13 +230,13 @@ export const JobOrderService = {
       id: jobOrderId
     };
   
-    const data = await GraphQLService.query<any>(query, variables, token);
+    const data = await GraphQLService.query<any>(query, variables);
     return {
       jobOrderDetails: data.jobOrderMain.jobOrderDetails
     };
   },
 
-  async getPaymentModes(token?: string): Promise<any> {
+  async getPaymentModes(): Promise<any> {
     const query = `
       query PaymentModes {
         paymentModes {
@@ -251,8 +248,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.query<any>(
       query,
-      undefined,
-      token
+      undefined
     );
 
     return data.paymentModes;
@@ -268,8 +264,7 @@ export const JobOrderService = {
       payment_mode: string;
       payment_ref?: string | null;
       payment_amt: number;
-    },
-    token?: string
+    }
   ): Promise<{ id: string }> {
     const mutation = `
       mutation CreatePaymentMain($input: CreatePaymentMainInput!) {
@@ -305,7 +300,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       createPaymentMain: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.createPaymentMain;
   },
@@ -318,8 +313,7 @@ export const JobOrderService = {
       delivery_date: string | null;
       item_amt: number | null;
       desc1: string | null;
-    },
-    token?: string
+    }
   ): Promise<any> {
     const mutation = `
       mutation UpdateJobOrderDetails(
@@ -341,8 +335,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.query<{ updateJobOrderDetails: any }>(
       mutation,
-      variables,
-      token
+      variables
     );
 
     return data.updateJobOrderDetails;
@@ -352,8 +345,7 @@ export const JobOrderService = {
     id: number | string,
     input: {
       status_id: number | null;
-    },
-    token?: string
+    }
   ): Promise<any> {
     const mutation = `
       mutation UpdateJobOrderStatus($id: ID!, $input: JobOrderStatusInput!) {
@@ -368,7 +360,6 @@ export const JobOrderService = {
     const data = await GraphQLService.query<{ updateJobOrderStatus: any }>(
       mutation,
       variables,
-      token
     );
 
     return data.updateJobOrderStatus;
@@ -376,8 +367,7 @@ export const JobOrderService = {
   
   async markJobOrderDelivered(
     id: string,
-    delivered_qty: number,
-    token?: string
+    delivered_qty: number
   ): Promise<{ id: string }> {
     const mutation = `
       mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
@@ -396,15 +386,14 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       markOrderDelivered: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.markOrderDelivered;
   },
 
   async markJobOrderCancelled(
     id: string,
-    cancelled_qty: number,
-    token?: string
+    cancelled_qty: number
   ): Promise<{ id: string }> {
     const mutation = `
       mutation MarkJobOrderCancelled($input: MarkJobOrderCancelledInput!, $id: ID!) {
@@ -423,7 +412,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       markJobOrderCancelled: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.markJobOrderCancelled;
   },
@@ -445,8 +434,7 @@ export const JobOrderService = {
         delivery_date: string | null;
         status_id?: number;
       }>;
-    },
-    token?: string
+    }
   ): Promise<{ id: string }> {
     const mutation = `
       mutation CreateJobOrderwithInput($input: CreateJobWithDetailsInput!) {
@@ -478,7 +466,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       createJobOrderwithInput: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.createJobOrderwithInput;
   }

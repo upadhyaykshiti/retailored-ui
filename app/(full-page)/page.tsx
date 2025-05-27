@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
-import { Toast } from 'primereact/toast';
+import { AuthService } from '@/demo/service/auth.service';
+import { Toast } from '@capacitor/toast';
 
 const LoginPage = () => {
     const router = useRouter();
-    const toast = useRef<Toast>(null);
     const [step, setStep] = useState<'login' | 'otp'>('login');
     const [mobileNumber, setMobileNumber] = useState('');
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -66,20 +66,30 @@ const LoginPage = () => {
         }
     };
 
-    const handleSubmitMobile = () => {        
+    const handleSubmitMobile = async () => {
+        if (mobileNumber.length !== 10) return;
+
         setIsLoading(true);
-        setTimeout(() => {
-            setIsLoading(false);
+        try {
+            await AuthService.login(mobileNumber);
             setStep('otp');
             setTimer(119);
-            startTimer();
-            toast.current?.show({ 
-                severity: 'success', 
-                summary: 'OTP Sent', 
-                detail: `An OTP is sent to +91-${mobileNumber}`, 
-                life: 3000 
+
+            await Toast.show({
+                text: `An OTP is sent to +91-${mobileNumber}`,
+                duration: 'short',
+                position: 'bottom',
             });
-        }, 1500);
+        } catch (error) {
+            await Toast.show({
+                text: 'Failed to send OTP. Try again.',
+                duration: 'short',
+                position: 'bottom',
+            });
+
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const startTimer = () => {
@@ -103,49 +113,63 @@ const LoginPage = () => {
     const handleVerifyOtp = async (otpValue?: string) => {
         const finalOtp = otpValue || otp.join('');
         if (finalOtp.length !== 6 || !/^\d{6}$/.test(finalOtp)) {
-            toast.current?.show({ severity: 'warn', summary: 'Invalid OTP', detail: 'Please enter a valid 6-digit OTP', life: 3000 });
+            await Toast.show({
+                text: 'Please enter a valid 6-digit OTP',
+                duration: 'short',
+                position: 'bottom',
+            });
             return;
         }
-    
+
         setIsLoading(true);
-        setTimeout(() => {
-            setIsLoading(false);
-            toast.current?.show({ 
-                severity: 'success', 
-                summary: 'Success', 
-                detail: 'OTP successfully validated!', 
-                life: 3000 
+        try {
+            const res = await AuthService.otpVerify(mobileNumber, finalOtp);
+            localStorage.setItem('authToken', res.token);
+            router.push('/pages/dashboard');
+        } catch (error) {
+            await Toast.show({
+                text: 'The OTP you entered is incorrect.',
+                duration: 'short',
+                position: 'bottom',
             });
-            router.push('/');
-        }, 1500);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleResend = () => {
+    const handleResend = async () => {
         if (resendAttempts >= MAX_RESEND_ATTEMPTS) {
-            toast.current?.show({ 
-                severity: 'warn', 
-                summary: 'Limit Exceeded', 
-                detail: 'Max OTP resend attempts reached. Please try again later.', 
-                life: 3000 
-            });
+        await Toast.show({
+            text: 'Max OTP resend attempts reached. Please try again later.',
+            duration: 'short',
+            position: 'bottom',
+        });
             return;
         }
 
         setIsLoading(true);
-        setTimeout(() => {
-            setIsLoading(false);
-            setIsResending(true);
-            setResendAttempts(resendAttempts + 1);
+        try {
+            await AuthService.login(mobileNumber);
             setOtp(['', '', '', '', '', '']);
             setTimer(119);
             startTimer();
-            toast.current?.show({ 
-                severity: 'success', 
-                summary: 'OTP Resent', 
-                detail: `An OTP is resent to +91-${mobileNumber}`, 
-                life: 3000 
+            setIsResending(true);
+            setResendAttempts(prev => prev + 1);
+
+            await Toast.show({
+                text: `An OTP is resent to +91-${mobileNumber}`,
+                duration: 'short',
+                position: 'bottom',
             });
-        }, 1000);
+        } catch (error) {
+            await Toast.show({
+                text: 'Could not resend OTP. Try again.',
+                duration: 'short',
+                position: 'bottom',
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleBack = () => {
@@ -154,6 +178,8 @@ const LoginPage = () => {
         setIsDisabled(false);
         setTimer(119);
         setIsResending(false);
+        setMobileNumber('');
+        setResendAttempts(0);
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
         }
@@ -161,7 +187,6 @@ const LoginPage = () => {
 
     return (
         <div className="surface-ground flex align-items-center justify-content-center min-h-screen min-w-screen p-4">
-            <Toast ref={toast} />
             <div className="w-full max-w-25rem">
                 <div className="text-center mb-5">
                     <Link href="#">
@@ -193,6 +218,11 @@ const LoginPage = () => {
                                     id="mobile"
                                     value={mobileNumber}
                                     onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && mobileNumber.length === 10) {
+                                            handleSubmitMobile();
+                                        }
+                                    }}
                                     placeholder="Enter 10-digit mobile number"
                                     className="w-full p-3"
                                     maxLength={10}
@@ -251,13 +281,16 @@ const LoginPage = () => {
 
                         <div className="flex justify-content-center gap-2">
                             <span className="text-600">Didn&apos;t receive code?</span>
-                            <Button 
-                                label="Resend" 
-                                className="p-button-text p-0" 
-                                onClick={() => {
-                                    setOtp(Array(6).fill(''));
-                                }}
-                            />
+                            {isDisabled ? (
+                                <span className="text-600 font-medium">Resend in {timer}s</span>
+                            ) : (
+                                <Button 
+                                    label="Resend" 
+                                    className="p-button-text p-0" 
+                                    onClick={handleResend}
+                                    disabled={isLoading || isDisabled}
+                                />
+                            )}
                         </div>
 
                         <Button 

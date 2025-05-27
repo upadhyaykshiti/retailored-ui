@@ -4,8 +4,7 @@ export const JobberService = {
   async getJobbers(
     first: number = 5,
     page: number = 1,
-    search?: string,
-    token?: string
+    search?: string
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
       query JobberPaginateList($first: Int!, $page: Int) {
@@ -40,7 +39,7 @@ export const JobberService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return {
       data: data.jobberPaginateList.data,
@@ -57,8 +56,7 @@ export const JobberService = {
       email?: string;
       siteadd?: string;
       cmpcode?: number;
-    },
-    token?: string
+    }
   ): Promise<{ code: string }> {
     const mutation = `
       mutation CreateJobber($input: AdminSiteInput!) {
@@ -75,7 +73,7 @@ export const JobberService = {
         code: string;
         sitename: string;
       } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
     
     return data.createJobber;
   },
@@ -90,8 +88,7 @@ export const JobberService = {
       email?: string;
       siteadd?: string;
       cmpcode?: number;
-    },
-    token?: string
+    }
   ): Promise<{ code: string }> {
     const mutation = `
       mutation UpdateJobber($id: ID!, $input: UpdateAdminSiteInput!) {
@@ -108,7 +105,7 @@ export const JobberService = {
         code: string;
         sitename: string;
       }
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.updateJobber;
   }

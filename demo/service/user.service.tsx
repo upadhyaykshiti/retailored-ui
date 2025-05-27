@@ -5,8 +5,7 @@ export const UserService = {
   async getUsers(
     search: string | null = null,
     first: number = 10,
-    page: number = 1,
-    token?: string
+    page: number = 1
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
       query Users($search: String, $first: Int!, $page: Int) {
@@ -46,7 +45,7 @@ export const UserService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return {
       data: data.users.data,
@@ -54,7 +53,7 @@ export const UserService = {
     };
   },
   
-  async createUser(input: Demo.CreateUserInput, token?: string): Promise<Demo.User> {
+  async createUser(input: Demo.CreateUserInput): Promise<Demo.User> {
     const mutation = `
       mutation CreateAdminSite($input: AdminSiteInput!) {
         createAdminSite(input: $input) {
@@ -108,13 +107,12 @@ export const UserService = {
 
     const data = await GraphQLService.query<{ createAdminSite: { customer: Demo.User } }>(
       mutation, 
-      { input: transformedInput }, 
-      token
+      { input: transformedInput }
     );
     return data.createAdminSite.customer;
   },
 
-  async updateUser(id: string, input: Demo.UpdateUserInput, token?: string): Promise<Demo.User> {
+  async updateUser(id: string, input: Demo.UpdateUserInput): Promise<Demo.User> {
     const mutation = `
       mutation UpdateCustomer($id: ID!, $input: UpdateUserInput!) {
         updateCustomer(id: $id, input: $input) {
@@ -141,8 +139,7 @@ export const UserService = {
 
     const data = await GraphQLService.query<{ updateCustomer: Demo.User }>(
       mutation,
-      { id, input },
-      token
+      { id, input }
     );
     return data.updateCustomer;
   },

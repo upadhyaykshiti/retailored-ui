@@ -1,7 +1,7 @@
 import { GraphQLService } from './graphql.service';
 
 export const SalesOrderService = {
-  async getSalesOrders( page: number = 1, perPage: number = 4, search: string = '', token?: string): Promise<{ data: any[]; pagination: any }> {
+  async getSalesOrders( page: number = 1, perPage: number = 4, search: string = ''): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query OrderMains($first: Int!, $page: Int!, $search: String) {
         orderMains(first: $first, page: $page, search: $search) {
@@ -52,7 +52,7 @@ export const SalesOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.orderMains.data,
@@ -63,8 +63,7 @@ export const SalesOrderService = {
   async getActiveCustomers(
     page: number = 1,
     perPage: number = 2,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query Users($first: Int!, $page: Int!, $search: String) {
@@ -102,7 +101,7 @@ export const SalesOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.users.data,
@@ -113,8 +112,7 @@ export const SalesOrderService = {
   async getActiveMaterials(
     page: number = 1,
     perPage: number = 10,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query MaterialMasters($first: Int!, $page: Int, $search: String) {
@@ -151,7 +149,7 @@ export const SalesOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.materialMasters.data,
@@ -159,7 +157,7 @@ export const SalesOrderService = {
     };
   },
 
-  async getMeasurementData(user_id: string, material_master_id: string, token?: string): Promise<any> {
+  async getMeasurementData(user_id: string, material_master_id: string): Promise<any> {
     const query = `
       query GetMeasurementData($user_id: ID!, $material_master_id: ID!) {
         getMeasurementData(user_id: $user_id, material_master_id: $material_master_id) {
@@ -188,12 +186,12 @@ export const SalesOrderService = {
       getMeasurementData: { 
         masters: any[] 
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return data.getMeasurementData.masters;
   },
 
-  async getSalesOrderById(id: string, token?: string): Promise<any> {
+  async getSalesOrderById(id: string): Promise<any> {
     const query = `
       query OrderMain($id: ID!) {
         orderMain(id: $id) {
@@ -252,11 +250,11 @@ export const SalesOrderService = {
       }
     `;
     const variables = { id };
-    const data = await GraphQLService.query<{ orderMain: any }>(query, variables, token);
+    const data = await GraphQLService.query<{ orderMain: any }>(query, variables);
     return data.orderMain;
   },
 
-  async getOrderMeasurements(orderId: number, token?: string): Promise<any> {
+  async getOrderMeasurements(orderId: number): Promise<any> {
     const query = `
       query OrderDetail($id: ID!) {
         orderDetail(id: $id) {
@@ -281,7 +279,7 @@ export const SalesOrderService = {
     };
 
     try {
-      const response = await GraphQLService.query<any>(query, variables, token);
+      const response = await GraphQLService.query<any>(query, variables);
       const result = response || { orderDetail: null };
       return result;
     } catch (error) {
@@ -296,8 +294,7 @@ export const SalesOrderService = {
       measurement_main_id: number | null;
       measurement_master_id: number | null;
       measurement_val: string | null;
-    }[],
-    token?: string
+    }[]
   ): Promise<any> {
     const mutation = `
       mutation UpdateMeasurementsDetails($id: ID!, $input: [UpdateMeasurementDetailInput!]!) {
@@ -308,7 +305,7 @@ export const SalesOrderService = {
     `;
 
     const variables = { id, input };
-    const data = await GraphQLService.query<{ updateMeasurementsDetails: any }>(mutation, variables, token);
+    const data = await GraphQLService.query<{ updateMeasurementsDetails: any }>(mutation, variables);
     return data.updateMeasurementsDetails;
   },
 
@@ -324,8 +321,7 @@ export const SalesOrderService = {
       ord_qty: number | null;
       desc1: string | null;
       admsite_code: string | null;
-    },
-    token?: string
+    }
   ): Promise<any> {
     const mutation = `
       mutation UpdateOrderDetail($id: ID!, $input: UpdateOrderDetailInput!) {
@@ -339,8 +335,7 @@ export const SalesOrderService = {
 
     const data = await GraphQLService.query<{ updateOrderDetails: any }>(
       mutation,
-      variables,
-      token
+      variables
     );
 
     return data.updateOrderDetails;
@@ -350,8 +345,7 @@ export const SalesOrderService = {
     id: number | string,
     input: {
       status_id: number | null;
-    },
-    token?: string
+    }
   ): Promise<any> {
     const mutation = `
       mutation UpdateSalesOrderStatus($id: ID!, $input: OrderStatusInput!) {
@@ -365,8 +359,7 @@ export const SalesOrderService = {
 
     const data = await GraphQLService.query<{ updateSalesOrderStatus: any }>(
       mutation,
-      variables,
-      token
+      variables
     );
 
     return data.updateSalesOrderStatus;
@@ -374,8 +367,7 @@ export const SalesOrderService = {
 
   async markOrderDelivered(
     id: string,
-    delivered_qty: number,
-    token?: string
+    delivered_qty: number
   ): Promise<{ id: string }> {
       const mutation = `
         mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
@@ -394,15 +386,14 @@ export const SalesOrderService = {
 
     const data = await GraphQLService.mutation<{ 
         markOrderDelivered: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.markOrderDelivered;
   },
 
   async markOrderCancelled(
       id: string,
-      cancelled_qty: number,
-      token?: string
+      cancelled_qty: number
   ): Promise<{ id: string }> {
       const mutation = `
           mutation MarkOrderCancelled($input: MarkOrderCancelledInput!, $id: ID!) {
@@ -421,7 +412,7 @@ export const SalesOrderService = {
 
       const data = await GraphQLService.mutation<{ 
           markOrderCancelled: { id: string } 
-      }>(mutation, variables, token);
+      }>(mutation, variables);
 
       return data.markOrderCancelled;
   },
@@ -454,8 +445,7 @@ export const SalesOrderService = {
           }>;
         }>;
       }>;
-    },
-    token?: string
+    }
   ): Promise<{ id: number }> {
     const mutation = `
       mutation CreateOrderWithDetails($input: CreateOrderWithDetailsInput!) {
@@ -470,7 +460,7 @@ export const SalesOrderService = {
     try {
       const data = await GraphQLService.query<{ 
         createOrderWithDetails: { id: number } 
-      }>(mutation, variables, token);
+      }>(mutation, variables);
       
       return data.createOrderWithDetails;
     } catch (error) {

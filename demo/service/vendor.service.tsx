@@ -3,8 +3,7 @@ import { GraphQLService } from './graphql.service';
 export const VendorService = {
   async getVendors(
     first: number = 5,
-    page: number = 1,
-    token?: string
+    page: number = 1
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
       query VendorPaginateList($first: Int!, $page: Int) {
@@ -38,7 +37,7 @@ export const VendorService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return {
       data: data.vendorPaginateList.data,
@@ -54,8 +53,7 @@ export const VendorService = {
       cmpcode?: string | null;
       mobileNumber?: string | null;
       email?: string | null;
-    },
-    token?: string
+    }
   ): Promise<{ code: string }> {
     const mutation = `
       mutation CreateVendor($input: AdminSiteInput!) {
@@ -72,7 +70,7 @@ export const VendorService = {
         code: string;
         sitename: string;
       } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
     
     return data.createVendor;
   },
@@ -86,8 +84,7 @@ export const VendorService = {
       cmpcode?: string | null;
       mobileNumber?: string | null;
       email?: string | null;
-    },
-    token?: string
+    }
   ): Promise<{ code: string }> {
     const mutation = `
       mutation UpdateVendor($id: ID!, $input: UpdateAdminSiteInput!) {
@@ -104,7 +101,7 @@ export const VendorService = {
         code: string;
         sitename: string;
       } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
     
     return data.updateVendor;
   },
