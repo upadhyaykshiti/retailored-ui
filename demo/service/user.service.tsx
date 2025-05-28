@@ -143,4 +143,72 @@ export const UserService = {
     );
     return data.updateCustomer;
   },
+
+  async getCustomerInfo(id: string): Promise<any> {
+    const query = `
+      query CustomerInfo($id: ID!) {
+        customerInfo(id: $id) {
+          id
+          fname
+          lname
+          email
+          mobileNumber
+          homeAddress
+          dob
+          gender
+          admsite_code
+        }
+      }
+    `;
+
+    const variables = { id };
+    const data = await GraphQLService.query<any>(query, variables);
+    return data.customerInfo;
+  },
+
+  async getCustomerOrders(admsite_code: string, first: number = 5, page: number = 1): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query CustomerOrders($id: ID!, $first: Int!, $page: Int!) {
+        customerOrders(id: $id, first: $first, page: $page) {
+          paginatorInfo {
+            count
+            currentPage
+            firstItem
+            hasMorePages
+            lastItem
+            lastPage
+            perPage
+            total
+          }
+          data {
+            id
+            order_id
+            trial_date
+            delivery_date
+            item_amt
+            ord_qty
+            delivered_qty
+            cancelled_qty
+            inProcess_qty
+            item_ref
+            material {
+              id
+              name
+            }
+            orderStatus {
+              id
+              status_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { id: admsite_code, first, page };
+    const data = await GraphQLService.query<any>(query, variables);
+    return {
+      data: data.customerOrders.data,
+      paginatorInfo: data.customerOrders.paginatorInfo
+    };
+  }
 };
