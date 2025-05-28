@@ -47,5 +47,5 @@ export const AuthService = {
     }>(mutation, variables);
     
     return data.otpVerify;
-  },
+  }
 };
