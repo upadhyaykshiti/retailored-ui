@@ -71,18 +71,7 @@ const LoginPage = () => {
 
         setIsLoading(true);
         try {
-            const timeout = setTimeout(async () => {
-                const response = await AuthService.login(mobileNumber);
-                await Toast.show({
-                    text: `OTP: ${response.otp} (for testing)`,
-                    duration: 'long',
-                    position: 'top',
-                });
-            }, 5000);
-
             await AuthService.login(mobileNumber);
-            clearTimeout(timeout);
-            
             setStep('otp');
             setTimer(119);
 
@@ -160,18 +149,7 @@ const LoginPage = () => {
 
         setIsLoading(true);
         try {
-            const timeout = setTimeout(async () => {
-                const response = await AuthService.login(mobileNumber);
-                await Toast.show({
-                    text: `OTP: ${response.otp} (for testing)`,
-                    duration: 'long',
-                    position: 'top',
-                });
-            }, 5000);
-
             await AuthService.login(mobileNumber);
-            clearTimeout(timeout);
-            
             setOtp(['', '', '', '', '', '']);
             setTimer(119);
             startTimer();

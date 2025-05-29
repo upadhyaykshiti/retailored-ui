@@ -1,0 +1,41 @@
+{
+  "pagination": {
+    "total": 4,
+    "perPage": 20,
+    "currentPage": 1,
+    "lastPage": 1,
+    "hasMorePages": false
+  },
+  "orders": [
+    {
+      "id": "4",
+      "order_id": "4",
+      "customerId": "1",
+      "customerName": "Siddharth",
+      "productId": "2",
+      "productName": "Shirt",
+      "productRef": "ORD-4",
+      "deliveryDate": "2025-05-17 13:04:40",
+      "admsite_code": "6",
+      "statusId": 1,
+      "status": "Pending",
+      "jobOrderStatus": "Pending",
+      "last_jobId": "1"
+    },
+    {
+      "id": "3",
+      "order_id": "3",
+      "customerId": "1",
+      "customerName": "Siddharth",
+      "productId": "3",
+      "productName": "Kurta",
+      "productRef": "ORD-3",
+      "deliveryDate": "2025-05-18 13:04:40",
+      "admsite_code": "6",
+      "statusId": 1,
+      "status": "Pending",
+      "jobOrderStatus": "Completed",
+      "last_jobId": "2"
+    }
+  ]
+}

@@ -34,8 +34,8 @@ const AppMenu = () => {
         {
             label: 'Reports',
             items: [
-                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
-                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true },
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales' },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs' },
                 { label: 'Pending Payments', icon: 'pi pi-fw pi-dollar', to: '/pages/reports/pending-payments' }
             ]
         },
@@ -61,8 +61,8 @@ const AppMenu = () => {
         {
             label: 'Reports',
             items: [
-                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
-                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true }
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales' },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs' }
             ]
         },
         {

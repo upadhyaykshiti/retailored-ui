@@ -13,6 +13,7 @@ import { InputNumber } from 'primereact/inputnumber';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { Sidebar } from 'primereact/sidebar';
 import { Dropdown } from 'primereact/dropdown';
+import { useSearchParams } from 'next/navigation';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
@@ -134,6 +135,8 @@ const SalesOrder = () => {
     reference: ''
   });
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const observer = useRef<IntersectionObserver | null>(null);
   const lastOrderRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +196,12 @@ const SalesOrder = () => {
   useEffect(() => {
     fetchOrders(1, pagination.perPage);
   }, [fetchOrders, pagination.perPage, debouncedSearchTerm]);
+
+  useEffect(() => {
+    if (id) {
+      fetchOrderDetails(id);
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!pagination.hasMorePages || loading || isFetchingMore) return;

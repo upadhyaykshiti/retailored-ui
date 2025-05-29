@@ -37,7 +37,6 @@ interface Order {
     statusName: string;
 }
 
-
 interface OrdersResponse {
     data: Order[];
     paginatorInfo: {

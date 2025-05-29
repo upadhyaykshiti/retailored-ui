@@ -20,6 +20,7 @@ import { ProgressSpinner } from 'primereact/progressspinner';
 import { compressImage } from '@/demo/utils/imageCompressUtils';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { convertImageToBase64 } from '@/demo/utils/imageUtils';
+import { useSearchParams } from 'next/navigation';
 import { Galleria } from 'primereact/galleria';
 import { useDebounce } from 'use-debounce';
 import { Toast } from '@capacitor/toast';
@@ -211,6 +212,8 @@ const JobOrder = () => {
   });
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
 
   const availableStatuses = [
     { id: '1', name: 'Pending' },
@@ -252,11 +255,28 @@ const JobOrder = () => {
     fetchJobOrders(1, debouncedSearchTerm);
   }, [debouncedSearchTerm, fetchJobOrders]);
 
+  useEffect(() => {
+    if (id) {
+      const fetchAndOpen = async () => {
+        await fetchJobOrderDetails(id);
+        setVisible(true);
+      };
+      fetchAndOpen();
+    }
+  }, [id]);
+
   const fetchJobOrderDetails = async (jobOrderId: string) => {
     try {
       setLoadingDetails(true);
       const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
       setJobOrderDetails(response.jobOrderDetails);
+
+      const jobOrder = jobOrders.find(order => order.id === jobOrderId);
+      if (jobOrder) {
+        setSelectedJobOrder(jobOrder);
+      }
+
+      return response;
     } catch (error) {
       await Toast.show({
         text: 'Failed to fetch job order details',
