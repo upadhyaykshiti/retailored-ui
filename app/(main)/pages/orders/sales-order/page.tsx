@@ -137,6 +137,7 @@ const SalesOrder = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
+  const source = searchParams.get('source');
   const observer = useRef<IntersectionObserver | null>(null);
   const lastOrderRef = useRef<HTMLDivElement>(null);
 
@@ -194,12 +195,23 @@ const SalesOrder = () => {
   }, [debouncedSearchTerm]);
 
   useEffect(() => {
-    fetchOrders(1, pagination.perPage);
+    if (!source) {
+      fetchOrders(1, pagination.perPage);
+    }
   }, [fetchOrders, pagination.perPage, debouncedSearchTerm]);
 
   useEffect(() => {
     if (id) {
-      fetchOrderDetails(id);
+      const openDialog = async () => {
+        try {
+          await fetchOrderDetails(id);
+        } finally {
+          setLoading(false);
+          setVisible(true);
+        }
+      };
+
+      openDialog();
     }
   }, [id]);
 
@@ -237,13 +249,14 @@ const SalesOrder = () => {
       if (res && res.orderDetails) {
         const detailedOrder: Order = res;
         setSelectedOrder(detailedOrder);
-        setVisible(true);
       } else {
+        setSelectedOrder(null);
         throw new Error('Order details are missing from the response');
       }
     } catch (err) {
       console.error('Failed to fetch order details:', err);
       setError('Failed to fetch order details');
+      setSelectedOrder(null);
     } finally {
       setListLoading(false);
     }
@@ -292,8 +305,14 @@ const SalesOrder = () => {
 
   const openOrderDetails = (order: Order) => {
     fetchOrderDetails(order.id);
-    setSelectedOrder(order);
     setVisible(true);
+  };
+
+  const handleDialogClose = () => {
+    setVisible(false);
+    if (source) {
+      router.push(`/pages/reports/${source}`);
+    }
   };
 
   const itemTemplate = (item: {itemImageSrc: string}) => {
@@ -797,7 +816,7 @@ const SalesOrder = () => {
       <Dialog 
         header={`Order Details - ${selectedOrder?.docno}`} 
         visible={visible} 
-        onHide={() => setVisible(false)}
+        onHide={handleDialogClose}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
         className={isMaximized ? 'maximized-dialog' : ''}

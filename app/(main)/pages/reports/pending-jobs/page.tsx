@@ -10,8 +10,9 @@ import { Sidebar } from 'primereact/sidebar';
 import { InputText } from 'primereact/inputtext';
 import { Divider } from 'primereact/divider';
 import { Skeleton } from 'primereact/skeleton';
-import { useDebounce } from 'primereact/hooks'; 
+import { useDebounce } from 'primereact/hooks';
 import { ReportsService } from '@/demo/service/reports.service';
+import { JobOrderService } from '@/demo/service/job-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 
 interface PendingJobOrder {
@@ -168,11 +169,11 @@ const PendingJobOrderReport = () => {
   };
 
   const handleViewJO = (jobOrderId: string) => {
-    router.push(`/pages/orders/job-order?id=${jobOrderId}`);
+    router.push(`/pages/orders/job-order?id=${jobOrderId}&source=pending-jobs`);
   };
 
   const handleViewSO = (jobOrderId: string) => {
-    router.push(`/pages/orders/sales-order?id=${jobOrderId}`);
+    router.push(`/pages/orders/sales-order?id=${jobOrderId}&source=pending-jobs`);
   };
 
   const openStatusChangeDialog = (item: PendingJobOrder) => {
@@ -187,10 +188,12 @@ const PendingJobOrderReport = () => {
     try {
       setIsSaving(true);
       
-      // await JobOrderService.updateJobOrderStatus(
-      //   selectedItem.id,
-      //   statusId
-      // );
+      await JobOrderService.updateJobOrderStatus(
+        selectedItem.id,
+         { 
+          status_id: statusId ? parseInt(statusId) : null 
+        }
+      );
 
       await Toast.show({
         text: 'Status updated successfully',
@@ -268,7 +271,7 @@ const PendingJobOrderReport = () => {
       {isSaving && <FullPageLoader />}
       
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
-        <h2 className="text-2xl m-0">Pending Job Orders</h2>
+        <h2 className="text-2xl m-0">Pending Job Orders Report</h2>
         <span className="p-input-icon-right w-full">
           <i className={loading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
           <InputText 
@@ -325,23 +328,26 @@ const PendingJobOrderReport = () => {
                   
                   <Divider className="my-2" />
                   
-                  <div className="flex justify-content-end gap-2 mt-3">
+                  <div className="flex flex-column gap-2 mt-3">
                     <Button 
+                      label="View Job Order"
                       icon="pi pi-eye"
                       onClick={() => handleViewJO(item.job_order_id)}
-                      className="p-button-rounded p-button-info"
+                      className="w-full p-button-info"
                     />
                     
                     <Button 
+                      label="Change Status"
                       icon="pi pi-cog"
                       onClick={() => openStatusChangeDialog(item)}
-                      className="p-button-rounded p-button-secondary"
+                      className="w-full p-button-secondary"
                     />
                     
-                    <Button 
+                    <Button
+                      label="View Sales Order"
                       icon="pi pi-eye"
                       onClick={() => handleViewSO(item.job_order_id)}
-                      className="p-button-rounded"
+                      className="w-full"
                     />
                   </div>
                 </div>

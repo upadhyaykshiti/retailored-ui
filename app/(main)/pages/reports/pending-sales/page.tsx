@@ -13,6 +13,7 @@ import { Divider } from 'primereact/divider';
 import { Skeleton } from 'primereact/skeleton';
 import { useDebounce } from 'primereact/hooks'; 
 import { ReportsService } from '@/demo/service/reports.service';
+import { SalesOrderService } from '@/demo/service/sales-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 
 interface PendingOrderItem {
@@ -167,15 +168,9 @@ const PendingSalesReport = () => {
 
     if (jobOrderStatus === "Completed" || jobOrderStatus === "Pending") {
         const query = jobOrderStatus === "Completed"
-            ? `id=${order_id}&completed=true`
-            : `id=${order_id}`;
+            ? `id=${order_id}`
+            : `id=${order_id}&completed=false`;
         router.push(`/pages/orders/job-order?${query}`);
-    } else {
-        const queryParams = new URLSearchParams({
-            orderId: order_id,
-            itemId: id,
-        });
-        router.push(`/pages/job-orders/create?${queryParams.toString()}`);
     }
   };
 
@@ -191,11 +186,10 @@ const PendingSalesReport = () => {
     try {
       setIsSaving(true);
       
-      // Uncomment when you have the service ready
-      // await SalesOrderService.updateSalesOrderItemStatus(
-      //   selectedItem.id,
-      //   statusId
-      // );
+      await SalesOrderService.updateSalesOrderStatus(
+        selectedItem.id,
+        { status_id: statusId }
+      );
 
       await Toast.show({
         text: 'Status updated successfully',
@@ -228,7 +222,6 @@ const PendingSalesReport = () => {
     try {
       setIsSaving(true);
       
-      // Uncomment when you have the service ready
       // await SalesOrderService.deleteSalesOrderItem(itemToDelete.id);
 
       await Toast.show({
@@ -252,7 +245,7 @@ const PendingSalesReport = () => {
   };
 
   const viewSalesOrder = (orderId: string) => {
-    router.push(`/pages/orders/sales-order?id=${orderId}`);
+    router.push(`/pages/orders/sales-order?id=${orderId}&source=pending-sales`);
   };
 
   if (loading && !isFetchingMore && !debouncedSearchTerm) {
@@ -311,7 +304,7 @@ const PendingSalesReport = () => {
       {isSaving && <FullPageLoader />}
       
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
-        <h2 className="text-2xl m-0">Pending Sales Report</h2>
+        <h2 className="text-2xl m-0">Pending Sales Orders Report</h2>
         <span className="p-input-icon-right w-full">
           <i className={loading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
           <InputText 
@@ -367,26 +360,38 @@ const PendingSalesReport = () => {
                   
                   <Divider className="my-2" />
                   
-                  <div className="flex justify-content-end gap-2 mt-3">
+                  <div className="flex flex-column gap-2 mt-3">
                     <Button 
-                        icon={(item.jobOrderStatus === 'Completed' ? 'pi pi-eye' : 'pi pi-pencil')}
+                        label={item.jobOrderStatus === 'Completed' ? 'View Job Order' : 'Create Job Order'}
+                        icon={(item.jobOrderStatus === 'Completed' ? 'pi pi-eye' : 'pi pi-plus')}
                         onClick={() => handleCreateViewJO(item)}
-                        className={`p-button-rounded ${(item.jobOrderStatus === 'Completed' ? 'p-button-success' : 'p-button-warning')}`}
+                        className={`w-full ${(item.jobOrderStatus === 'Completed' ? 'p-button-info' : 'p-button-warning')}`}
                         disabled={item.status === 'Completed' || item.status === 'Cancelled'}
                     />
                     
                     <Button 
+                        label="Change Status"
                         icon="pi pi-cog"
                         onClick={() => openStatusChangeDialog(item)}
-                        className="p-button-rounded p-button-secondary"
+                        className="w-full p-button-secondary"
                     />
-                    
-                    <Button 
-                        icon="pi pi-eye"
-                        onClick={() => viewSalesOrder(item.order_id)}
-                        className="p-button-rounded"
-                    />
+                
+                    <div className="flex gap-2">
+                        <Button 
+                            label="View Sales Order"
+                            icon="pi pi-eye"
+                            onClick={() => viewSalesOrder(item.order_id)}
+                            className="w-full"
+                        />
+                        <Button 
+                            icon="pi pi-trash"
+                            onClick={() => confirmDelete(item)}
+                            className="p-button-danger"
+                            style={{ width: '20%' }}
+                            disabled={item.jobOrderStatus === 'Completed'}
+                        />
                     </div>
+                  </div>
                 </div>
               </Card>
             </div>
@@ -410,7 +415,6 @@ const PendingSalesReport = () => {
         </div>
       )}
 
-      {/* Status Update Sidebar */}
       <Sidebar 
         visible={statusSidebarVisible} 
         onHide={() => setStatusSidebarVisible(false)}
@@ -424,7 +428,7 @@ const PendingSalesReport = () => {
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
         }}
         header={
-          <div className="sticky top-0 bg-white z-1 p-3 border-bottom-1 surface-border flex justify-content-between align-items-center">
+          <div className="sticky top-0 bg-white z-1 p-3 surface-border flex justify-content-between align-items-center">
             <span className="font-bold text-xl">Update Item Status</span>
           </div>
         }
@@ -460,7 +464,7 @@ const PendingSalesReport = () => {
         onHide={() => setDeleteConfirmVisible(false)}
         style={{ width: '90vw', maxWidth: '500px' }}
       >
-        <div className="flex flex-column gap-3">
+        <div className="flex flex-column gap-3 mt-2">
           <p>
             {itemToDelete && orders.filter(o => o.order_id === itemToDelete.order_id).length === 1 
               ? "This is the only item in the Sales Order. Deleting this will delete the entire Sales Order. Continue?"

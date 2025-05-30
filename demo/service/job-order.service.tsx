@@ -18,11 +18,7 @@ export const JobOrderService = {
     return data.jobberList;
   },
 
-  async getOrdersList(
-    page: number = 1,
-    perPage: number = 10,
-    search: string | null = null
-  ): Promise<{ data: any[]; pagination: any }> {
+  async getOrdersList(page: number = 1, perPage: number = 10, search: string | null = null, id?: string): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query OrderMains($first: Int!, $page: Int!, $search: String) {
         orderMains(first: $first, page: $page, search: $search) {

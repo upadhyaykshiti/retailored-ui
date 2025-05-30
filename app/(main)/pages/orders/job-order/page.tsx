@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 import { Button } from 'primereact/button';
+import { useRouter } from 'next/navigation';
 import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
 import { Dialog } from 'primereact/dialog';
@@ -136,6 +137,7 @@ interface OrderItemDetails {
 }
 
 const JobOrder = () => {
+  const router = useRouter();
   const [jobOrders, setJobOrders] = useState<JobOrderMain[]>([]);
   const [jobOrderDetails, setJobOrderDetails] = useState<JobOrderDetail[]>([]);
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
@@ -213,7 +215,7 @@ const JobOrder = () => {
   const observer = useRef<IntersectionObserver>();
   const loadingRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
-  const id = searchParams.get('id');
+  const source = searchParams.get('source');
 
   const availableStatuses = [
     { id: '1', name: 'Pending' },
@@ -252,37 +254,96 @@ const JobOrder = () => {
   }, []);
 
   useEffect(() => {
-    fetchJobOrders(1, debouncedSearchTerm);
+    if (!source) {
+      fetchJobOrders(1, debouncedSearchTerm);
+    }
   }, [debouncedSearchTerm, fetchJobOrders]);
 
   useEffect(() => {
-    if (id) {
-      const fetchAndOpen = async () => {
-        await fetchJobOrderDetails(id);
-        setVisible(true);
+    const id = searchParams.get('id');
+    const completed = searchParams.get('completed');
+
+    if (id && completed === 'false') {
+      const handleUrlParams = async () => {
+        setCreateOrderVisible(true);
+        
+        if (ordersList.length === 0) {
+          await fetchOrdersList(1);
+        }
+
+        const matchingOrder = ordersList.find(order => order.id === id);
+        if (matchingOrder) {
+          await Promise.all(matchingOrder.orderMain.orderDetails.map(async (item) => {
+            try {
+              const details = await JobOrderService.getOrderDetails(item.id);
+              if (details) {
+                setTrialDate(details?.trial_date ? new Date(details.trial_date) : null);
+                setDeliveryDate(details?.delivery_date ? new Date(details.delivery_date) : null);
+              }
+            } catch (error) {
+              console.error(`Failed to fetch details for item ${item.id}:`, error);
+            }
+          }));
+          
+          handleSelectAllInOrder(matchingOrder, true);
+        }
       };
-      fetchAndOpen();
+
+      handleUrlParams();
+    } else if (id && completed !== 'false') {
+      const openDialog = async () => {
+        try {
+            setLoading(true);
+            await fetchJobOrderDetails(id);
+          } finally {
+            setLoading(false);
+            setVisible(true);
+          }
+        };
+
+      openDialog();
     }
-  }, [id]);
+  }, [ordersList]);
 
   const fetchJobOrderDetails = async (jobOrderId: string) => {
     try {
       setLoadingDetails(true);
       const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
-      setJobOrderDetails(response.jobOrderDetails);
+      
+      const responseData = response.data || response;
+      
+      const details = responseData.jobOrderDetails || responseData.jobOrderMain?.jobOrderDetails || [];
+      
+      setJobOrderDetails(details);
 
-      const jobOrder = jobOrders.find(order => order.id === jobOrderId);
-      if (jobOrder) {
-        setSelectedJobOrder(jobOrder);
-      }
+      const jobOrder: JobOrderMain = {
+        id: responseData.jobOrderMain?.id || jobOrderId,
+        job_date: responseData.jobOrderMain?.job_date || new Date().toISOString(),
+        status_id: responseData.jobOrderMain?.status_id || '1',
+        docno: responseData.jobOrderMain?.docno || `JOB-${jobOrderId}`,
+        ord_qty: responseData.jobOrderMain?.ord_qty || 0,
+        amt_paid: responseData.jobOrderMain?.amt_paid || 0,
+        amt_due: responseData.jobOrderMain?.amt_due || 0,
+        delivered_qty: responseData.jobOrderMain?.delivered_qty || 0,
+        cancelled_qty: responseData.jobOrderMain?.cancelled_qty || 0,
+        desc1: responseData.jobOrderMain?.desc1 || '',
+        status: responseData.jobOrderMain?.status || { id: '1', status_name: 'Pending' },
+        jobOrderDetails: details.map((detail: any) => ({
+          adminSite: detail.adminSite ? { sitename: detail.adminSite.sitename } : undefined
+        }))
+      };
 
-      return response;
+      setSelectedJobOrder(jobOrder);
+
+      return { jobOrder, details };
     } catch (error) {
+      console.error('Error fetching job order details:', error);
       await Toast.show({
         text: 'Failed to fetch job order details',
         duration: 'short',
         position: 'bottom'
       });
+      return null;
     } finally {
       setLoadingDetails(false);
     }
@@ -312,7 +373,9 @@ const JobOrder = () => {
       }
     };
 
-    fetchJobbers();
+    if (!source) {
+      fetchJobbers();
+    }
   }, []);
 
   const fetchOrdersList = useCallback(async (page: number = 1, search: string = '') => {
@@ -370,8 +433,10 @@ const JobOrder = () => {
   }, []);
 
   useEffect(() => {
-    fetchOrdersList(1, debouncedOrderSearchTerm);
-  }, [debouncedOrderSearchTerm, fetchOrdersList]);
+    if (!source) {
+      fetchOrdersList(1, debouncedOrderSearchTerm);
+    }
+  }, [debouncedOrderSearchTerm, fetchOrdersList, source]);
 
   const fetchOrderDetails = async (orderDetailId: string, onSuccess?: (details: any) => void) => {
     try {
@@ -468,8 +533,14 @@ const JobOrder = () => {
 
   const openJobOrderDetails = async (jobOrder: JobOrderMain) => {
     setVisible(true);
-    setSelectedJobOrder(jobOrder);
     await fetchJobOrderDetails(jobOrder.id);
+  };
+
+  const handleDialogClose = () => {
+    setVisible(false);
+    if (source) {
+      router.push(`/pages/reports/${source}`);
+    }
   };
 
   const itemTemplate = (item: {itemImageSrc: string}) => {
@@ -1883,7 +1954,7 @@ const JobOrder = () => {
       <Dialog 
         header={`Order Details - ${selectedJobOrder?.docno || `JOB-${selectedJobOrder?.id}`}`} 
         visible={visible} 
-        onHide={() => setVisible(false)}
+        onHide={handleDialogClose}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
         className={isMaximized ? 'maximized-dialog' : ''}
