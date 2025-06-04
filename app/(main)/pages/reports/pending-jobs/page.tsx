@@ -19,26 +19,26 @@ interface PendingJobOrder {
   id: string;
   job_order_id: string;
   jobberId: string;
-  jobber_name: string;
+  jobberName: string;
   job_date: string;
-  reference: string;
+  productRef: string;
   statusId: string;
   status: string;
-  making_charge: number;
+  making_charges: number;
   productId: string;
-  product_name: string;
+  productName: string;
   customerName: string;
 }
 
 interface PendingJobOrdersResponse {
-  pagination: {
+  data: PendingJobOrder[];
+  paginatorInfo: {
     total: number;
     perPage: number;
     currentPage: number;
     lastPage: number;
     hasMorePages: boolean;
   };
-  jobOrders: PendingJobOrder[];
 }
 
 const PendingJobOrderReport = () => {
@@ -50,7 +50,7 @@ const PendingJobOrderReport = () => {
   const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [pagination, setPagination] = useState({
     currentPage: 1,
-    perPage: 20,
+    perPage: 10,
     total: 0,
     hasMorePages: true
   });
@@ -77,22 +77,22 @@ const PendingJobOrderReport = () => {
       }
 
       const response: PendingJobOrdersResponse = await ReportsService.getPendingJobOrders(
-        page, 
-        perPage, 
-        debouncedSearchTerm
+        debouncedSearchTerm,
+        perPage,
+        page
       );
 
       if (loadMore) {
-        setJobOrders(prev => [...prev, ...response.jobOrders]);
+        setJobOrders(prev => [...prev, ...response.data]);
       } else {
-        setJobOrders(response.jobOrders);
+        setJobOrders(response.data);
       }
 
       setPagination({
-        currentPage: response.pagination.currentPage,
-        perPage: response.pagination.perPage,
-        total: response.pagination.total,
-        hasMorePages: response.pagination.hasMorePages
+        currentPage: response.paginatorInfo.currentPage,
+        perPage: response.paginatorInfo.perPage,
+        total: response.paginatorInfo.total,
+        hasMorePages: response.paginatorInfo.hasMorePages
       });
     } catch (error) {
       console.error('Error fetching pending job orders:', error);
@@ -277,7 +277,7 @@ const PendingJobOrderReport = () => {
           <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search pending job orders..."
+            placeholder="Search"
             className="w-full"
           />
         </span>
@@ -294,7 +294,7 @@ const PendingJobOrderReport = () => {
               <Card className="h-full">
                 <div className="flex flex-column gap-2">
                   <div className="flex justify-content-between align-items-center">
-                    <span className="font-bold">{item.customerName}</span>
+                    <span className="font-bold">{item.jobberName}</span>
                     <Tag 
                       value={item.status}
                       severity={getStatusSeverity(item.status)} 
@@ -305,16 +305,12 @@ const PendingJobOrderReport = () => {
                   
                   <div className="flex flex-column gap-1">
                     <div className="flex justify-content-between">
-                      <span className="text-600">Jobber:</span>
-                      <span>{item.jobber_name}</span>
+                      <span className="text-600">Product:</span>
+                      <span>{item.productName}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Reference:</span>
-                      <span>{item.reference}</span>
-                    </div>
-                    <div className="flex justify-content-between">
-                      <span className="text-600">Product:</span>
-                      <span>{item.product_name}</span>
+                      <span>{item.productRef || '-'}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Job Date:</span>
@@ -322,7 +318,7 @@ const PendingJobOrderReport = () => {
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Making Charge:</span>
-                      <span>{formatCurrency(item.making_charge)}</span>
+                      <span>{formatCurrency(item.making_charges)}</span>
                     </div>
                   </div>
                   

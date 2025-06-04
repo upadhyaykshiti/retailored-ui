@@ -25,9 +25,7 @@ export const JobOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -68,6 +66,56 @@ export const JobOrderService = {
     return {
       data: data.orderMains.data,
       pagination: data.orderMains.paginatorInfo,
+    };
+  },
+
+  async getOrderTypes(
+    first: number = 50,
+    page: number = 1
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query OrderTypes($first: Int!, $page: Int) {
+        orderTypes(first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
+          }
+          data {
+            id
+            type_name
+            job_or_sales
+            ext
+            created_at
+            updated_at
+            jobPriceCharts {
+              id
+              type_id
+              material_id
+              job_or_sales
+              price
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { first, page };
+    const data = await GraphQLService.query<{ 
+      orderTypes: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables);
+    
+    const filteredData = data.orderTypes.data.filter(type => type.job_or_sales === 'J');
+    
+    return {
+      data: filteredData,
+      paginatorInfo: data.orderTypes.paginatorInfo
     };
   },
 
@@ -123,9 +171,7 @@ export const JobOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -418,6 +464,7 @@ export const JobOrderService = {
       job_date?: string | null;
       status_id?: number;
       docno?: string | null;
+      type_id?: number | null;
       job_details: Array<{
         admsite_code?: string;
         order_details_id?: string | null;
@@ -445,6 +492,7 @@ export const JobOrderService = {
         job_date: input.job_date || null,
         status_id: input.status_id || null,
         docno: input.docno || null,
+        type_id: input.type_id || null,
         job_details: input.job_details.map(detail => ({
           admsite_code: detail.admsite_code || null,
           order_details_id: detail.order_details_id || null,

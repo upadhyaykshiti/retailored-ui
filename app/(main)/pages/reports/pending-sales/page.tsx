@@ -16,6 +16,13 @@ import { ReportsService } from '@/demo/service/reports.service';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 
+interface JobOrderStatus {
+  id: string;
+  job_order_main_id: string;
+  status: string;
+  status_name: string;
+}
+
 interface PendingOrderItem {
   id: string;
   order_id: string;
@@ -28,19 +35,19 @@ interface PendingOrderItem {
   admsite_code: string;
   statusId: number;
   status: string;
-  jobOrderStatus: string;
+  jobOrderStatus: JobOrderStatus[];
   last_jobId: string | null;
 }
 
 interface PendingOrdersResponse {
-  pagination: {
+  data: PendingOrderItem[];
+  paginatorInfo: {
     total: number;
     perPage: number;
     currentPage: number;
     lastPage: number;
     hasMorePages: boolean;
   };
-  orders: PendingOrderItem[];
 }
 
 const PendingSalesReport = () => {
@@ -52,7 +59,7 @@ const PendingSalesReport = () => {
   const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [pagination, setPagination] = useState({
     currentPage: 1,
-    perPage: 20,
+    perPage: 10,
     total: 0,
     hasMorePages: true
   });
@@ -81,22 +88,22 @@ const PendingSalesReport = () => {
       }
 
       const response: PendingOrdersResponse = await ReportsService.getPendingSalesOrders(
-        page, 
-        perPage, 
+        page,
+        perPage,
         debouncedSearchTerm
       );
 
       if (loadMore) {
-        setOrders(prev => [...prev, ...response.orders]);
+        setOrders(prev => [...prev, ...response.data]);
       } else {
-        setOrders(response.orders);
+        setOrders(response.data);
       }
 
       setPagination({
-        currentPage: response.pagination.currentPage,
-        perPage: response.pagination.perPage,
-        total: response.pagination.total,
-        hasMorePages: response.pagination.hasMorePages
+        currentPage: response.paginatorInfo.currentPage,
+        perPage: response.paginatorInfo.perPage,
+        total: response.paginatorInfo.total,
+        hasMorePages: response.paginatorInfo.hasMorePages
       });
     } catch (error) {
       console.error('Error fetching pending sales orders:', error);
@@ -116,7 +123,7 @@ const PendingSalesReport = () => {
 
   useEffect(() => {
     fetchPendingOrders(1, pagination.perPage);
-  }, [fetchPendingOrders, pagination.perPage]);
+  }, [fetchPendingOrders, pagination.perPage, debouncedSearchTerm]);
 
   useEffect(() => {
     if (!pagination.hasMorePages || loading || isFetchingMore) return;
@@ -165,12 +172,16 @@ const PendingSalesReport = () => {
 
   const handleCreateViewJO = (item: PendingOrderItem) => {
     const { order_id, id, jobOrderStatus } = item;
+    
+    const latestStatus = jobOrderStatus.length > 0 
+      ? jobOrderStatus[jobOrderStatus.length - 1].status_name 
+      : 'Pending';
 
-    if (jobOrderStatus === "Completed" || jobOrderStatus === "Pending") {
-        const query = jobOrderStatus === "Completed"
-            ? `id=${order_id}`
-            : `id=${order_id}&completed=false`;
-        router.push(`/pages/orders/job-order?${query}`);
+    if (latestStatus === "Completed" || latestStatus === "Pending") {
+      const query = latestStatus === "Completed"
+        ? `id=${order_id}&source=pending-sales`
+        : `id=${order_id}&completed=false`;
+      router.push(`/pages/orders/job-order?${query}`);
     }
   };
 
@@ -222,7 +233,7 @@ const PendingSalesReport = () => {
     try {
       setIsSaving(true);
       
-      // await SalesOrderService.deleteSalesOrderItem(itemToDelete.id);
+      await ReportsService.deleteSalesOrderItem(itemToDelete.id);
 
       await Toast.show({
         text: 'Item deleted successfully',
@@ -310,7 +321,7 @@ const PendingSalesReport = () => {
           <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search pending orders..."
+            placeholder="Search"
             className="w-full"
           />
         </span>
@@ -347,13 +358,17 @@ const PendingSalesReport = () => {
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">Delivery Date:</span>
-                      <span>{formatDate(item.deliveryDate)}</span>
+                      <span>{item.deliveryDate ? formatDate(item.deliveryDate) : 'Not scheduled'}</span>
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">JO Status:</span>
                       <Tag 
-                        value={item.jobOrderStatus}
-                        severity={getStatusSeverity(item.jobOrderStatus)}
+                        value={item.jobOrderStatus.length > 0 
+                          ? item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name 
+                          : 'Pending'}
+                        severity={getStatusSeverity(item.jobOrderStatus.length > 0 
+                          ? item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name 
+                          : 'Pending')}
                       />
                     </div>
                   </div>
@@ -362,11 +377,17 @@ const PendingSalesReport = () => {
                   
                   <div className="flex flex-column gap-2 mt-3">
                     <Button 
-                        label={item.jobOrderStatus === 'Completed' ? 'View Job Order' : 'Create Job Order'}
-                        icon={(item.jobOrderStatus === 'Completed' ? 'pi pi-eye' : 'pi pi-plus')}
-                        onClick={() => handleCreateViewJO(item)}
-                        className={`w-full ${(item.jobOrderStatus === 'Completed' ? 'p-button-info' : 'p-button-warning')}`}
-                        disabled={item.status === 'Completed' || item.status === 'Cancelled'}
+                      label={item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
+                        ? 'View Job Order' 
+                        : 'Create Job Order'}
+                      icon={(item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
+                        ? 'pi pi-eye' 
+                        : 'pi pi-plus')}
+                      onClick={() => handleCreateViewJO(item)}
+                      className={`w-full ${(item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
+                        ? 'p-button-info' 
+                        : 'p-button-warning')}`}
+                      disabled={item.status === 'Completed' || item.status === 'Cancelled'}
                     />
                     
                     <Button 
@@ -388,7 +409,8 @@ const PendingSalesReport = () => {
                             onClick={() => confirmDelete(item)}
                             className="p-button-danger"
                             style={{ width: '20%' }}
-                            disabled={item.jobOrderStatus === 'Completed'}
+                            disabled={item.jobOrderStatus.length > 0 && 
+                              item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed'}
                         />
                     </div>
                   </div>
@@ -450,7 +472,13 @@ const PendingSalesReport = () => {
                     status.name === 'Cancelled' ? 'pi pi-times-circle' :
                     'pi pi-info-circle'
                   }
-                  disabled={(status.id) === selectedItem?.statusId || ((status.id) === 3 && selectedItem?.jobOrderStatus !== 'Completed')}
+                  disabled={
+                    (status.id) === selectedItem?.statusId || 
+                    ((status.id) === 3 && (
+                      !selectedItem?.jobOrderStatus?.length || 
+                      selectedItem.jobOrderStatus[selectedItem.jobOrderStatus.length - 1].status_name !== 'Completed'
+                    ))
+                  }
                 />
               </div>
             ))}

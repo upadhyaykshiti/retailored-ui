@@ -38,6 +38,10 @@ interface Material {
     mrp: number;
 }
 
+interface ExtendedMaterial extends Material {
+    displayPrice: number;
+}
+
 interface MeasurementMaster {
     id: string;
     measurement_name: string;
@@ -122,7 +126,7 @@ const CreateOrder = () => {
     const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [customerPage, setCustomerPage] = useState(1);
-    const [materials, setMaterials] = useState<Material[]>([]);
+    const [materials, setMaterials] = useState<ExtendedMaterial[]>([]);
     const [materialSearch, setMaterialSearch] = useState('');
     const [materialPage, setMaterialPage] = useState(1);
     const [garmentRefNames, setGarmentRefNames] = useState<{[instanceId: string]: string}>({});
@@ -137,6 +141,14 @@ const CreateOrder = () => {
     const materialSearchTimeout = useRef<NodeJS.Timeout>();
     const observerTarget = useRef<HTMLDivElement>(null);
     const searchTimeout = useRef<NodeJS.Timeout>();
+
+    const getMaterialPrice = (material: any, type: 'stitching' | 'alteration' = 'stitching') => {
+        const priceItem = material.priceChart?.find(
+            (item: any) => item.type?.type_name === (type === 'stitching' ? 'Stitching' : 'Alteration')
+        );
+        
+        return priceItem?.price || material.mrp || 0;
+    };
 
     useEffect(() => {
         return () => {
@@ -204,7 +216,10 @@ const CreateOrder = () => {
                 searchTerm || null
             );
             
-            const materialsData = response.data;
+            const materialsData: ExtendedMaterial[] = response.data.map((material: Material) => ({
+                ...material,
+                displayPrice: getMaterialPrice(material)
+            }));
             const pagination = response.pagination;
     
             if (page === 1) {
@@ -329,6 +344,13 @@ const CreateOrder = () => {
         setCurrentGarment(garment);
         const instanceId = generateInstanceId(garment, index);
         setCurrentInstanceId(instanceId);
+
+        const existingItem = itemsData[instanceId];
+        const selectedType = (existingItem?.type === 'alteration' || existingItem?.type === 'stitching')
+            ? existingItem.type
+            : 'stitching';
+
+        setType(selectedType);
         setShowCreateDialog(true);
     };
 
@@ -350,7 +372,7 @@ const CreateOrder = () => {
         }));
     };
 
-   const handleOutfitSelection = (garment: Material) => {
+    const handleOutfitSelection = (garment: Material) => {
         const newGarments = [...selectedGarments, garment];
         setSelectedGarments(newGarments);
         setShowOutfitSelectionDialog(false);
@@ -358,17 +380,22 @@ const CreateOrder = () => {
         
         const instanceId = generateInstanceId(garment, newGarments.length - 1);
         setCurrentInstanceId(instanceId);
+
+        const existingItem = itemsData[instanceId];
+
+        const selectedType = (existingItem?.type as 'stitching' | 'alteration') || 'stitching';
+        const initialStitchingPrice = getMaterialPrice(garment, selectedType);
         
         setItemsData(prev => ({
             ...prev,
             [instanceId]: {
-                type: 'stitching',
+                type: selectedType,
                 specialInstructions: '',
                 deliveryDate: null,
                 trialDate: null,
                 isPriority: false,
                 quantity: 1,
-                stitchingPrice: 0,
+                stitchingPrice: initialStitchingPrice,
                 inspiration: '',
                 uploadedImages: [],
                 additionalCosts: []
@@ -381,7 +408,7 @@ const CreateOrder = () => {
                 [instanceId]: selectedCustomer.fname
             }));
         }
-        
+        setType(selectedType);
         setShowCreateDialog(true);
     };
 
@@ -650,6 +677,7 @@ const CreateOrder = () => {
                         item_ref: garmentRefNames[instanceId] || '',
                         admsite_code: parseInt(selectedCustomer.admsite_code) || 0,
                         status_id: 1,
+                        type_id: itemData.type === 'stitching' ? 1 : 2,
                         desc1: itemData.specialInstructions || '',
                         desc2: itemData.inspiration || '',
                         measurement_main: [{
@@ -670,7 +698,6 @@ const CreateOrder = () => {
             const orderPayload = {
                 user_id: parseInt(selectedCustomer.id),
                 order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                type_id: 1,
                 status_id: 1,
                 order_details: orderDetails
             };
@@ -990,7 +1017,7 @@ const CreateOrder = () => {
                             >
                                 <div>
                                     <span className="font-medium text-900">{material.name}</span>
-                                    <div className="text-sm text-500">₹{material.mrp}</div>
+                                    <div className="text-sm text-500">₹{material.displayPrice.toLocaleString('en-IN')}</div>
                                 </div>
                                 <i className="pi pi-plus-circle text-2xl" />
                             </div>
@@ -1064,71 +1091,105 @@ const CreateOrder = () => {
                         <label>Type</label>
                         <div className="flex gap-3 mt-2">
                             <div className="flex align-items-center">
-                                <RadioButton inputId="stitching" name="type" value="stitching" onChange={(e) => setType(e.value)} checked={type === 'stitching'} />
+                                <RadioButton 
+                                    inputId="stitching" 
+                                    name="type" 
+                                    value="stitching" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const stitchingPrice = getMaterialPrice(currentGarment, 'stitching');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: stitchingPrice
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    checked={type === 'stitching'} 
+                                />
                                 <label htmlFor="stitching" className="ml-2">Stitching</label>
                             </div>
                             <div className="flex align-items-center">
-                                <RadioButton inputId="alteration" name="type" value="alteration" onChange={(e) => setType(e.value)} checked={type === 'alteration'} />
+                                <RadioButton 
+                                    inputId="alteration" 
+                                    name="type" 
+                                    value="alteration" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const alterationPrice = getMaterialPrice(currentGarment, 'alteration');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: alterationPrice
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    checked={type === 'alteration'} 
+                                />
                                 <label htmlFor="alteration" className="ml-2">Alteration</label>
                             </div>
                         </div>
                     </div>
 
-                    {type === 'stitching' && (
-                        <>
-                            <div className="flex flex-column gap-3 mb-4">
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Add Measurements</span>
-                                        <div className="w-3 text-right">
-                                           {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
-                                                <Button 
-                                                    label="Edit"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            ) : (
-                                                <Button 
-                                                    label="Add"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Stitch Options</span>
-                                        <div className="w-3 text-right">
-                                            <Button 
-                                                label="Add" 
-                                                icon="pi pi-plus" 
-                                                onClick={() => {
-                                                    if (currentInstanceId) {
-                                                        const currentOptions = stitchOptions[currentInstanceId] || {};
-                                                        setCollarOption(currentOptions.collar || null);
-                                                        setSleeveOption(currentOptions.sleeve || null);
-                                                        setBottomOption(currentOptions.bottom || null);
-                                                        setPocketOption(currentOptions.pocket || '');
-                                                        setPocketSquareOption(currentOptions.pocketSquare || '');
-                                                        setCuffsOption(currentOptions.cuffs || '');
-                                                    }
-                                                    setShowStitchOptionsDialog(true);
-                                                }}
-                                                className="p-button-sm p-button-outlined"
-                                            />
-                                        </div>
-                                    </div>
+                    <div className="flex flex-column gap-3 mb-4">
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Add Measurements</span>
+                                <div className="w-3 text-right">
+                                    {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
+                                        <Button 
+                                            label="Edit"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
+                                            onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    ) : (
+                                        <Button 
+                                            label="Add"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
+                                            onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    )}
                                 </div>
                             </div>
-                        </>
-                    )}
+                        </div>
+
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Stitch Options</span>
+                                <div className="w-3 text-right">
+                                    <Button 
+                                        label="Add" 
+                                        icon="pi pi-plus" 
+                                        onClick={() => {
+                                            if (currentInstanceId) {
+                                                const currentOptions = stitchOptions[currentInstanceId] || {};
+                                                setCollarOption(currentOptions.collar || null);
+                                                setSleeveOption(currentOptions.sleeve || null);
+                                                setBottomOption(currentOptions.bottom || null);
+                                                setPocketOption(currentOptions.pocket || '');
+                                                setPocketSquareOption(currentOptions.pocketSquare || '');
+                                                setCuffsOption(currentOptions.cuffs || '');
+                                            }
+                                            setShowStitchOptionsDialog(true);
+                                        }}
+                                        className="p-button-sm p-button-outlined"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="field mb-4">
                         <label htmlFor="instructions">Special Instructions</label>

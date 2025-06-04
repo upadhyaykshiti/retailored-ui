@@ -1,100 +1,126 @@
-import salesOrderReport from '../../public/demo/data/salesOrderReport.json';
-import jobOrderReport from '../../public/demo/data/jobOrderReport.json';
+import { GraphQLService } from './graphql.service';
 
 export const ReportsService = {
   async getPendingSalesOrders(
     page: number = 1,
-    perPage: number = 20,
+    first: number = 10,
     search: string | null = null
-  ): Promise<{
-    orders: any[];
-    pagination: {
-      total: number;
-      perPage: number;
-      currentPage: number;
-      lastPage: number;
-      hasMorePages: boolean;
-    };
-  }> {
-    const allOrders = salesOrderReport.orders;
-
-    const filtered = search
-      ? allOrders.filter((order) =>
-          order.customerName.toLowerCase().includes(search.toLowerCase()) ||
-          order.productName.toLowerCase().includes(search.toLowerCase())
-        )
-      : allOrders;
-
-    const total = filtered.length;
-    const start = (page - 1) * perPage;
-    const paginated = filtered.slice(start, start + perPage);
-    const lastPage = Math.ceil(total / perPage);
-
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          orders: paginated,
-          pagination: {
-            total,
-            perPage,
-            currentPage: page,
-            lastPage,
-            hasMorePages: page < lastPage
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query GetPendingSalesOrder($first: Int!, $page: Int!) {
+        getPendingSalesOrder(first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
           }
-        });
-      }, 500);
-    });
+          data {
+            id
+            order_id
+            productId
+            productName
+            productRef
+            docno
+            deliveryDate
+            admsite_code
+            customerName
+            statusId
+            status
+            jobOrderStatus {
+              id
+              job_order_main_id
+              status
+              status_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { page, first, search };
+
+    const data = await GraphQLService.query<{
+      getPendingSalesOrder: {
+        data: any[];
+        paginatorInfo: any;
+      };
+    }>(query, variables);
+
+    return {
+      data: data.getPendingSalesOrder.data,
+      paginatorInfo: data.getPendingSalesOrder.paginatorInfo
+    };
   },
 
   async getPendingJobOrders(
-    page: number = 1,
-    perPage: number = 20,
     search: string | null = null,
-    statusFilter: string | null = null
-  ): Promise<{
-    jobOrders: any[];
-    pagination: {
-      total: number;
-      perPage: number;
-      currentPage: number;
-      lastPage: number;
-      hasMorePages: boolean;
-    };
-  }> {
-    const allJobOrders = jobOrderReport.jobOrders;
-
-    const filtered = allJobOrders.filter((order) => {
-      const matchesSearch = search
-        ? order.customerName.toLowerCase().includes(search.toLowerCase()) ||
-          order.product_name.toLowerCase().includes(search.toLowerCase()) ||
-          order.reference.toLowerCase().includes(search.toLowerCase())
-        : true;
-
-      const matchesStatus = statusFilter
-        ? order.status.toLowerCase() === statusFilter.toLowerCase()
-        : true;
-
-      return matchesSearch && matchesStatus;
-    });
-
-    const total = filtered.length;
-    const start = (page - 1) * perPage;
-    const paginated = filtered.slice(start, start + perPage);
-    const lastPage = Math.ceil(total / perPage);
-
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          jobOrders: paginated,
-          pagination: {
-            total,
-            perPage,
-            currentPage: page,
-            lastPage,
-            hasMorePages: page < lastPage
+    first: number = 10,
+    page: number = 1
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query GetPendingJobOrder($first: Int!, $page: Int!) {
+        getPendingJobOrder(first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
           }
-        });
-      }, 500);
-    });
-  }
+          data {
+            id
+            job_order_id
+            admsite_code
+            jobberName
+            productId
+            productName
+            docno
+            productRef
+            making_charges
+            job_date
+            statusId
+            status
+          }
+        }
+      }
+    `;
+
+    const variables = { search, page, first };
+
+    const data = await GraphQLService.query<{
+      getPendingJobOrder: {
+        data: any[];
+        paginatorInfo: any;
+      };
+    }>(query, variables);
+
+    return {
+      data: data.getPendingJobOrder.data,
+      paginatorInfo: data.getPendingJobOrder.paginatorInfo
+    };
+  },
+
+  async deleteSalesOrderItem(id: string): Promise<boolean> {
+    const query = `
+      mutation DeleteSalesOrderItem($id: ID!) {
+        deleteSalesOrderItem(id: $id) {
+        }
+      }
+    `;
+
+    const variables = { id };
+
+    const data = await GraphQLService.query<{
+      deleteSalesOrderItem: {
+        success: boolean;
+        message: string;
+      };
+    }>(query, variables);
+
+    return data.deleteSalesOrderItem.success;
+  },
 };

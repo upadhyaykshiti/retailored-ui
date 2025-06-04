@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
+import { useRouter } from 'next/navigation';
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
@@ -13,6 +14,7 @@ import { Checkbox } from 'primereact/checkbox';
 import { Galleria } from 'primereact/galleria';
 import { Sidebar } from 'primereact/sidebar';
 import { useState, useEffect, useRef } from 'react';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
@@ -34,6 +36,15 @@ interface Material {
     img_url: string | null;
     wsp: number;
     mrp: number;
+}
+
+interface ExtendedMaterial extends Material {
+    displayPrice: number;
+}
+
+interface SelectedGarmentEntry {
+    garment: Material;
+    instanceId: string;
 }
 
 interface MeasurementMaster {
@@ -84,8 +95,9 @@ interface StitchOptions {
 }
 
 const CreateOrder = () => {
+    const router = useRouter();
     const [visible, setVisible] = useState(false);
-    const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
+    const [selectedGarments, setSelectedGarments] = useState<SelectedGarmentEntry[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [currentGarment, setCurrentGarment] = useState<Material | null>(null);
     const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
@@ -119,7 +131,7 @@ const CreateOrder = () => {
     const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [customerPage, setCustomerPage] = useState(1);
-    const [materials, setMaterials] = useState<Material[]>([]);
+    const [materials, setMaterials] = useState<ExtendedMaterial[]>([]);
     const [materialSearch, setMaterialSearch] = useState('');
     const [materialPage, setMaterialPage] = useState(1);
     const [garmentRefNames, setGarmentRefNames] = useState<{[instanceId: string]: string}>({});
@@ -134,6 +146,14 @@ const CreateOrder = () => {
     const materialSearchTimeout = useRef<NodeJS.Timeout>();
     const observerTarget = useRef<HTMLDivElement>(null);
     const searchTimeout = useRef<NodeJS.Timeout>();
+
+    const getMaterialPrice = (material: any, type: 'stitching' | 'alteration' = 'stitching') => {
+        const priceItem = material.priceChart?.find(
+            (item: any) => item.type?.type_name === (type === 'stitching' ? 'Stitching' : 'Alteration')
+        );
+        
+        return priceItem?.price || material.mrp || 0;
+    };
 
     useEffect(() => {
         return () => {
@@ -159,32 +179,32 @@ const CreateOrder = () => {
     const fetchCustomers = async (searchTerm = '', page = 1) => {
         setIsLoadingCustomers(true);
         try {
-        const { data, pagination } = await SalesOrderService.getActiveCustomers(
+          const { data, pagination } = await SalesOrderService.getActiveCustomers(
             page,
             20,
             searchTerm || null
-        );
-        
-        if (page === 1) {
+         );
+
+          if (page === 1) {
             setAllCustomers(data);
-        } else {
+          } else {
             setAllCustomers(prev => [...prev, ...data]);
-        }
+          }
         
-        setCustomerPagination({
+          setCustomerPagination({
             hasMorePages: pagination.hasMorePages,
             currentPage: pagination.currentPage,
             total: pagination.total
-        });
+          });
         } catch (error) {
-        console.error('Error fetching customers:', error);
-        await Toast.show({
+          console.error('Error fetching customers:', error);
+          await Toast.show({
             text: 'Failed to load customers',
             duration: 'short',
             position: 'top'
-        });
+          });
         } finally {
-        setIsLoadingCustomers(false);
+          setIsLoadingCustomers(false);
         }
     };
       
@@ -197,11 +217,14 @@ const CreateOrder = () => {
         try {
             const response = await SalesOrderService.getActiveMaterials(
                 page,
-                20,
+                10,
                 searchTerm || null
             );
             
-            const materialsData = response.data;
+            const materialsData: ExtendedMaterial[] = response.data.map((material: Material) => ({
+                ...material,
+                displayPrice: getMaterialPrice(material)
+            }));
             const pagination = response.pagination;
     
             if (page === 1) {
@@ -316,19 +339,10 @@ const CreateOrder = () => {
         return `${garment.id}-${index}`;
     };
 
-    const handleSelectCustomer = (customer: Customer) => {
-        setSelectedCustomer(customer);
-        setShowCustomerDialog(false);
-        setCustomerSearch('');
-    };
-
-    const handleAddOutfit = (garment: Material, index: number) => {
-        const instanceId = generateInstanceId(garment, index);
-        
-        setCurrentGarment(garment);
-        setCurrentInstanceId(instanceId);
-        
+    const ensureInstanceDataInitialized = (instanceId: string, garment: Material, currentSelectedCustomer: Customer | null) => {
         if (!itemsData[instanceId]) {
+            const initialStitchingPrice = getMaterialPrice(garment, 'stitching');
+
             setItemsData(prev => ({
                 ...prev,
                 [instanceId]: {
@@ -338,22 +352,25 @@ const CreateOrder = () => {
                     trialDate: null,
                     isPriority: false,
                     quantity: 1,
-                    stitchingPrice: 0,
+                    stitchingPrice: initialStitchingPrice,
                     inspiration: '',
                     uploadedImages: [],
                     additionalCosts: []
                 }
             }));
         }
-        
-        if (selectedCustomer && !garmentRefNames[instanceId]) {
+        if (currentSelectedCustomer && !garmentRefNames[instanceId]) {
             setGarmentRefNames(prev => ({
                 ...prev,
-                [instanceId]: selectedCustomer.fname
+                [instanceId]: currentSelectedCustomer.fname
             }));
         }
-        
-        setShowCreateDialog(true);
+    };
+ 
+    const handleSelectCustomer = (customer: Customer) => {
+        setSelectedCustomer(customer);
+        setShowCustomerDialog(false);
+        setCustomerSearch('');
     };
 
     const handleClearCustomer = () => {
@@ -375,70 +392,47 @@ const CreateOrder = () => {
     };
 
     const handleOutfitSelection = (garment: Material) => {
-        const existingCount = selectedGarments.filter(g => g.id === garment.id).length;
+        const existingCount = selectedGarments.filter(sg => sg.garment.id === garment.id).length;
         const instanceId = generateInstanceId(garment, existingCount);
         
-        setSelectedGarments(prev => [...prev, garment]);
+        setSelectedGarments(prev => [...prev, { garment, instanceId }]);
         
         setShowOutfitSelectionDialog(false);
         setCurrentGarment(garment);
         setCurrentInstanceId(instanceId);
         
-        if (!itemsData[instanceId]) {
-            setItemsData(prev => ({
-                ...prev,
-                [instanceId]: {
-                    type: 'stitching',
-                    specialInstructions: '',
-                    deliveryDate: null,
-                    trialDate: null,
-                    isPriority: false,
-                    quantity: 1,
-                    stitchingPrice: 0,
-                    inspiration: '',
-                    uploadedImages: [],
-                    additionalCosts: []
-                }
-            }));
-        }
-        
-        if (selectedCustomer && !garmentRefNames[instanceId]) {
-            setGarmentRefNames(prev => ({
-                ...prev,
-                [instanceId]: selectedCustomer.fname
-            }));
-        }
+        ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
         
         setShowCreateDialog(true);
     };
 
-    const openMeasurementDialog = async (garment: Material, index: number) => {
-        const instanceId = generateInstanceId(garment, index);
-        setCurrentGarment(garment);
-        setCurrentInstanceId(instanceId);
-        
-        if (!garmentRefNames[instanceId] && selectedCustomer) {
+    const openMeasurementDialog = async (garmentForDialog: Material, instanceIdForDialog: string) => {
+        setCurrentGarment(garmentForDialog);
+        setCurrentInstanceId(instanceIdForDialog);
+    
+        if (!selectedCustomer) return;
+    
+        if (!garmentRefNames[instanceIdForDialog] && selectedCustomer) {
             setGarmentRefNames(prev => ({
                 ...prev,
-                [instanceId]: selectedCustomer.fname
+                [instanceIdForDialog]: selectedCustomer.fname
             }));
         }
-        
-        await fetchMeasurementData(garment.id);
-        
-        const existingMeasurements = allMeasurements[instanceId] || {};
-        
-        const initialValues: {[key: string]: string} = {};
+    
+        await fetchMeasurementData(garmentForDialog.id);
+    
+        const existingMeasurementsForInstance = allMeasurements[instanceIdForDialog] || {};
+    
+        const initialValues: { [key: string]: string } = {};
         measurementData.forEach(master => {
-            initialValues[master.measurement_name] = 
-                master.measurementDetail?.measurement_val || '';
+            initialValues[master.measurement_name] = master.measurementDetail?.measurement_val || '';
         });
-        
+    
         setCurrentMeasurements({
             ...initialValues,
-            ...existingMeasurements
+            ...existingMeasurementsForInstance
         });
-        
+    
         setVisible(true);
     };
 
@@ -649,8 +643,8 @@ const CreateOrder = () => {
             const currentDate = new Date();
             
             const orderDetails = await Promise.all(
-                selectedGarments.map(async (garment, index) => {
-                    const instanceId = generateInstanceId(garment, index);
+                selectedGarments.map(async (sgEntry) => {
+                    const { garment, instanceId } = sgEntry;
                     const itemData = itemsData[instanceId] || {};
                     
                     const base64Images = await Promise.all(
@@ -676,6 +670,7 @@ const CreateOrder = () => {
                         item_ref: garmentRefNames[instanceId] || '',
                         admsite_code: parseInt(selectedCustomer.admsite_code) || 0,
                         status_id: 1,
+                        type_id: itemData.type === 'stitching' ? 1 : 2,
                         desc1: itemData.specialInstructions || '',
                         desc2: itemData.inspiration || '',
                         measurement_main: [{
@@ -697,7 +692,6 @@ const CreateOrder = () => {
             const orderPayload = {
                 user_id: parseInt(selectedCustomer.id),
                 order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                type_id: 1,
                 status_id: 1,
                 order_details: orderDetails
             };
@@ -714,6 +708,8 @@ const CreateOrder = () => {
             setAllMeasurements({});
             setIsMesurementSaved({});
             setStitchOptions({});
+
+            router.push('/pages/orders/sales-order');
             
             return response;
         } catch (error) {
@@ -762,6 +758,7 @@ const CreateOrder = () => {
 
     return (
         <div className="flex flex-column p-3 lg:p-5 mb-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            {(isConfirmingOrder) && <FullPageLoader />}
             <h2 className="text-2xl m-0 mb-3">Create Order</h2>
             <Card className="mb-4">
                 <div className="flex flex-column gap-2 p-3 surface-50 border-round">
@@ -814,8 +811,8 @@ const CreateOrder = () => {
 
                 {selectedGarments.length > 0 ? (
                     <div className="grid">
-                        {selectedGarments.map((garment, index) => {
-                            const instanceId = generateInstanceId(garment, index);
+                        {selectedGarments.map((sgEntry) => {
+                            const { garment, instanceId } = sgEntry;
                             return (
                                 <div key={instanceId} className="col-12 md:col-6 lg:col-4">
                                     <Card className="h-full">
@@ -823,42 +820,31 @@ const CreateOrder = () => {
                                             <div className="flex justify-content-between align-items-center">
                                                 <span className="font-medium">{garment.name}</span>
                                                 <div className="flex gap-2">
-                                                    <Button 
-                                                        icon="pi pi-pencil" 
+                                                    <Button
+                                                        icon="pi pi-pencil"
                                                         rounded
                                                         text
                                                         severity="info"
-                                                        onClick={() => handleAddOutfit(garment, index)}
+                                                        onClick={() => {
+                                                            setCurrentGarment(garment);
+                                                            setCurrentInstanceId(instanceId);
+                                                            ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
+                                                            setShowCreateDialog(true);
+                                                        }}
                                                     />
-                                                    <Button 
-                                                        icon="pi pi-trash" 
+                                                    <Button
+                                                        icon="pi pi-trash"
                                                         rounded
-                                                        text 
+                                                        text
                                                         severity="danger"
                                                         onClick={() => {
-                                                            setSelectedGarments(
-                                                                selectedGarments.filter((g, i) => i !== index)
-                                                            );
-                                                            setGarmentRefNames(prev => {
-                                                                const newRefNames = {...prev};
-                                                                delete newRefNames[instanceId];
-                                                                return newRefNames;
-                                                            });
-                                                            setAllMeasurements(prev => {
-                                                                const newMeasurements = {...prev};
-                                                                delete newMeasurements[instanceId];
-                                                                return newMeasurements;
-                                                            });
-                                                            setIsMesurementSaved(prev => {
-                                                                const newSaved = {...prev};
-                                                                delete newSaved[instanceId];
-                                                                return newSaved;
-                                                            });
-                                                            setStitchOptions(prev => {
-                                                                const newOptions = {...prev};
-                                                                delete newOptions[instanceId];
-                                                                return newOptions;
-                                                            });
+                                                            setSelectedGarments(prevSg => prevSg.filter(item => item.instanceId !== instanceId));
+                                                            setGarmentRefNames(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setAllMeasurements(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setIsMesurementSaved(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setStitchOptions(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setItemsData(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setGarmentTotals(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
                                                         }}
                                                     />
                                                 </div>
@@ -1015,7 +1001,7 @@ const CreateOrder = () => {
                             >
                                 <div>
                                     <span className="font-medium text-900">{material.name}</span>
-                                    <div className="text-sm text-500">₹{material.mrp}</div>
+                                    <div className="text-sm text-500">₹{material.displayPrice.toLocaleString('en-IN')}</div>
                                 </div>
                                 <i className="pi pi-plus-circle text-2xl" />
                             </div>
@@ -1089,71 +1075,113 @@ const CreateOrder = () => {
                         <label>Type</label>
                         <div className="flex gap-3 mt-2">
                             <div className="flex align-items-center">
-                                <RadioButton inputId="stitching" name="type" value="stitching" onChange={(e) => setType(e.value)} checked={type === 'stitching'} />
+                                <RadioButton 
+                                    inputId="stitching" 
+                                    name="type" 
+                                    value="stitching" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const stitchingPrice = getMaterialPrice(currentGarment, 'stitching');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: stitchingPrice
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    checked={type === 'stitching'} 
+                                />
                                 <label htmlFor="stitching" className="ml-2">Stitching</label>
                             </div>
                             <div className="flex align-items-center">
-                                <RadioButton inputId="alteration" name="type" value="alteration" onChange={(e) => setType(e.value)} checked={type === 'alteration'} />
+                                <RadioButton 
+                                    inputId="alteration" 
+                                    name="type" 
+                                    value="alteration" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const alterationPrice = getMaterialPrice(currentGarment, 'alteration');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: alterationPrice
+                                                }
+                                            }));
+                                        }
+                                    }} 
+                                    checked={type === 'alteration'} 
+                                />
                                 <label htmlFor="alteration" className="ml-2">Alteration</label>
                             </div>
                         </div>
                     </div>
 
-                    {type === 'stitching' && (
-                        <>
-                            <div className="flex flex-column gap-3 mb-4">
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Add Measurements</span>
-                                        <div className="w-3 text-right">
-                                           {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
-                                                <Button 
-                                                    label="Edit"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            ) : (
-                                                <Button 
-                                                    label="Add"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Stitch Options</span>
-                                        <div className="w-3 text-right">
-                                            <Button 
-                                                label="Add" 
-                                                icon="pi pi-plus" 
-                                                onClick={() => {
-                                                    if (currentInstanceId) {
-                                                        const currentOptions = stitchOptions[currentInstanceId] || {};
-                                                        setCollarOption(currentOptions.collar || null);
-                                                        setSleeveOption(currentOptions.sleeve || null);
-                                                        setBottomOption(currentOptions.bottom || null);
-                                                        setPocketOption(currentOptions.pocket || '');
-                                                        setPocketSquareOption(currentOptions.pocketSquare || '');
-                                                        setCuffsOption(currentOptions.cuffs || '');
-                                                    }
-                                                    setShowStitchOptionsDialog(true);
-                                                }}
-                                                className="p-button-sm p-button-outlined"
-                                            />
-                                        </div>
-                                    </div>
+                    <div className="flex flex-column gap-3 mb-4">
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Add Measurements</span>
+                                <div className="w-3 text-right">
+                                    {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
+                                        <Button
+                                            label="Edit"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    ) : (
+                                        <Button
+                                            label="Add"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    )}
                                 </div>
                             </div>
-                        </>
-                    )}
+                        </div>
+
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Stitch Options</span>
+                                <div className="w-3 text-right">
+                                    <Button 
+                                        label="Add" 
+                                        icon="pi pi-plus" 
+                                        onClick={() => {
+                                            if (currentInstanceId) {
+                                                const currentOptions = stitchOptions[currentInstanceId] || {};
+                                                setCollarOption(currentOptions.collar || null);
+                                                setSleeveOption(currentOptions.sleeve || null);
+                                                setBottomOption(currentOptions.bottom || null);
+                                                setPocketOption(currentOptions.pocket || '');
+                                                setPocketSquareOption(currentOptions.pocketSquare || '');
+                                                setCuffsOption(currentOptions.cuffs || '');
+                                            }
+                                            setShowStitchOptionsDialog(true);
+                                        }}
+                                        className="p-button-sm p-button-outlined"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="field mb-4">
                         <label htmlFor="instructions">Special Instructions</label>

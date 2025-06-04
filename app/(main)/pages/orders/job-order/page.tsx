@@ -131,9 +131,10 @@ interface OrderItem {
 interface OrderItemDetails {
   quantity: number;
   makingCharge: number;
+  processType: any | null;
   image: File | null;
   selectedImages?: string[];
-  allImages ?: string[];
+  allImages?: string[];
 }
 
 const JobOrder = () => {
@@ -164,6 +165,9 @@ const JobOrder = () => {
   const [selectedJobber, setSelectedJobber] = useState<any>(null);
   const [ordersList, setOrdersList] = useState<OrdersList[]>([]);
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
+  const [processTypes, setProcessTypes] = useState<any[]>([]);
+  const [selectedProcessType, setSelectedProcessType] = useState<any>(null);
+  const [loadingProcessTypes, setLoadingProcessTypes] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderSidebarVisible, setOrderSidebarVisible] = useState(false);
   const [loadingOrdersButton, setLoadingOrdersButton] = useState(false);
@@ -349,34 +353,44 @@ const JobOrder = () => {
     }
   };
 
-  useEffect(() => {
+  const fetchJobbers = async () => {
     setLoadingJobbers(true);
-    const fetchJobbers = async () => {
-      try {
-        const response = await JobOrderService.getJobberList();
-        response.map(jobber => ({
-          label: jobber.sitename,
-          value: {
-            ...jobber,
-            code: jobber.code
-          }
-        }));
-      } catch (error) {
-        console.error('Error fetching jobbers:', error);
-        await Toast.show({
-          text: 'Failed to fetch jobbers',
-          duration: 'short',
-          position: 'bottom'
-        });
-      } finally {
-        setLoadingJobbers(false);
-      }
-    };
-
-    if (!source) {
-      fetchJobbers();
+    try {
+      const response = await JobOrderService.getJobberList();
+      const formattedJobbers = response.map(jobber => ({
+        label: jobber.sitename,
+        value: jobber.code,
+        ...jobber
+      }));
+      setJobbers(formattedJobbers);
+    } catch (error) {
+      console.error('Error fetching jobbers:', error);
+      await Toast.show({
+        text: 'Failed to fetch jobbers',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setLoadingJobbers(false);
     }
-  }, []);
+  };
+
+  const fetchProcessTypes = async () => {
+    try {
+      setLoadingProcessTypes(true);
+      const { data } = await JobOrderService.getOrderTypes();
+      setProcessTypes(data);
+    } catch (error) {
+      console.error('Error fetching process types:', error);
+      await Toast.show({
+        text: 'Failed to fetch process types',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setLoadingProcessTypes(false);
+    }
+  };
 
   const fetchOrdersList = useCallback(async (page: number = 1, search: string = '') => {
     try {
@@ -601,19 +615,30 @@ const JobOrder = () => {
     setItemManagementSidebarVisible(true);
   };
     
-  const handleQuantityChange = (newQuantity: number) => {
-    if (!currentlyEditingItem) return;
-    
-    const clampedQty = Math.min(Math.max(1, newQuantity), currentlyEditingItem.maxQuantity);
-    
-    setItemDetails(prev => ({
-      ...prev,
-      [currentlyEditingItem.id]: {
-        ...(prev[currentlyEditingItem.id] || {quantity: 1, image: null}),
-        quantity: clampedQty
-      }
-    }));
-  };
+const handleQuantityChange = (newQuantity: number) => {
+  if (!currentlyEditingItem) return;
+  
+  const clampedQty = Math.min(Math.max(1, newQuantity), currentlyEditingItem.maxQuantity);
+  const currentProcess = itemDetails[currentlyEditingItem.id]?.processType;
+  const materialId = currentlyEditingItem.materialId;
+  
+  let makingCharge = 0;
+  if (currentProcess) {
+    const priceChart = currentProcess.jobPriceCharts?.find(
+      (chart: any) => chart.material_id === materialId
+    );
+    makingCharge = priceChart ? priceChart.price * clampedQty : 0;
+  }
+  
+  setItemDetails(prev => ({
+    ...prev,
+    [currentlyEditingItem.id]: {
+      ...(prev[currentlyEditingItem.id] || {quantity: 1, makingCharge: 0}),
+      quantity: clampedQty,
+      makingCharge: makingCharge
+    }
+  }));
+};
   
   const handleMakingChargeChange = (value: number) => {
     if (!currentlyEditingItem) return;
@@ -731,6 +756,15 @@ const JobOrder = () => {
     try {
       const details = await JobOrderService.getOrderDetails(item.id);
 
+      let makingCharge = 0;
+      const processType = selectedProcessType || itemDetails[itemKey]?.processType;
+      if (processType) {
+        const priceChart = processType.jobPriceCharts?.find(
+          (chart: any) => chart.material_id === item.material.id
+        );
+        makingCharge = priceChart ? priceChart.price * (details?.ord_qty || 1) : 0;
+      }
+
       openItemManagement({
         id: itemKey,
         materialId: item.material.id,
@@ -748,10 +782,13 @@ const JobOrder = () => {
       setItemDetails(prev => ({
         ...prev,
         [itemKey]: {
-          ...(prev[itemKey] || { quantity: details?.ord_qty || 1, makingCharge: 0 }),
+          quantity: details?.ord_qty || 1, 
+          makingCharge: makingCharge,
+          processType: processType || null,
           selectedImages: [],
-          allImages: details?.image_url || []
-        }
+          allImages: details?.image_url || [],
+          image: null
+        } as OrderItemDetails
       }));
 
       setTrialDate(details?.trial_date ? new Date(details.trial_date) : null);
@@ -837,6 +874,7 @@ const JobOrder = () => {
         job_date: new Date().toISOString().split('T')[0],
         status_id: 1,
         docno: docno,
+        type_id: selectedProcessType ? Number(selectedProcessType.id) : null,
         job_details: jobDetails
       });
 
@@ -879,26 +917,22 @@ const JobOrder = () => {
     }
   };
 
-  const openCreateOrderDialog = async () => {
-    setIsCreateOrderLoading(true);
-    try {
-      const jobbersResponse = await JobOrderService.getJobberList();
-      const formattedJobbers = jobbersResponse.map(jobber => ({
-        label: jobber.sitename,
-        value: jobber.code,
-        ...jobber
-      }));
-      setJobbers(formattedJobbers);
-      setCreateOrderVisible(true);
-    } catch (error) {
-      console.error('Error:', error);
-      await Toast.show({
-        text: 'Failed to initialize order creation',
-        duration: 'short',
-        position: 'bottom'
-      });
-    } finally {
-      setIsCreateOrderLoading(false);
+  const openCreateOrderDialog = () => {
+    setSelectedProcessType(null);
+    setSelectedJobber(null);
+    setSelectedItems([]);
+    setCreateOrderVisible(true);
+  };
+
+  const handleJobber = async () => {
+    if (jobbers.length === 0 && !loadingJobbers) {
+      await fetchJobbers();
+    }
+  };
+
+  const handleProcessType = async () => {
+    if (processTypes.length === 0 && !loadingProcessTypes) {
+      await fetchProcessTypes();
     }
   };
 
@@ -1343,12 +1377,53 @@ const JobOrder = () => {
                 setSelectedJobber(e.value);
                 setSelectedCode(e.value);
               }}
+              onShow={handleJobber}
               optionLabel="label"
               placeholder={loadingJobbers ? "Loading jobbers..." : "Select a jobber"}
               className="w-full"
               filter
               filterBy="label"
               disabled={loadingJobbers}
+              emptyMessage={loadingJobbers ? "Loading jobbers..." : "No jobbers found"}
+            />
+          </div>
+
+          <div className="field my-4">
+            <label htmlFor="processType" className="font-bold block mb-2">
+              Process Type
+            </label>
+            <Dropdown 
+              id="processType"
+              value={selectedProcessType}
+              options={processTypes}
+              onChange={(e) => {
+                setSelectedProcessType(e.value);
+                const newItemDetails = {...itemDetails};
+                
+                Object.keys(newItemDetails).forEach(key => {
+                  const item = selectedItems.find(i => i.id === key);
+                  if (item && e.value) {
+                    const priceChart = e.value.jobPriceCharts?.find(
+                      (chart: any) => chart.material_id === item.materialId
+                    );
+                    newItemDetails[key] = {
+                      ...newItemDetails[key],
+                      processType: e.value,
+                      makingCharge: priceChart ? priceChart.price * (newItemDetails[key].quantity || 1) : 0
+                    };
+                  }
+                });
+                
+                setItemDetails(newItemDetails);
+              }}
+              onShow={handleProcessType}
+              optionLabel="type_name"
+              placeholder={loadingProcessTypes ? "Loading process types..." : "Select a process"}
+              className="w-full"
+              filter
+              filterBy="label"
+              disabled={loadingProcessTypes}
+              emptyMessage={loadingProcessTypes ? "Loading process types..." : "No process types found"}
             />
           </div>
 

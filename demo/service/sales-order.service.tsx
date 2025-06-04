@@ -8,8 +8,6 @@ export const SalesOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
-            lastItem
             lastPage
             perPage
             total
@@ -71,9 +69,7 @@ export const SalesOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -120,9 +116,7 @@ export const SalesOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -133,6 +127,17 @@ export const SalesOrderService = {
             image_url
             wsp
             mrp
+            priceChart {
+              id
+              material_id
+              job_or_sales
+              price
+              ext
+              type {
+                id
+                type_name
+              }
+            }
           }
         }
       }
@@ -148,7 +153,7 @@ export const SalesOrderService = {
       materialMasters: {
         paginatorInfo: any;
         data: any[];
-      } 
+      }
     }>(query, variables);
 
     return {
@@ -421,7 +426,6 @@ export const SalesOrderService = {
     input: {
       user_id: number;
       order_date: string;
-      type_id: number;
       order_details: Array<{
         material_master_id: number;
         image_url: string[];
@@ -433,6 +437,7 @@ export const SalesOrderService = {
         item_ref: string;
         admsite_code: number;
         status_id: number;
+        type_id: number;
         desc1: string;
         desc2: string;
         measurement_main: Array<{

@@ -9,7 +9,7 @@ import { Dropdown } from 'primereact/dropdown';
 import { TabView, TabPanel } from 'primereact/tabview';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { JobOrderService } from '@/demo/service/job-order.service';
-import { PendingPaymentsService } from '@/demo/service/pending-transactions'; 
+import { PendingPaymentsService } from '@/demo/service/pending-transactions.service';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 import { useDebounce } from 'use-debounce';
 import { Toast } from '@capacitor/toast';
