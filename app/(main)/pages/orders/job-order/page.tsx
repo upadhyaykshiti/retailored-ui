@@ -315,31 +315,32 @@ const JobOrder = () => {
       const response = await JobOrderService.getJobOrdersDetails(jobOrderId);
       
       const responseData = response.data || response;
-      
       const details = responseData.jobOrderDetails || responseData.jobOrderMain?.jobOrderDetails || [];
       
       setJobOrderDetails(details);
 
-      const jobOrder: JobOrderMain = {
-        id: responseData.jobOrderMain?.id || jobOrderId,
-        job_date: responseData.jobOrderMain?.job_date || new Date().toISOString(),
-        status_id: responseData.jobOrderMain?.status_id || '1',
-        docno: responseData.jobOrderMain?.docno || `JOB-${jobOrderId}`,
-        ord_qty: responseData.jobOrderMain?.ord_qty || 0,
-        amt_paid: responseData.jobOrderMain?.amt_paid || 0,
-        amt_due: responseData.jobOrderMain?.amt_due || 0,
-        delivered_qty: responseData.jobOrderMain?.delivered_qty || 0,
-        cancelled_qty: responseData.jobOrderMain?.cancelled_qty || 0,
-        desc1: responseData.jobOrderMain?.desc1 || '',
-        status: responseData.jobOrderMain?.status || { id: '1', status_name: 'Pending' },
-        jobOrderDetails: details.map((detail: any) => ({
-          adminSite: detail.adminSite ? { sitename: detail.adminSite.sitename } : undefined
-        }))
-      };
+      setSelectedJobOrder(prev => {
+        const newJobOrder = {
+          ...(prev || {}),
+          id: responseData.jobOrderMain?.id || jobOrderId,
+          job_date: responseData.jobOrderMain?.job_date || prev?.job_date || new Date().toISOString(),
+          status_id: responseData.jobOrderMain?.status_id || prev?.status_id || '1',
+          docno: responseData.jobOrderMain?.docno || prev?.docno || `JOB-${jobOrderId}`,
+          ord_qty: responseData.jobOrderMain?.ord_qty || prev?.ord_qty || 0,
+          amt_paid: responseData.jobOrderMain?.amt_paid || prev?.amt_paid || 0,
+          amt_due: responseData.jobOrderMain?.amt_due || prev?.amt_due || 0,
+          delivered_qty: responseData.jobOrderMain?.delivered_qty || prev?.delivered_qty || 0,
+          cancelled_qty: responseData.jobOrderMain?.cancelled_qty || prev?.cancelled_qty || 0,
+          desc1: responseData.jobOrderMain?.desc1 || prev?.desc1 || '',
+          status: responseData.jobOrderMain?.status || prev?.status || { id: '1', status_name: 'Pending' },
+          jobOrderDetails: details.map((detail: any) => ({
+            adminSite: detail.adminSite ? { sitename: detail.adminSite.sitename } : undefined
+          }))
+        };
+        return newJobOrder;
+      });
 
-      setSelectedJobOrder(jobOrder);
-
-      return { jobOrder, details };
+      return { jobOrder: jobOrders, details };
     } catch (error) {
       console.error('Error fetching job order details:', error);
       await Toast.show({
@@ -547,6 +548,7 @@ const JobOrder = () => {
 
   const openJobOrderDetails = async (jobOrder: JobOrderMain) => {
     setVisible(true);
+    setSelectedJobOrder(jobOrder);
     await fetchJobOrderDetails(jobOrder.id);
   };
 
