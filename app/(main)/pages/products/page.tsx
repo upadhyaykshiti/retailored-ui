@@ -679,6 +679,22 @@ const Products = () => {
           onMaximize={(e) => setIsMaximized(e.maximized)}
           className={isMaximized ? 'maximized-dialog' : ''}
           blockScroll
+          footer={
+            <div className="flex justify-content-end gap-2 mt-3">
+              <Button 
+                label="Cancel" 
+                icon="pi pi-times" 
+                onClick={() => setShowDialog(false)}
+                className="p-button-text"
+              />
+              <Button 
+                label="Save" 
+                icon="pi pi-check" 
+                onClick={handleSave}
+                disabled={!currentGarment.name || currentGarment.measurements?.length === 0}
+              />
+            </div>
+          }
         >
           <div className="flex flex-column gap-3 mt-3">
             <div className="field">
@@ -881,21 +897,6 @@ const Products = () => {
                 itemTemplate={statusItemTemplate}
                 valueTemplate={statusItemTemplate}
                 className="w-full"
-              />
-            </div>
-
-            <div className="flex justify-content-end gap-2 mt-3">
-              <Button 
-                label="Cancel" 
-                icon="pi pi-times" 
-                onClick={() => setShowDialog(false)}
-                className="p-button-text"
-              />
-              <Button 
-                label="Save" 
-                icon="pi pi-check" 
-                onClick={handleSave}
-                disabled={!currentGarment.name || currentGarment.measurements?.length === 0}
               />
             </div>
           </div>

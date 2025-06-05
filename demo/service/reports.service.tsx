@@ -74,6 +74,7 @@ export const ReportsService = {
           data {
             id
             job_order_id
+            sales_order_id
             admsite_code
             jobberName
             productId

@@ -171,17 +171,12 @@ const PendingSalesReport = () => {
   };
 
   const handleCreateViewJO = (item: PendingOrderItem) => {
-    const { order_id, id, jobOrderStatus } = item;
+    const { order_id, jobOrderStatus } = item;
     
-    const latestStatus = jobOrderStatus.length > 0 
-      ? jobOrderStatus[jobOrderStatus.length - 1].status_name 
-      : 'Pending';
-
-    if (latestStatus === "Completed" || latestStatus === "Pending") {
-      const query = latestStatus === "Completed"
-        ? `id=${order_id}&source=pending-sales`
-        : `id=${order_id}&completed=false`;
-      router.push(`/pages/orders/job-order?${query}`);
+    if (jobOrderStatus.length === 0) {
+      router.push(`/pages/orders/job-order?id=${order_id}&completed=false&source=pending-sales`);
+    } else {
+      router.push(`/pages/orders/job-order?id=${order_id}&source=pending-sales`);
     }
   };
 
@@ -362,12 +357,12 @@ const PendingSalesReport = () => {
                     </div>
                     <div className="flex justify-content-between">
                       <span className="text-600">JO Status:</span>
-                      <Tag 
+                     <Tag 
                         value={item.jobOrderStatus.length > 0 
-                          ? item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name 
+                          ? item.jobOrderStatus[0].status_name
                           : 'Pending'}
                         severity={getStatusSeverity(item.jobOrderStatus.length > 0 
-                          ? item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name 
+                          ? item.jobOrderStatus[0].status_name 
                           : 'Pending')}
                       />
                     </div>
@@ -377,20 +372,13 @@ const PendingSalesReport = () => {
                   
                   <div className="flex flex-column gap-2 mt-3">
                     <Button 
-                      label={item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
-                        ? 'View Job Order' 
-                        : 'Create Job Order'}
-                      icon={(item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
-                        ? 'pi pi-eye' 
-                        : 'pi pi-plus')}
+                      label={item.jobOrderStatus.length > 0 ? 'View Job Order' : 'Create Job Order'}
+                      icon={item.jobOrderStatus.length > 0 ? 'pi pi-eye' : 'pi pi-plus'}
                       onClick={() => handleCreateViewJO(item)}
-                      className={`w-full ${(item.jobOrderStatus.length > 0 && item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed' 
-                        ? 'p-button-info' 
-                        : 'p-button-warning')}`}
-                      disabled={item.status === 'Completed' || item.status === 'Cancelled'}
+                      className={`w-full ${item.jobOrderStatus.length > 0 ? 'p-button-info' : 'p-button-warning'}`}
                     />
                     
-                    <Button 
+                    <Button
                         label="Change Status"
                         icon="pi pi-cog"
                         onClick={() => openStatusChangeDialog(item)}

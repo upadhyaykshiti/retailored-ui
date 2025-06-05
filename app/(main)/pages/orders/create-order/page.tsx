@@ -42,6 +42,11 @@ interface ExtendedMaterial extends Material {
     displayPrice: number;
 }
 
+interface SelectedGarmentEntry {
+    garment: Material;
+    instanceId: string;
+}
+
 interface MeasurementMaster {
     id: string;
     measurement_name: string;
@@ -55,9 +60,14 @@ interface MeasurementMaster {
     };
 }
 
+interface MeasurementEntry {
+  val: string | null;
+  master_id: string;
+}
+
 interface MeasurementValues {
     [instanceId: string]: {
-      [measurement: string]: string | null;
+      [measurement_name: string]: MeasurementEntry;
     };
 }
 
@@ -92,13 +102,13 @@ interface StitchOptions {
 const CreateOrder = () => {
     const router = useRouter();
     const [visible, setVisible] = useState(false);
-    const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
+    const [selectedGarments, setSelectedGarments] = useState<SelectedGarmentEntry[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [currentGarment, setCurrentGarment] = useState<Material | null>(null);
     const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
     const [type, setType] = useState('stitching');
     const [isMaximized, setIsMaximized] = useState(true);
-    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: string | null}>({});
+    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: MeasurementEntry}>({});
     const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
     const [isMesurementSaved, setIsMesurementSaved] = useState<{[instanceId: string]: boolean}>({});
     const [showStitchOptionsDialog, setShowStitchOptionsDialog] = useState(false);
@@ -142,8 +152,8 @@ const CreateOrder = () => {
     const observerTarget = useRef<HTMLDivElement>(null);
     const searchTimeout = useRef<NodeJS.Timeout>();
 
-    const getMaterialPrice = (material: any, type: 'stitching' | 'alteration' = 'stitching') => {
-        const priceItem = material.priceChart?.find(
+    const getMaterialPrice = (material: Material, type: 'stitching' | 'alteration' = 'stitching'): number => {
+        const priceItem = (material as any).priceChart?.find(
             (item: any) => item.type?.type_name === (type === 'stitching' ? 'Stitching' : 'Alteration')
         );
         
@@ -178,14 +188,14 @@ const CreateOrder = () => {
             page,
             20,
             searchTerm || null
-          );
-          
+         );
+
           if (page === 1) {
             setAllCustomers(data);
           } else {
             setAllCustomers(prev => [...prev, ...data]);
           }
-          
+        
           setCustomerPagination({
             hasMorePages: pagination.hasMorePages,
             currentPage: pagination.currentPage,
@@ -249,8 +259,8 @@ const CreateOrder = () => {
         fetchMaterials('', 1);
     }, []);
 
-    const fetchMeasurementData = async (materialId: string) => {
-        if (!selectedCustomer) return;
+    const fetchMeasurementData = async (materialId: string): Promise<MeasurementMaster[]> => {
+        if (!selectedCustomer) return [];
         
         setIsLoadingMeasurements(true);
         setIsAddingMeasurements(true);
@@ -260,6 +270,7 @@ const CreateOrder = () => {
             materialId
           );
           setMeasurementData(measurements);
+          return measurements;
         } catch (error) {
           console.error('Error fetching measurements:', error);
           await Toast.show({
@@ -267,6 +278,7 @@ const CreateOrder = () => {
             duration: 'short',
             position: 'top'
           });
+          return [];
         } finally {
           setIsLoadingMeasurements(false);
           setIsAddingMeasurements(false);
@@ -334,24 +346,42 @@ const CreateOrder = () => {
         return `${garment.id}-${index}`;
     };
 
+    const ensureInstanceDataInitialized = (instanceId: string, garment: Material, currentSelectedCustomer: Customer | null) => {
+        if (!itemsData[instanceId]) {
+            const selectedType = 'stitching';
+            const initialStitchingPrice = getMaterialPrice(garment, selectedType);
+
+            setItemsData(prev => ({
+                ...prev,
+                [instanceId]: {
+                    type: selectedType,
+                    specialInstructions: '',
+                    deliveryDate: null,
+                    trialDate: null,
+                    isPriority: false,
+                    quantity: 1,
+                    stitchingPrice: initialStitchingPrice,
+                    inspiration: '',
+                    uploadedImages: [],
+                    additionalCosts: []
+                }
+            }));
+        } else {
+            setType(itemsData[instanceId].type);
+        }
+        
+        if (currentSelectedCustomer && !garmentRefNames[instanceId]) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceId]: currentSelectedCustomer.fname
+            }));
+        }
+    };
+ 
     const handleSelectCustomer = (customer: Customer) => {
         setSelectedCustomer(customer);
         setShowCustomerDialog(false);
         setCustomerSearch('');
-    };
-
-    const handleAddOutfit = (garment: Material, index: number) => {
-        setCurrentGarment(garment);
-        const instanceId = generateInstanceId(garment, index);
-        setCurrentInstanceId(instanceId);
-
-        const existingItem = itemsData[instanceId];
-        const selectedType = (existingItem?.type === 'alteration' || existingItem?.type === 'stitching')
-            ? existingItem.type
-            : 'stitching';
-
-        setType(selectedType);
-        setShowCreateDialog(true);
     };
 
     const handleClearCustomer = () => {
@@ -373,103 +403,100 @@ const CreateOrder = () => {
     };
 
     const handleOutfitSelection = (garment: Material) => {
-        const newGarments = [...selectedGarments, garment];
-        setSelectedGarments(newGarments);
+        const existingCount = selectedGarments.filter(sg => sg.garment.id === garment.id).length;
+        const instanceId = generateInstanceId(garment, existingCount);
+        
+        setSelectedGarments(prev => [...prev, { garment, instanceId }]);
+        
         setShowOutfitSelectionDialog(false);
         setCurrentGarment(garment);
-        
-        const instanceId = generateInstanceId(garment, newGarments.length - 1);
         setCurrentInstanceId(instanceId);
-
-        const existingItem = itemsData[instanceId];
-
-        const selectedType = (existingItem?.type as 'stitching' | 'alteration') || 'stitching';
-        const initialStitchingPrice = getMaterialPrice(garment, selectedType);
         
-        setItemsData(prev => ({
-            ...prev,
-            [instanceId]: {
-                type: selectedType,
-                specialInstructions: '',
-                deliveryDate: null,
-                trialDate: null,
-                isPriority: false,
-                quantity: 1,
-                stitchingPrice: initialStitchingPrice,
-                inspiration: '',
-                uploadedImages: [],
-                additionalCosts: []
-            }
-        }));
-        
-        if (selectedCustomer) {
-            setGarmentRefNames(prev => ({
-                ...prev,
-                [instanceId]: selectedCustomer.fname
-            }));
+        ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
+
+        if (itemsData[instanceId]) {
+            setType(itemsData[instanceId].type);
+        } else {
+            setType('stitching');
         }
-        setType(selectedType);
+        
         setShowCreateDialog(true);
     };
 
-    const openMeasurementDialog = async (garment: Material, index: number) => {
-        const instanceId = generateInstanceId(garment, index);
-        setCurrentGarment(garment);
-        setCurrentInstanceId(instanceId);
-        await fetchMeasurementData(garment.id);
-        
-        const initialValues: {[key: string]: string} = {};
-        measurementData.forEach(master => {
-          initialValues[master.measurement_name] = 
-            master.measurementDetail?.measurement_val || '';
+    const openMeasurementDialog = async (garmentForDialog: Material, instanceIdForDialog: string) => {
+        setCurrentGarment(garmentForDialog);
+        setCurrentInstanceId(instanceIdForDialog);
+    
+        if (!selectedCustomer) return;
+    
+        if (!garmentRefNames[instanceIdForDialog] && selectedCustomer) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceIdForDialog]: selectedCustomer.fname
+            }));
+        }
+    
+        const garmentSpecificMasters = await fetchMeasurementData(garmentForDialog.id);
+    
+        const existingMeasurementsForInstance = allMeasurements[instanceIdForDialog] || {};
+        const initialDialogMeasurements: { [key: string]: MeasurementEntry } = {};
+
+        garmentSpecificMasters.forEach(master => {
+            const existingEntry = existingMeasurementsForInstance[master.measurement_name];
+            if (existingEntry) {
+                initialDialogMeasurements[master.measurement_name] = {
+                    val: existingEntry.val,
+                    master_id: existingEntry.master_id
+                };
+            } else {
+                initialDialogMeasurements[master.measurement_name] = {
+                    val: master.measurementDetail?.measurement_val || '',
+                    master_id: master.id
+                };
+            }
         });
-        
-        const existingMeasurements = allMeasurements[instanceId] || {};
-        setCurrentMeasurements({
-            ...initialValues,
-            ...existingMeasurements
-        });
+        setMeasurementData(garmentSpecificMasters);
+        setCurrentMeasurements(initialDialogMeasurements);
         setVisible(true);
     };
 
-    const handleMeasurementChange = (measurement: string, value: string) => {
-        setCurrentMeasurements(prev => ({
-          ...prev,
-          [measurement]: value
-        }));
+    const handleMeasurementChange = (measurementName: string, value: string) => {
+        setCurrentMeasurements(prev => {
+            const existingEntry = prev[measurementName] || { val: null, master_id: '' };
+            return {
+                ...prev,
+                [measurementName]: { ...existingEntry, val: value }
+            };
+        });
     };
 
     const handleSaveMeasurements = () => {
         if (currentGarment && currentInstanceId) {
-          setAllMeasurements(prev => ({
-            ...prev,
-            [currentInstanceId]: {
-              ...prev[currentInstanceId],
-              ...currentMeasurements
-            }
-          }));
-          
-          setIsMesurementSaved(prev => ({
-            ...prev,
-            [currentInstanceId]: true
-          }));
+            const measurementsToSave: { [key: string]: MeasurementEntry } = {};
+            Object.entries(currentMeasurements).forEach(([name, entry]) => {
+                const master = measurementData.find(m => m.measurement_name === name);
+                measurementsToSave[name] = {
+                    val: entry.val,
+                    master_id: master?.id || '0'
+                };
+            });
+
+            setAllMeasurements(prev => ({
+                ...prev,
+                [currentInstanceId]: measurementsToSave
+            }));
+            
+            setIsMesurementSaved(prev => ({
+                ...prev,
+                [currentInstanceId]: true
+            }));
         }
         setVisible(false);
     };
 
     const handleSaveOrder = () => {
-        if (currentGarment && currentInstanceId) {
-            const instanceExists = selectedGarments.some((g, index) => 
-                generateInstanceId(g, index) === currentInstanceId
-            );
-            
-            if (!instanceExists) {
-                setSelectedGarments(prev => [...prev, currentGarment]);
-            }
-            
-            setShowCreateDialog(false);
-            resetDialog();
-        }
+        setShowCreateDialog(false);
+        resetDialog();
     };
 
     const resetDialog = () => {
@@ -628,7 +655,7 @@ const CreateOrder = () => {
         });
     };   
 
-   const handleConfirmOrder = async () => {        
+    const handleConfirmOrder = async () => {        
         try {
             setIsConfirmingOrder(true);
             if (!selectedCustomer) {
@@ -650,8 +677,8 @@ const CreateOrder = () => {
             const currentDate = new Date();
             
             const orderDetails = await Promise.all(
-                selectedGarments.map(async (garment, index) => {
-                    const instanceId = generateInstanceId(garment, index);
+                selectedGarments.map(async (sgEntry) => {
+                    const { garment, instanceId } = sgEntry;
                     const itemData = itemsData[instanceId] || {};
                     
                     const base64Images = await Promise.all(
@@ -684,12 +711,12 @@ const CreateOrder = () => {
                             user_id: parseInt(selectedCustomer.id),
                             material_master_id: parseInt(garment.id),
                             measurement_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                            details: measurementData
-                                .filter(master => allMeasurements[instanceId]?.[master.measurement_name] !== undefined)
-                                .map(master => ({
-                                    measurement_master_id: parseInt(master.id),
-                                    measurement_val: allMeasurements[instanceId][master.measurement_name] || ''
-                                }))
+                            details: Object.entries(allMeasurements[instanceId] || {}).map(([key, measurementEntry]) => {
+                                return {
+                                    measurement_master_id: parseInt(measurementEntry.master_id || '0'),
+                                    measurement_val: measurementEntry.val || ''
+                                };
+                            })
                         }]
                     };
                 })
@@ -714,8 +741,9 @@ const CreateOrder = () => {
             setAllMeasurements({});
             setIsMesurementSaved({});
             setStitchOptions({});
-            
+
             router.push('/pages/orders/sales-order');
+            
             return response;
         } catch (error) {
             console.error('Error confirming order:', error);
@@ -768,7 +796,7 @@ const CreateOrder = () => {
             <Card className="mb-4">
                 <div className="flex flex-column gap-1 surface-50 border-round">
                     {selectedCustomer ? (
-                        <div className="flex flex-column gap-1">
+                        <div className="flex flex-column">
                             <div className="flex justify-content-between align-items-center">
                                 <div className="flex align-items-center gap-2">
                                     <i className="pi pi-user text-500"></i>
@@ -816,51 +844,41 @@ const CreateOrder = () => {
 
                 {selectedGarments.length > 0 ? (
                     <div className="grid">
-                        {selectedGarments.map((garment, index) => {
-                            const instanceId = generateInstanceId(garment, index);
+                        {selectedGarments.map((sgEntry) => {
+                            const { garment, instanceId } = sgEntry;
                             return (
                                 <div key={instanceId} className="col-12 md:col-6 lg:col-4">
                                     <Card className="h-full">
-                                        <div className="flex flex-column gap-1">
+                                        <div className="flex flex-column">
                                             <div className="flex justify-content-between align-items-center">
                                                 <span className="font-medium">{garment.name}</span>
-                                                <div className="flex gap-2">
-                                                    <Button 
-                                                        icon="pi pi-pencil" 
+                                                <div className="flex gap-1">
+                                                    <Button
+                                                        icon="pi pi-pencil"
                                                         rounded
                                                         text
                                                         severity="info"
-                                                        onClick={() => handleAddOutfit(garment, index)}
+                                                        onClick={() => {
+                                                            setCurrentGarment(garment);
+                                                            setCurrentInstanceId(instanceId);
+                                                            ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
+                                                            setType(itemsData[instanceId]?.type || 'stitching');
+                                                            setShowCreateDialog(true);
+                                                        }}
                                                     />
-                                                    <Button 
-                                                        icon="pi pi-trash" 
+                                                    <Button
+                                                        icon="pi pi-trash"
                                                         rounded
-                                                        text 
+                                                        text
                                                         severity="danger"
                                                         onClick={() => {
-                                                            setSelectedGarments(
-                                                                selectedGarments.filter((g, i) => i !== index)
-                                                            );
-                                                            setGarmentRefNames(prev => {
-                                                                const newRefNames = {...prev};
-                                                                delete newRefNames[instanceId];
-                                                                return newRefNames;
-                                                            });
-                                                            setAllMeasurements(prev => {
-                                                                const newMeasurements = {...prev};
-                                                                delete newMeasurements[instanceId];
-                                                                return newMeasurements;
-                                                            });
-                                                            setIsMesurementSaved(prev => {
-                                                                const newSaved = {...prev};
-                                                                delete newSaved[instanceId];
-                                                                return newSaved;
-                                                            });
-                                                            setStitchOptions(prev => {
-                                                                const newOptions = {...prev};
-                                                                delete newOptions[instanceId];
-                                                                return newOptions;
-                                                            });
+                                                            setSelectedGarments(prevSg => prevSg.filter(item => item.instanceId !== instanceId));
+                                                            setGarmentRefNames(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setAllMeasurements(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setIsMesurementSaved(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setStitchOptions(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setItemsData(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setGarmentTotals(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
                                                         }}
                                                     />
                                                 </div>
@@ -1115,7 +1133,7 @@ const CreateOrder = () => {
                             </div>
                             <div className="flex align-items-center">
                                 <RadioButton 
-                                    inputId="alteration" 
+                                    inputId="alteration"
                                     name="type" 
                                     value="alteration" 
                                     onChange={(e) => {
@@ -1145,18 +1163,26 @@ const CreateOrder = () => {
                                 <span className="font-medium w-9">Add Measurements</span>
                                 <div className="w-3 text-right">
                                     {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
-                                        <Button 
+                                        <Button
                                             label="Edit"
                                             icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
-                                            onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
                                             className="p-button-sm p-button-outlined"
                                             disabled={isAddingMeasurements}
                                         />
                                     ) : (
-                                        <Button 
+                                        <Button
                                             label="Add"
                                             icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
-                                            onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
                                             className="p-button-sm p-button-outlined"
                                             disabled={isAddingMeasurements}
                                         />
@@ -1390,7 +1416,7 @@ const CreateOrder = () => {
                             <label htmlFor="quantity">Quantity</label>
                             <InputNumber 
                                 id="quantity"
-                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1}
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1} 
                                 onValueChange={(e) => {
                                     if (currentInstanceId) {
                                         setItemsData(prev => ({
@@ -1522,21 +1548,21 @@ const CreateOrder = () => {
                             {master.data_type === 'number' ? (
                             <InputNumber 
                                 id={master.measurement_name}
-                                value={currentMeasurements[master.measurement_name] ? parseFloat(currentMeasurements[master.measurement_name]!) : null}
+                                value={currentMeasurements[master.measurement_name]?.val ? parseFloat(currentMeasurements[master.measurement_name].val!) : null}
                                 onChange={(e) => handleMeasurementChange(
-                                master.measurement_name, 
+                                master.measurement_name,
                                 e.value?.toString() || ''
                                 )}
                                 mode="decimal" 
-                                min={1} 
+                                min={0} 
                                 className="w-full"
                             />
                             ) : (
                             <InputText
                                 id={master.measurement_name}
-                                value={currentMeasurements[master.measurement_name] || ''}
+                                value={currentMeasurements[master.measurement_name]?.val || ''}
                                 onChange={(e) => handleMeasurementChange(
-                                master.measurement_name, 
+                                master.measurement_name,
                                 e.target.value
                                 )}
                                 className="w-full"

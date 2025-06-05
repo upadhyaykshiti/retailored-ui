@@ -316,8 +316,6 @@ const JobOrder = () => {
       
       const responseData = response.data || response;
       const details = responseData.jobOrderDetails || responseData.jobOrderMain?.jobOrderDetails || [];
-      
-      setJobOrderDetails(details);
 
       setSelectedJobOrder(prev => {
         const newJobOrder = {
@@ -340,6 +338,7 @@ const JobOrder = () => {
         return newJobOrder;
       });
 
+      setJobOrderDetails(details);
       return { jobOrder: jobOrders, details };
     } catch (error) {
       console.error('Error fetching job order details:', error);
@@ -558,6 +557,15 @@ const JobOrder = () => {
       router.push(`/pages/reports/${source}`);
     }
   };
+
+  const handleCreateDialogClose = () => {
+    setCreateOrderVisible(false);
+    setSelectedJobber(null);
+    setSelectedItems([]);
+    if (source) {
+      router.push(`/pages/reports/${source}`);
+    }
+  }
 
   const itemTemplate = (item: {itemImageSrc: string}) => {
     return (
@@ -886,12 +894,16 @@ const handleQuantityChange = (newQuantity: number) => {
         position: 'bottom'
       });
 
-      setCreateOrderVisible(false);
       setSelectedJobber(null);
       setSelectedItems([]);
       setItemDetails({});
-      
-      fetchJobOrders(1, searchTerm);
+
+      if (source) {
+        router.push(`/pages/reports/${source}`);
+      } else {
+        setCreateOrderVisible(false);
+        fetchJobOrders(1, searchTerm);
+      }
     } catch (error) {
       await Toast.show({
         text: 'Failed to create job order',
@@ -1333,18 +1345,14 @@ const handleQuantityChange = (newQuantity: number) => {
 
       <Dialog 
         header="Create New Job Order" 
-        visible={createOrderVisible} 
-        onHide={() => {
-          setCreateOrderVisible(false);
-          setSelectedJobber(null);
-          setSelectedItems([]);
-        }}
+        visible={createOrderVisible}
+        onHide={handleCreateDialogClose}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
         className={isMaximized ? 'maximized-dialog' : ''}
         blockScroll
         footer={
-          <div className="flex justify-content-end gap-2 w-full p-2 border-top-1 surface-border bg-white">
+          <div className="flex justify-content-end gap-2 w-full p-2 surface-border bg-white">
             <Button 
               label="Cancel" 
               icon="pi pi-times" 
@@ -1926,7 +1934,7 @@ const handleQuantityChange = (newQuantity: number) => {
               )}
             </div>
 
-            <div className="bg-white pt-3 pb-1 border-top-1 surface-border w-full">
+            <div className="bg-white pt-3 pb-1 surface-border w-full">
               <Button 
                 label="Done"
                 icon="pi pi-check" 

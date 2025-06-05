@@ -18,6 +18,7 @@ import FullPageLoader from '@/demo/components/FullPageLoader';
 interface PendingJobOrder {
   id: string;
   job_order_id: string;
+  sales_order_id: string;
   jobberId: string;
   jobberName: string;
   job_date: string;
@@ -172,8 +173,8 @@ const PendingJobOrderReport = () => {
     router.push(`/pages/orders/job-order?id=${jobOrderId}&source=pending-jobs`);
   };
 
-  const handleViewSO = (jobOrderId: string) => {
-    router.push(`/pages/orders/sales-order?id=${jobOrderId}&source=pending-jobs`);
+  const handleViewSO = (salesOrderId: string) => {
+    router.push(`/pages/orders/sales-order?id=${salesOrderId}&source=pending-jobs`);
   };
 
   const openStatusChangeDialog = (item: PendingJobOrder) => {
@@ -342,7 +343,7 @@ const PendingJobOrderReport = () => {
                     <Button
                       label="View Sales Order"
                       icon="pi pi-eye"
-                      onClick={() => handleViewSO(item.job_order_id)}
+                      onClick={() => handleViewSO(item.sales_order_id)}
                       className="w-full"
                     />
                   </div>
