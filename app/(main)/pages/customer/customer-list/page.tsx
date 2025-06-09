@@ -57,7 +57,7 @@ const CustomerList = () => {
         .filter(user => user.isCustomer === 'Y')
         .map((user) => ({
           id: user.id,
-          fname: user.fname,
+          fname: user.fname || '',
           lname: user.lname || '',
           mobileNumber: user.mobileNumber,
           alternateContact: user.alternateContact || '',
@@ -304,14 +304,25 @@ const CustomerList = () => {
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Customers</h2>
-          <span className="p-input-icon-right w-full">
-            <i className={listLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
+          <span className="p-input-icon-left p-input-icon-right w-full">
+            <i className="pi pi-search" />
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search"
               className="w-full"
             />
+
+            {listLoading && debouncedSearchTerm ? (
+              <i className="pi pi-spin pi-spinner" />
+            ) : searchTerm ? (
+              <i 
+                className="pi pi-times cursor-pointer" 
+                onClick={() => {
+                  setSearchTerm('');
+                }}
+              />
+            ) : null}
           </span>
           <Button 
             label="Add Customer" 
@@ -326,75 +337,77 @@ const CustomerList = () => {
           {customers.length > 0 ? (
             <>
               {customers.map((customer) => (
-                <Card 
-                  key={customer.id} 
-                  className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
-                  onClick={() => handleCardClick(customer.id)}
-                >
-                  <div className="flex justify-content-between align-items-start mb-3">
-                    <div>
-                      <h3 className="text-xl m-0">{customer.fname} {customer.lname}</h3>
+                customer && ( 
+                  <Card 
+                    key={customer.id} 
+                    className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
+                    onClick={() => handleCardClick(customer.id)}
+                  >
+                    <div className="flex justify-content-between align-items-start mb-3">
+                      <div>
+                        <h3 className="text-xl m-0">{customer?.fname} {customer?.lname}</h3>
 
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-phone" /> {customer.mobileNumber}
-                        {customer.alternateContact && (
-                          <span className="text-sm text-500 flex align-items-center gap-2">
-                            (Alt: {customer.alternateContact})
-                          </span>
+                        <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                          <i className="pi pi-phone" /> {customer.mobileNumber}
+                          {customer.alternateContact && (
+                            <span className="text-sm text-500 flex align-items-center gap-2">
+                              (Alt: {customer.alternateContact})
+                            </span>
+                          )}
+                        </div>
+
+                        {customer.email && (
+                          <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                            <i className="pi pi-envelope" /> {customer.email}
+                          </div>
                         )}
-                      </div>
 
-                      {customer.email && (
                         <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                          <i className="pi pi-envelope" /> {customer.email}
+                          <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
                         </div>
-                      )}
 
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
-                      </div>
+                        {customer.anniversary && (
+                          <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                            <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                          </div>
+                        )}
 
-                      {customer.anniversary && (
                         <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                          <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                          <i className="pi pi-user" /> {customer.gender === 'M' ? 'Male' : 'Female'}
                         </div>
-                      )}
-
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-user" /> {customer.gender === 'M' ? 'Male' : 'Female'}
                       </div>
+
+                      <Tag 
+                        value={customer.active === 1 ? 'Active' : 'Inactive'}
+                        severity={customer.active === 1 ? 'success' : 'danger'}
+                        className="align-self-start"
+                      />
                     </div>
 
-                    <Tag 
-                      value={customer.active === 1 ? 'Active' : 'Inactive'}
-                      severity={customer.active === 1 ? 'success' : 'danger'}
-                      className="align-self-start"
-                    />
-                  </div>
-
-                  <div className="flex justify-content-end gap-1">
-                    <Button 
-                      icon="pi pi-pencil" 
-                      rounded 
-                      text 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        showEditDialog(customer);
-                      }}
-                      severity="secondary"
-                    />
-                    <Button 
-                      icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
-                      rounded 
-                      text 
-                      severity={customer.active === 1 ? 'danger' : 'success'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmStatusChange(customer.id);
-                      }}
-                    />
-                  </div>
-                </Card>
+                    <div className="flex justify-content-end gap-1">
+                      <Button 
+                        icon="pi pi-pencil" 
+                        rounded 
+                        text 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showEditDialog(customer);
+                        }}
+                        severity="secondary"
+                      />
+                      <Button 
+                        icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
+                        rounded 
+                        text 
+                        severity={customer.active === 1 ? 'danger' : 'success'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmStatusChange(customer.id);
+                        }}
+                      />
+                    </div>
+                  </Card>
+                )
               ))}
               <div ref={observerTarget} className="w-full flex justify-content-center p-3">
                 {isLoadingMore && (
@@ -469,6 +482,8 @@ const CustomerList = () => {
                       </div>
                       <InputText 
                           id="mobileNumber" 
+                          type="tel"
+                          inputMode="numeric"
                           value={currentCustomer.mobileNumber} 
                           onChange={(e) => setCurrentCustomer({...currentCustomer, mobileNumber: e.target.value})}
                           placeholder="Enter 10-digit mobile number"

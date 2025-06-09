@@ -5,7 +5,7 @@ import { Chart } from 'primereact/chart';
 import { Skeleton } from 'primereact/skeleton';
 import { ChartData, ChartOptions } from 'chart.js';
 import React, { useContext, useEffect, useState } from 'react';
-import { LayoutContext } from '@/layout/context/layoutcontext'; 
+import { LayoutContext } from '@/layout/context/layoutcontext';
 import { DashboardService } from '@/demo/service/dashboard.service';
 
 const Dashboard = () => {
@@ -47,7 +47,7 @@ const Dashboard = () => {
     };
 
     const ordersData: ChartData = {
-        labels: dashboardData.monthlyCounts.map(item => item.month.substring(5)), // Extract month from YYYY-MM
+        labels: dashboardData.monthlyCounts.map(item => item.month.substring(5)),
         datasets: [
             {
                 label: 'Job Orders',

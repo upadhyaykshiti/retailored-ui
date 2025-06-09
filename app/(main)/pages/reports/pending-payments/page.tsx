@@ -394,14 +394,25 @@ const PendingPayments = () => {
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Pending Transactions</h2>
-        <span className="p-input-icon-right w-full">
-          <i className={isLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
+         <span className="p-input-icon-left p-input-icon-right w-full">
+          <i className="pi pi-search" />
           <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search"
             className="w-full"
           />
+
+          {isLoading && debouncedSearchTerm ? (
+            <i className="pi pi-spin pi-spinner" />
+          ) : searchTerm ? (
+            <i 
+              className="pi pi-times cursor-pointer" 
+              onClick={() => {
+                setSearchTerm('');
+              }}
+            />
+          ) : null}
         </span>
       </div>
 

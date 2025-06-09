@@ -151,6 +151,7 @@ const CreateOrder = () => {
     const materialSearchTimeout = useRef<NodeJS.Timeout>();
     const observerTarget = useRef<HTMLDivElement>(null);
     const searchTimeout = useRef<NodeJS.Timeout>();
+    const priceInputRef = useRef(null);
 
     const getMaterialPrice = (material: Material, type: 'stitching' | 'alteration' = 'stitching'): number => {
         const priceItem = (material as any).priceChart?.find(
@@ -926,7 +927,7 @@ const CreateOrder = () => {
             >
                 <div className="flex flex-column h-full">
                     <div className="p-3 border-bottom-1 surface-border">
-                        <span className="p-input-icon-left w-full">
+                          <span className="p-input-icon-left p-input-icon-right w-full">
                             <i className="pi pi-search" />
                             <InputText
                                 value={customerSearch}
@@ -934,6 +935,15 @@ const CreateOrder = () => {
                                 placeholder="Search"
                                 className="w-full"
                             />
+                            {customerSearch && (
+                                <i 
+                                    className="pi pi-times cursor-pointer" 
+                                    onClick={() => {
+                                    setCustomerSearch('');
+                                    fetchCustomers('', 1);
+                                    }}
+                                />
+                            )}
                         </span>
                     </div>
 
@@ -1015,14 +1025,24 @@ const CreateOrder = () => {
                 >
                 <div className="flex flex-column h-full">
                     <div className="p-3 border-bottom-1 surface-border">
-                        <span className="p-input-icon-left w-full">
+                        <span className="p-input-icon-left p-input-icon-right w-full">
                             <i className="pi pi-search" />
                             <InputText
                                 value={materialSearch}
                                 onChange={handleMaterialSearch}
-                                placeholder="Search outfits..."
+                                placeholder="Search"
                                 className="w-full"
                             />
+
+                            {materialSearch && (
+                                <i 
+                                    className="pi pi-times cursor-pointer" 
+                                    onClick={() => {
+                                    setMaterialSearch('');
+                                    fetchMaterials('', 1);
+                                    }}
+                                />
+                            )}
                         </span>
                     </div>
 
@@ -1442,22 +1462,29 @@ const CreateOrder = () => {
                                 id="price" 
                                 value={currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0} 
                                 onValueChange={(e) => {
-                                    if (currentInstanceId) {
-                                        setItemsData(prev => ({
-                                            ...prev,
-                                            [currentInstanceId]: {
-                                                ...prev[currentInstanceId],
-                                                stitchingPrice: e.value || 0
-                                            }
-                                        }));
+                                if (currentInstanceId) {
+                                    setItemsData(prev => ({
+                                    ...prev,
+                                    [currentInstanceId]: {
+                                        ...prev[currentInstanceId],
+                                        stitchingPrice: e.value || 0
                                     }
+                                    }));
+                                }
                                 }} 
+                                onFocus={(e) => {
+                                if ((currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0) === 0) {
+                                    setTimeout(() => {
+                                    e.target.select();
+                                    }, 0);
+                                }
+                                }}
                                 mode="currency" 
                                 currency="INR" 
                                 locale="en-IN" 
                                 className="w-full"
                                 placeholder="Enter amount"
-                                minFractionDigits={2}
+                                minFractionDigits={0}
                                 maxFractionDigits={2}
                             />
                         </div>

@@ -268,14 +268,25 @@ const Jobbers = () => {
         
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Jobbers</h2>
-          <span className="p-input-icon-right w-full">
-            <i className={listLoading && debouncedSearchTerm ? 'pi pi-spin pi-spinner' : 'pi pi-search'} />
+          <span className="p-input-icon-left p-input-icon-right w-full">
+            <i className="pi pi-search" />
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search"
               className="w-full"
             />
+
+            {listLoading && debouncedSearchTerm ? (
+              <i className="pi pi-spin pi-spinner" />
+            ) : searchTerm ? (
+              <i 
+                className="pi pi-times cursor-pointer" 
+                onClick={() => {
+                  setSearchTerm('');
+                }}
+              />
+            ) : null}
           </span>
           <Button 
             label="Add Jobber" 
@@ -397,6 +408,8 @@ const Jobbers = () => {
                 <label htmlFor="mobile">Mobile</label>
                 <InputText 
                   id="mobile" 
+                  type="tel"
+                  inputMode="numeric"
                   value={currentJobber.mobileNumber || ''} 
                   onChange={(e) => setCurrentJobber({...currentJobber, mobileNumber: e.target.value})}
                 />

@@ -216,6 +216,8 @@ const LoginPage = () => {
                                 <span className="p-inputgroup-addon bg-white">+91</span>
                                 <InputText
                                     id="mobile"
+                                    type="tel"
+                                    inputMode="numeric"
                                     value={mobileNumber}
                                     onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                                     onKeyDown={(e) => {
@@ -248,6 +250,8 @@ const LoginPage = () => {
                                 <InputText
                                     key={index}
                                     id={`otp-${index}`}
+                                    type="tel"
+                                    inputMode="numeric"
                                     value={otp[index]}
                                     onChange={(e) => handleOtpChange(e.target.value, index)}
                                     className="text-center p-2"
