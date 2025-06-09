@@ -7,7 +7,6 @@ import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { AuthService } from '@/demo/service/auth.service';
 import { Toast } from '@capacitor/toast';
-import { SplashScreen } from '@capacitor/splash-screen';
 
 const LoginPage = () => {
     const router = useRouter();
@@ -28,10 +27,6 @@ const LoginPage = () => {
                 clearInterval(intervalRef.current);
             }
         };
-    }, []);
-    
-    useEffect(() => {
-        SplashScreen.hide();
     }, []);
 
     const handleOtpChange = (value: string, index: number) => {

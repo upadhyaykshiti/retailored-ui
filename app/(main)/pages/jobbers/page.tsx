@@ -175,13 +175,14 @@ const Jobbers = () => {
 
       setVisible(false);
       fetchJobbers();
-    } catch (err) {
-      await Toast.show({
-        text: 'Failed to save jobber',
-        duration: 'short',
-        position: 'bottom'
-      });
-      console.error(err);
+      } catch (err: any) {
+        const errorMessage = err?.message || 'Failed to save jobber';
+        await Toast.show({
+          text: errorMessage,
+          duration: 'short',
+          position: 'bottom'
+        });
+        console.error('Error:', err);
     } finally {
       setListLoading(false);
     }
@@ -204,13 +205,14 @@ const Jobbers = () => {
             position: 'bottom'
           });
           fetchJobbers();
-        } catch (err) {
-          console.error('Failed to update status:', err);
+        } catch (err: any) {
+          const errorMessage = err?.message || 'Failed to update jobber status';
           await Toast.show({
-            text: 'Failed to update jobber status',
+            text: errorMessage,
             duration: 'short',
             position: 'bottom'
           });
+          console.error('Error:', err);
         } finally {
           setListLoading(false);
         }

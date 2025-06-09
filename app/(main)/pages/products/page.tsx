@@ -328,15 +328,12 @@ const Products = () => {
       setShowDialog(false);
       fetchMaterials();
       } catch (err: any) {
-        const errorMessage =
-          err?.message || 'Failed to save product';
-
+        const errorMessage = err?.message || 'Failed to save product';
         await Toast.show({
           text: errorMessage,
           duration: 'short',
           position: 'bottom'
         });
-
         console.error('Error:', err);
     } finally {
       setListLoading(false);
@@ -519,13 +516,14 @@ const Products = () => {
             duration: 'short',
             position: 'bottom'
           });
-        } catch (err) {
-          console.error('Failed to update status:', err);
+        } catch (err: any) {
+          const errorMessage = err?.message || 'Failed to update product status';
           await Toast.show({
-            text: 'Failed to update product status',
+            text: errorMessage,
             duration: 'short',
             position: 'bottom'
           });
+          console.error('Error:', err);
         } finally {
           setListLoading(false);
         }

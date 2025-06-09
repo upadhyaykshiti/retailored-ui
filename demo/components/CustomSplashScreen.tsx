@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { SplashScreen } from '@capacitor/splash-screen';
 
-export default function CustomSplashScreen() {
+interface CustomSplashScreenProps {
+  onAnimationComplete: () => void;
+}
+
+export default function CustomSplashScreen({ onAnimationComplete }: CustomSplashScreenProps) {
   const [displayText, setDisplayText] = useState('');
   const fullText = 'reTailored';
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -17,11 +21,12 @@ export default function CustomSplashScreen() {
       } else {
         clearInterval(interval);
         setAnimationComplete(true);
+        onAnimationComplete();
       }
     }, 150);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [onAnimationComplete]);
 
   return (
     <div style={{

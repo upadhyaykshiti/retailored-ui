@@ -7,30 +7,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [animationCompleted, setAnimationCompleted] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const isAuthPage = pathname === '/';
-      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      if (!token && !isAuthPage) {
-        router.replace('/');
-      } else if (token && isAuthPage) {
-        router.replace('/pages/dashboard');
+    const checkAuth = () => {
+      if (typeof window === 'undefined') {
+        setIsCheckingAuth(false);
+        return;
       }
 
-      setIsCheckingAuth(false);
+      const token = localStorage.getItem('authToken');
+      const isAuthPage = pathname === '/';
+
+      if (animationCompleted) {
+        if (token && isAuthPage) {
+          router.replace('/pages/dashboard');
+          return;
+        }
+
+        if (!token && !isAuthPage) {
+          router.replace('/');
+          return;
+        }
+
+        setIsCheckingAuth(false);
+      }
     };
 
-    if (typeof window !== 'undefined') {
-      checkAuth();
-    }
-  }, [pathname, router]);
+    checkAuth();
+    const timeout = setTimeout(checkAuth, 100);
+
+    return () => clearTimeout(timeout);
+  }, [pathname, router, animationCompleted]);
 
   if (isCheckingAuth) {
-    return <CustomSplashScreen />;
+    return <CustomSplashScreen onAnimationComplete={() => setAnimationCompleted(true)} />;
   }
 
   return <>{children}</>;

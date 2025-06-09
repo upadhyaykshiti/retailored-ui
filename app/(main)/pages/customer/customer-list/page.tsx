@@ -199,13 +199,14 @@ const CustomerList = () => {
     
       setVisible(false);
       fetchCustomers();
-    } catch (error) {
-      console.error('Error saving customer:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Error saving customer';
       await Toast.show({
-        text: 'Failed to save customer',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setListLoading(false);
     }
@@ -233,13 +234,14 @@ const CustomerList = () => {
             duration: 'short',
             position: 'bottom'
           });
-        } catch (err) {
-          console.error('Failed to update status:', err);
+        } catch (err: any) {
+          const errorMessage = err?.message || 'Failed to update customer status';
           await Toast.show({
-            text: 'Failed to update customer status',
+            text: errorMessage,
             duration: 'short',
             position: 'bottom'
           });
+          console.error('Error:', err);
         } finally {
           setListLoading(false);
         }
