@@ -18,6 +18,7 @@ import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
 import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { ProgressSpinner } from 'primereact/progressspinner';
 import { useDebounce } from 'use-debounce';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
@@ -61,6 +62,7 @@ interface Order {
     cancelled_qty: number;
     desc1: string | null;
     ext: string;
+    item_ref: string;
     orderStatus: {
       id: string;
       status_name: string;
@@ -112,6 +114,9 @@ const SalesOrder = () => {
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
+  const [paymentHistorySidebarVisible, setPaymentHistorySidebarVisible] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPaymentHistory, setLoadingPaymentHistory] = useState(false);
   const [itemActionSidebarVisible, setItemActionSidebarVisible] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<Order['orderDetails'][0] | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -259,6 +264,23 @@ const SalesOrder = () => {
       setSelectedOrder(null);
     } finally {
       setListLoading(false);
+    }
+  };
+
+  const fetchPaymentHistory = async (orderId: string) => {
+    try {
+      setLoadingPaymentHistory(true);
+      const response = await SalesOrderService.getOrderInfoByOrderId(orderId);
+      setPaymentHistory(response.data);
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      await Toast.show({
+        text: 'Failed to load payment history',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setLoadingPaymentHistory(false);
     }
   };
 
@@ -411,13 +433,14 @@ const SalesOrder = () => {
       await fetchOrderDetails(selectedOrder.id);
       await fetchOrders(pagination.currentPage, pagination.perPage);
       setEditOrderDetailDialogVisible(false);
-    } catch (error) {
-      console.error('Error updating order details:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update order details';
       await Toast.show({
-        text: 'Failed to update order details',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setIsSavingDetails(false);
     }
@@ -425,6 +448,13 @@ const SalesOrder = () => {
 
   const getPendingAmountSummary = (order: Order) => {
     return `₹${order.amt_due} (₹${order.ord_amt})`;
+  };
+
+  const handleViewPaymentHistory = async () => {
+    if (selectedOrder) {
+      await fetchPaymentHistory(selectedOrder.id);
+      setPaymentHistorySidebarVisible(true);
+    }
   };
 
   const handleItemStatusUpdate = async (statusId: number) => {
@@ -448,12 +478,14 @@ const SalesOrder = () => {
         fetchOrderDetails(selectedOrder.id),
         fetchOrders(pagination.currentPage, pagination.perPage)
       ]);
-    } catch (error) {
-      console.error('Error updating item status:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update item status';
       await Toast.show({
-        text: 'Failed to update item status',
+        text: errorMessage,
         duration: 'short',
+        position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setLoading(false);
       setStatusSidebarVisible(false);
@@ -513,13 +545,14 @@ const SalesOrder = () => {
 
       fetchMeasurements(Number(selectedItem.id));
       setEditMeasurementDialogVisible(false);
-    } catch (error) {
-      console.error('Error updating measurements:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update measurements';
       await Toast.show({
-        text: 'Failed to update measurements',
+        text: errorMessage,
         duration: 'short',
-        position: 'bottom',
+        position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setIsSaving(false);
     }
@@ -576,14 +609,14 @@ const SalesOrder = () => {
       setVisible(false);
       setPaymentDialogVisible(false);
       await fetchOrders(1, pagination.perPage);
-  
-    } catch (error) {
-      console.error('Error recording payment:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to record payment';
       await Toast.show({
-        text: 'Failed to record payment',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
@@ -617,12 +650,14 @@ const SalesOrder = () => {
       
       await fetchOrderDetails(selectedOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update delivery status';
       await Toast.show({
-        text: 'Failed to update delivery status',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
   
@@ -643,12 +678,14 @@ const SalesOrder = () => {
       
       await fetchOrderDetails(selectedOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update cancellation status';
       await Toast.show({
-        text: 'Failed to update cancellation status',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
@@ -888,13 +925,21 @@ const SalesOrder = () => {
                 </div>
               </div>
               <div className="col-12">
-                <Button
-                  label="Receive Payment"
-                  icon="pi pi-wallet"
-                  onClick={handlePaymentClick}
-                  className="mt-3"
-                  disabled={selectedOrder?.amt_due === 0 || selectedOrder?.amt_due === undefined}
-                />
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    label="Receive Payment"
+                    icon="pi pi-wallet"
+                    onClick={handlePaymentClick}
+                    disabled={selectedOrder?.amt_due === 0 || selectedOrder?.amt_due === undefined}
+                  />
+                  <Button
+                    icon={loadingPaymentHistory ? 'pi pi-spin pi-spinner' : 'pi pi-history'}
+                    style={{ width: '20%' }}
+                    onClick={handleViewPaymentHistory}
+                    className="p-button-secondary"
+                    disabled={loadingPaymentHistory}
+                  />
+                </div>
               </div>
             </div>
 
@@ -907,14 +952,20 @@ const SalesOrder = () => {
                 <div className="grid">
                   <div className="col-6">
                     <div className="field">
-                      <label>Item Name</label>
-                      <p className="m-0 font-medium">{item.material?.name || 'Not Available'}</p>
+                      <label>Item Ref</label>
+                      <p className="m-0 font-medium">{item.item_ref || 'Not Available'}</p>
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="field">
                       <label>Job Order No</label>
                       <p className="m-0 font-medium">{item.order_id}</p>
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="field">
+                      <label>Item Name</label>
+                      <p className="m-0 font-medium">{item.material?.name || 'Not Available'}</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -933,14 +984,8 @@ const SalesOrder = () => {
                   </div>
                   <div className="col-6">
                     <div className="field">
-                      <label>Delivered Qty</label>
-                      <p className="m-0 font-medium">{item.delivered_qty}</p>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Cancelled Qty</label>
-                      <p className="m-0 font-medium">{item.cancelled_qty}</p>
+                      <label>Amount</label>
+                      <p className="m-0 font-medium">₹ {item.item_amt || 0}</p>
                     </div>
                   </div>
                   <div className="col-12 mt-2">
@@ -1140,6 +1185,58 @@ const SalesOrder = () => {
           </div>
         </div>
       </Dialog>
+
+    <Sidebar 
+        visible={paymentHistorySidebarVisible}
+        onHide={() => setPaymentHistorySidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100vw',
+          height: '68vh',
+          maxHeight: '68vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-selector-sidebar"
+        header={
+          <div className="flex align-items-center gap-2">
+            <span className="font-bold text-xl">Payment History</span>
+          </div>
+        }
+      >
+        {loadingPaymentHistory ? (
+          <div className="flex justify-content-center p-4">
+            <ProgressSpinner style={{ width: '50px', height: '50px' }} strokeWidth="4" />
+          </div>
+        ) : paymentHistory.length > 0 ? (
+          <div className="flex flex-column gap-2 p-2">
+            {paymentHistory.map((payment, index) => (
+              <div key={index} className="flex justify-content-between align-items-center border-1 surface-border p-3 border-round">
+                <div className="text-sm">
+                  <div className="text-500">Date</div>
+                  <div className="font-medium">{new Date(payment.payment_date).toLocaleDateString('en-IN')}</div>
+                </div>
+                <div className="text-sm text-right">
+                  <div className="text-500">Amount</div>
+                  <div className="font-medium">₹{payment.payment_amt}</div>
+                </div>
+                <div className="text-sm text-right">
+                  <div className="text-500">Method</div>
+                  <div className="font-medium">
+                    {payment.paymentMode?.mode_name || payment.payment_type || 'Unknown'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-column align-items-center justify-content-center p-5">
+            <i className="pi pi-info-circle text-2xl mb-2"></i>
+            <p className="text-500 m-0">No payment history found</p>
+          </div>
+        )}
+      </Sidebar>
 
       <Sidebar 
         visible={itemActionSidebarVisible}

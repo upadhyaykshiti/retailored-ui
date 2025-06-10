@@ -327,14 +327,14 @@ const Products = () => {
 
       setShowDialog(false);
       fetchMaterials();
-      } catch (err: any) {
-        const errorMessage = err?.message || 'Failed to save product';
-        await Toast.show({
-          text: errorMessage,
-          duration: 'short',
-          position: 'bottom'
-        });
-        console.error('Error:', err);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to save product';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
+      });
+      console.error('Error:', err);
     } finally {
       setListLoading(false);
     }

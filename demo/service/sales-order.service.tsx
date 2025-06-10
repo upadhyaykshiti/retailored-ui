@@ -237,6 +237,7 @@ export const SalesOrderService = {
             cancelled_qty
             desc1
             ext
+            item_ref
             orderStatus {
               id
               status_name
@@ -257,6 +258,54 @@ export const SalesOrderService = {
     const variables = { id };
     const data = await GraphQLService.query<{ orderMain: any }>(query, variables);
     return data.orderMain;
+  },
+
+  async getOrderInfoByOrderId(orderId: string, page: number = 1, perPage: number = 20): Promise<{ data: any[]; pagination: any }> {
+    const query = `
+      query GetOrderInfoByOrderId($order_id: ID!, $first: Int!, $page: Int!) {
+        getOrderInfoByOrderId(order_id: $order_id, first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
+          }
+          data {
+            id
+            docno
+            admsite_code
+            payment_date
+            payment_ref
+            payment_amt
+            payment_type
+            paymentMode {
+              id
+              mode_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      order_id: orderId,
+      first: perPage,
+      page: page
+    };
+
+    const data = await GraphQLService.query<{ 
+      getOrderInfoByOrderId: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables);
+
+    return {
+      data: data.getOrderInfoByOrderId.data,
+      pagination: data.getOrderInfoByOrderId.paginatorInfo
+    };
   },
 
   async getOrderMeasurements(orderId: number): Promise<any> {

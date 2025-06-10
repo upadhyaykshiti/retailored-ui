@@ -36,6 +36,7 @@ export const JobOrderService = {
             orderDetails {
               id
               measurement_main_id
+              item_ref
               material {
                 id
                 name
@@ -235,6 +236,7 @@ export const JobOrderService = {
             item_amt
             item_discount
             ord_qty
+            item_ref
             delivered_qty
             cancelled_qty
             desc1

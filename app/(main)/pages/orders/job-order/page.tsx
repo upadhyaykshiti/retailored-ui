@@ -68,6 +68,7 @@ interface JobOrderDetail {
   item_amt: number;
   item_discount: number;
   ord_qty: number;
+  item_ref: string;
   delivered_qty: number;
   cancelled_qty: number;
   desc1: string | null;
@@ -106,6 +107,7 @@ interface OrdersList {
     orderDetails: {
       id: string;
       ord_qty: number;
+      item_ref: string;
       material: {
         id: string;
         name: string;
@@ -415,9 +417,10 @@ const JobOrder = () => {
             id: order.user.id,
             fname: order.user.fname
           },
-          orderDetails: order.orderDetails.map((detail: { id: any; material: { id: any; name: any; }; }) => ({
+          orderDetails: order.orderDetails.map((detail: { id: any; item_ref: any; material: { id: any; name: any; }; }) => ({
             id: detail.id,
             ord_qty: 0,
+            item_ref: detail.item_ref,
             material: {
               id: detail.material.id,
               name: detail.material.name
@@ -904,12 +907,14 @@ const handleQuantityChange = (newQuantity: number) => {
         setCreateOrderVisible(false);
         fetchJobOrders(1, searchTerm);
       }
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to create job order';
       await Toast.show({
-        text: 'Failed to create job order',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setCreatingOrder(false);
     }
@@ -985,13 +990,14 @@ const handleQuantityChange = (newQuantity: number) => {
 
       await fetchJobOrderDetails(selectedJobOrder.id);
       setEditDialogVisible(false);
-    } catch (error) {
-      console.error('Error updating job order details:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update job order details';
       await Toast.show({
-        text: 'Failed to update job order details',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -1067,13 +1073,14 @@ const handleQuantityChange = (newQuantity: number) => {
           amt_due: prev.amt_due - paymentAmount
         } : null);
       }
-    } catch (error) {
-      console.error('Error recording payment:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to record payment';
       await Toast.show({
-        text: `Failed to record payment`,
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
@@ -1145,13 +1152,14 @@ const handleQuantityChange = (newQuantity: number) => {
 
       await fetchJobOrders(pagination.currentPage, searchTerm);
 
-    } catch (error) {
-      console.error('Error updating status:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update status';
       await Toast.show({
-        text: 'Failed to update status',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setStatusSidebarVisible(false);
     }
@@ -1174,12 +1182,14 @@ const handleQuantityChange = (newQuantity: number) => {
       
       await fetchJobOrderDetails(selectedJobOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update delivery status';
       await Toast.show({
-        text: 'Failed to update delivery status',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
   
@@ -1200,12 +1210,14 @@ const handleQuantityChange = (newQuantity: number) => {
       
       await fetchJobOrderDetails(selectedJobOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update cancellation status';
       await Toast.show({
-        text: 'Failed to update cancellation status',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
@@ -1623,7 +1635,10 @@ const handleQuantityChange = (newQuantity: number) => {
                               onChange={() => handleItemSelection(order, item)}
                             />
                             <label htmlFor={`item-${order.id}-${item.id}`} className="ml-2">
-                              {item.material.name}
+                              <span className="text-base">{item.material.name}</span>
+                              {item.item_ref && (
+                                <span className="text-sm text-500 ml-1">({item.item_ref})</span>
+                              )}
                             </label>
                           </div>
                         

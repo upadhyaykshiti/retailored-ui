@@ -175,14 +175,14 @@ const Jobbers = () => {
 
       setVisible(false);
       fetchJobbers();
-      } catch (err: any) {
-        const errorMessage = err?.message || 'Failed to save jobber';
-        await Toast.show({
-          text: errorMessage,
-          duration: 'short',
-          position: 'bottom'
-        });
-        console.error('Error:', err);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to save jobber';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
+      });
+      console.error('Error:', err);
     } finally {
       setListLoading(false);
     }

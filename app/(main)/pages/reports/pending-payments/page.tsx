@@ -119,7 +119,7 @@ const PendingPayments = () => {
         
         const paymentCustomers = response.data.map(item => ({
           id: item.id,
-          name: 'Jobber ' + (item.jobOrderDetails?.[0]?.adminSite.sitename || 'Unknown'),
+          name: (item.jobOrderDetails?.[0]?.adminSite.sitename || 'Unknown'),
           mobile: '+91 0000000000',
           type: 'payment' as const
         }));
@@ -305,11 +305,6 @@ const PendingPayments = () => {
     setPaymentDialogVisible(true);
   };
 
-  const validatePaymentAmount = (amount: string, amtDue: number) => {
-    const amountNum = Number(amount);
-    return amountNum > 0 && amountNum <= amtDue;
-  };
-
   const handlePaymentSubmit = async () => {
     if (!selectedPaymentForRecord || !paymentForm.paymentMethod) {
       return;
@@ -380,13 +375,14 @@ const PendingPayments = () => {
         reference: '',
         paymentMethod: null
       });
-    } catch (error) {
-      console.error('Error processing payment:', error);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to process payment';
       await Toast.show({
-        text: error instanceof Error ? error.message : 'Failed to process payment',
+        text: errorMessage,
         duration: 'short',
         position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
