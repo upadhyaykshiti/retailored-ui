@@ -9,6 +9,15 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   plugins: {
+    SplashScreen: {
+      launchShowDuration: 0,
+      launchAutoHide: false,
+      backgroundColor: '#ffffffff',
+      androidSplashResourceName: '',
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: true
+    },
     Camera: {
       photoSize: 'medium',
       saveToGallery: false,

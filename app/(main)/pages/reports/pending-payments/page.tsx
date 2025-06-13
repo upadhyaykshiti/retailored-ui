@@ -4,14 +4,15 @@ import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { InputText } from 'primereact/inputtext';
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Toast } from 'primereact/toast';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import { TabView, TabPanel } from 'primereact/tabview';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { JobOrderService } from '@/demo/service/job-order.service';
-import { PendingPaymentsService } from '@/demo/service/pending-transactions'; 
+import { PendingPaymentsService } from '@/demo/service/pending-transactions.service';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
+import { useDebounce } from 'use-debounce';
+import { Toast } from '@capacitor/toast';
 
 interface PendingPayment {
   id: string;
@@ -39,6 +40,7 @@ interface Customer {
 
 const PendingPayments = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [isMaximized, setIsMaximized] = useState(true);
   const [detailsDialogVisible, setDetailsDialogVisible] = useState(false);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
@@ -46,7 +48,6 @@ const PendingPayments = () => {
   const [selectedPaymentForRecord, setSelectedPaymentForRecord] = useState<PendingPayment | null>(null);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
   const [activeTab, setActiveTab] = useState(0);
-  const toast = useRef<Toast>(null);
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     paymentDate: new Date().toISOString().split('T')[0],
@@ -79,7 +80,7 @@ const PendingPayments = () => {
         const response = await PendingPaymentsService.getPendingReceipts(
           20,
           page,
-          searchTerm || null
+          debouncedSearchTerm || null
         );
         
         if (isLoadMore) {
@@ -118,7 +119,7 @@ const PendingPayments = () => {
         
         const paymentCustomers = response.data.map(item => ({
           id: item.id,
-          name: 'Jobber ' + (item.jobOrderDetails?.[0]?.adminSite.sitename || 'Unknown'),
+          name: (item.jobOrderDetails?.[0]?.adminSite.sitename || 'Unknown'),
           mobile: '+91 0000000000',
           type: 'payment' as const
         }));
@@ -135,11 +136,10 @@ const PendingPayments = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
       setApiError(true);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch data',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch data',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       if (isLoadMore) {
@@ -148,7 +148,7 @@ const PendingPayments = () => {
         setIsLoading(false);
       }
     }
-  }, [activeTab, searchTerm, currentPage]);
+  }, [activeTab, debouncedSearchTerm, currentPage]);
 
   useInfiniteObserver({
     targetRef: observerTarget,
@@ -164,7 +164,12 @@ const PendingPayments = () => {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, searchTerm]);
+  }, [activeTab, debouncedSearchTerm]);
+
+  useEffect(() => {
+    setSearchTerm('');
+    setCurrentPage(1);
+  }, [activeTab]);
 
   const fetchPaymentModes = useCallback(async () => {
     try {
@@ -172,19 +177,13 @@ const PendingPayments = () => {
       setPaymentModes(modes);
     } catch (error) {
       console.error('Error fetching payment modes:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to fetch payment methods',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to fetch payment methods',
+        duration: 'short',
+        position: 'bottom'
       });
     }
   }, []);
-
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.mobile.includes(searchTerm)
-  );
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -225,7 +224,7 @@ const PendingPayments = () => {
   const renderCustomerCards = (type: 'receipt' | 'payment') => {
     return (
       <div className="flex flex-wrap gap-3 lg:justify-content-start">
-        {filteredCustomers
+        {customers
           .filter(customer => customer.type === type)
           .map((customer) => {
             const customerPayments = getCustomerPayments(customer.id, type);
@@ -271,7 +270,7 @@ const PendingPayments = () => {
               </Card>
             );
           })}
-        {filteredCustomers.filter(customer => 
+        {customers.filter(customer => 
           customer.type === type && getCustomerPayments(customer.id, type).length > 0
         ).length === 0 && (
           <div className="w-full text-center py-5">
@@ -297,11 +296,27 @@ const PendingPayments = () => {
 
   const openPaymentDialog = (payment: PendingPayment) => {
     setSelectedPaymentForRecord(payment);
+      setPaymentForm({
+      amount: payment.amt_due.toString(),
+      paymentDate: new Date().toISOString().split('T')[0],
+      reference: '',
+      paymentMethod: null
+    });
     setPaymentDialogVisible(true);
   };
 
   const handlePaymentSubmit = async () => {
     if (!selectedPaymentForRecord || !paymentForm.paymentMethod) {
+      return;
+    }
+
+    const amountNum = Number(paymentForm.amount);
+    if (amountNum > selectedPaymentForRecord.amt_due) {
+      await Toast.show({
+        text: `Amount cannot exceed ${formatCurrency(selectedPaymentForRecord.amt_due)}`,
+        duration: 'short',
+        position: 'bottom'
+      });
       return;
     }
 
@@ -325,11 +340,10 @@ const PendingPayments = () => {
           admsite_code: selectedPaymentForRecord.user.adminsite_code,
         });
 
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Payment received successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Payment received successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       } else {
         if (!selectedPaymentForRecord.jobOrderDetails?.[0]?.adminSite?.code) {
@@ -345,11 +359,10 @@ const PendingPayments = () => {
           admsite_code: Number(adminSiteCode),
         });
 
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Payment recorded successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Payment recorded successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       }
 
@@ -362,30 +375,40 @@ const PendingPayments = () => {
         reference: '',
         paymentMethod: null
       });
-    } catch (error) {
-      console.error('Error processing payment:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: error instanceof Error ? error.message : 'Failed to process payment',
-        life: 3000
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to process payment';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <Toast ref={toast} />
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Pending Transactions</h2>
-        <span className="p-input-icon-left w-full md:w-30rem">
+         <span className="p-input-icon-left p-input-icon-right w-full">
           <i className="pi pi-search" />
-          <InputText
+          <InputText 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name or mobile"
+            placeholder="Search"
             className="w-full"
           />
+
+          {isLoading && debouncedSearchTerm ? (
+            <i className="pi pi-spin pi-spinner" />
+          ) : searchTerm ? (
+            <i 
+              className="pi pi-times cursor-pointer" 
+              onClick={() => {
+                setSearchTerm('');
+              }}
+            />
+          ) : null}
         </span>
       </div>
 
@@ -533,7 +556,22 @@ const PendingPayments = () => {
                 className="w-full" 
                 placeholder="Enter amount"
                 value={paymentForm.amount}
-                onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+                onChange={(e) => {
+                  const enteredAmount = parseFloat(e.target.value) || 0;
+                  const maxAllowed = selectedPaymentForRecord?.amt_due || 0;
+                  
+                  if (enteredAmount <= maxAllowed) {
+                    setPaymentForm({...paymentForm, amount: e.target.value});
+                  } else {
+                    Toast.show({
+                      text: `Amount cannot exceed ${formatCurrency(maxAllowed)}`,
+                      duration: 'short',
+                      position: 'bottom'
+                    });
+                    setPaymentForm({...paymentForm, amount: maxAllowed.toString()});
+                  }
+                }}
+                max={selectedPaymentForRecord?.amt_due}
               />
             </div>
 
@@ -593,7 +631,13 @@ const PendingPayments = () => {
                 icon="pi pi-check" 
                 className="p-button-success"
                 onClick={handlePaymentSubmit}
-                disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod}
+                disabled={
+                  !paymentForm.amount || 
+                  !paymentForm.paymentDate || 
+                  !paymentForm.paymentMethod ||
+                  parseFloat(paymentForm.amount) > (selectedPaymentForRecord?.amt_due || 0) ||
+                  parseFloat(paymentForm.amount) <= 0
+                }
               />
             </div>
           </div>

@@ -11,7 +11,6 @@ import { ToggleButton } from 'primereact/togglebutton';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { UserService } from '@/demo/service/user.service';
 import { Skeleton } from 'primereact/skeleton';
-import { Toast } from 'primereact/toast';
 import { useRef } from 'react';
 import { Calendar } from 'primereact/calendar';
 import { RadioButton } from 'primereact/radiobutton';
@@ -19,10 +18,10 @@ import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 import { useDebounce } from 'use-debounce';
 import { Demo } from '@/types';
+import { Toast } from '@capacitor/toast';
 
 const CustomerList = () => {
   const router = useRouter();
-  const toast = useRef<Toast>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [customers, setCustomers] = useState<Demo.User[]>([]);
@@ -58,7 +57,7 @@ const CustomerList = () => {
         .filter(user => user.isCustomer === 'Y')
         .map((user) => ({
           id: user.id,
-          fname: user.fname,
+          fname: user.fname || '',
           lname: user.lname || '',
           mobileNumber: user.mobileNumber,
           alternateContact: user.alternateContact || '',
@@ -78,11 +77,10 @@ const CustomerList = () => {
     } catch (err) {
       console.error('Failed to fetch customers:', err);
       setError('Failed to load customers. Please try again.');
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load customers',
-        life: 3000
+      await Toast.show({
+        text: 'Failed to load customers',
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       setIsInitialLoading(false);
@@ -107,14 +105,6 @@ const CustomerList = () => {
     },
     deps: [hasMorePages, searchTerm]
   });
-
-  const filteredCustomers = customers.filter(customer => 
-    customer?.fname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer?.lname && customer.lname.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    customer?.mobileNumber.includes(searchTerm) ||
-    (customer?.alternateContact && customer.alternateContact.includes(searchTerm)) ||
-    (customer?.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
 
   const handleCardClick = (customerId: string) => {
     router.push(`/pages/customer/customer-details?id=${customerId}`);
@@ -174,12 +164,11 @@ const CustomerList = () => {
     
         const updatedUser = await UserService.updateUser(currentCustomer.id, finalPayload);
         setCustomers(customers.map(c => c.id === updatedUser.id ? updatedUser : c));
-    
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Customer updated successfully',
-          life: 3000
+
+        await Toast.show({
+          text: 'Customer updated successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       } else {
         const payload = {
@@ -201,55 +190,61 @@ const CustomerList = () => {
     
         const newCustomer = await UserService.createUser(payload);
         setCustomers([...customers, newCustomer]);
-    
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Customer created successfully',
-          life: 3000
+        await Toast.show({
+          text: 'Customer created successfully',
+          duration: 'short',
+          position: 'bottom'
         });
       }
     
       setVisible(false);
       fetchCustomers();
-    } catch (error) {
-      console.error('Error saving customer:', error);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to save customer',
-        life: 3000
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Error saving customer';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
       setListLoading(false);
     }
   };
-
-  const toggleCustomerStatus = (customerId: string) => {
-    setCustomers(customers.map(customer => 
-      customer.id === customerId 
-        ? { ...customer, active: customer.active === 1 ? 0 : 1 } 
-        : customer
-    ));
-  };
-
-  const confirmStatusChange = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    const isActive = customer?.active === 1;
   
+  const confirmStatusChange = async (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+
+    const newStatus = customer.active === 1 ? 0 : 1;
+    const statusText = newStatus === 1 ? 'activate' : 'deactivate';
+
     confirmDialog({
-      message: `Are you sure you want to mark this customer as ${isActive ? 'inactive' : 'active'}?`,
+      message: `Are you sure you want to ${statusText} this customer?`,
       header: 'Confirm Status Change',
       icon: 'pi pi-info-circle',
-      acceptClassName: isActive ? 'p-button-danger' : 'p-button-success',
-      accept: () => {
-        toggleCustomerStatus(customerId);
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Status Updated',
-          detail: `Customer marked as ${isActive ? 'inactive' : 'active'}`,
-          life: 3000
-        });
+      acceptClassName: newStatus === 1 ? 'p-button-success' : 'p-button-danger',
+      accept: async () => {
+        try {
+          setListLoading(true);
+          await UserService.updateUser(customerId, { active: newStatus });
+          fetchCustomers();
+          await Toast.show({
+            text: `Customer ${statusText}d successfully`,
+            duration: 'short',
+            position: 'bottom'
+          });
+        } catch (err: any) {
+          const errorMessage = err?.message || 'Failed to update customer status';
+          await Toast.show({
+            text: errorMessage,
+            duration: 'short',
+            position: 'bottom'
+          });
+          console.error('Error:', err);
+        } finally {
+          setListLoading(false);
+        }
       }
     });
   };
@@ -308,19 +303,28 @@ const CustomerList = () => {
   return (
     <>
       {listLoading && <FullPageLoader />}
-      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <Toast ref={toast} />
-        
+      <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>        
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
           <h2 className="text-2xl m-0">Customers</h2>
-          <span className="p-input-icon-left w-full">
+          <span className="p-input-icon-left p-input-icon-right w-full">
             <i className="pi pi-search" />
             <InputText 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name, phone or email"
+              placeholder="Search"
               className="w-full"
             />
+
+            {listLoading && debouncedSearchTerm ? (
+              <i className="pi pi-spin pi-spinner" />
+            ) : searchTerm ? (
+              <i 
+                className="pi pi-times cursor-pointer" 
+                onClick={() => {
+                  setSearchTerm('');
+                }}
+              />
+            ) : null}
           </span>
           <Button 
             label="Add Customer" 
@@ -332,78 +336,80 @@ const CustomerList = () => {
         </div>
 
         <div className="flex flex-wrap gap-3 lg:justify-content-start">
-          {filteredCustomers.length > 0 ? (
+          {customers.length > 0 ? (
             <>
-              {filteredCustomers.map((customer) => (
-                <Card 
-                  key={customer.id} 
-                  className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
-                  onClick={() => handleCardClick(customer.id)}
-                >
-                  <div className="flex justify-content-between align-items-start mb-3">
-                    <div>
-                      <h3 className="text-xl m-0">{customer.fname} {customer.lname}</h3>
+              {customers.map((customer) => (
+                customer && ( 
+                  <Card 
+                    key={customer.id} 
+                    className="flex flex-column w-full sm:w-12rem md:w-16rem lg:w-20rem xl:w-22rem transition-all transition-duration-200 hover:shadow-4 cursor-pointer"
+                    onClick={() => handleCardClick(customer.id)}
+                  >
+                    <div className="flex justify-content-between align-items-start mb-3">
+                      <div>
+                        <h3 className="text-xl m-0">{customer?.fname} {customer?.lname}</h3>
 
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-phone" /> {customer.mobileNumber}
-                        {customer.alternateContact && (
-                          <span className="text-sm text-500 flex align-items-center gap-2">
-                            (Alt: {customer.alternateContact})
-                          </span>
+                        <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                          <i className="pi pi-phone" /> {customer.mobileNumber}
+                          {customer.alternateContact && (
+                            <span className="text-sm text-500 flex align-items-center gap-2">
+                              (Alt: {customer.alternateContact})
+                            </span>
+                          )}
+                        </div>
+
+                        {customer.email && (
+                          <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                            <i className="pi pi-envelope" /> {customer.email}
+                          </div>
                         )}
-                      </div>
 
-                      {customer.email && (
                         <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                          <i className="pi pi-envelope" /> {customer.email}
+                          <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
                         </div>
-                      )}
 
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-calendar" /> DOB: {formatDate(customer.dob)}
-                      </div>
+                        {customer.anniversary && (
+                          <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
+                            <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                          </div>
+                        )}
 
-                      {customer.anniversary && (
                         <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                          <i className="pi pi-heart" /> Anniversary: {formatDate(customer.anniversary)}
+                          <i className="pi pi-user" /> {customer.gender === 'M' ? 'Male' : 'Female'}
                         </div>
-                      )}
-
-                      <div className="text-sm text-500 flex flex-wrap align-items-center gap-2 mt-2">
-                        <i className="pi pi-user" /> {customer.gender === 'M' ? 'Male' : 'Female'}
                       </div>
+
+                      <Tag 
+                        value={customer.active === 1 ? 'Active' : 'Inactive'}
+                        severity={customer.active === 1 ? 'success' : 'danger'}
+                        className="align-self-start"
+                      />
                     </div>
 
-                    <Tag 
-                      value={customer.active === 1 ? 'Active' : 'Inactive'}
-                      severity={customer.active === 1 ? 'success' : 'danger'}
-                      className="align-self-start"
-                    />
-                  </div>
-
-                  <div className="flex justify-content-end gap-1">
-                    <Button 
-                      icon="pi pi-pencil" 
-                      rounded 
-                      text 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        showEditDialog(customer);
-                      }}
-                      severity="secondary"
-                    />
-                    <Button 
-                      icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
-                      rounded 
-                      text 
-                      severity={customer.active === 1 ? 'danger' : 'success'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmStatusChange(customer.id);
-                      }}
-                    />
-                  </div>
-                </Card>
+                    <div className="flex justify-content-end gap-1">
+                      <Button 
+                        icon="pi pi-pencil" 
+                        rounded 
+                        text 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showEditDialog(customer);
+                        }}
+                        severity="secondary"
+                      />
+                      <Button 
+                        icon={customer.active === 1 ? 'pi pi-trash' : 'pi pi-replay'} 
+                        rounded 
+                        text 
+                        severity={customer.active === 1 ? 'danger' : 'success'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmStatusChange(customer.id);
+                        }}
+                      />
+                    </div>
+                  </Card>
+                )
               ))}
               <div ref={observerTarget} className="w-full flex justify-content-center p-3">
                 {isLoadingMore && (
@@ -478,6 +484,8 @@ const CustomerList = () => {
                       </div>
                       <InputText 
                           id="mobileNumber" 
+                          type="tel"
+                          inputMode="numeric"
                           value={currentCustomer.mobileNumber} 
                           onChange={(e) => setCurrentCustomer({...currentCustomer, mobileNumber: e.target.value})}
                           placeholder="Enter 10-digit mobile number"

@@ -1,15 +1,13 @@
 import { GraphQLService } from './graphql.service';
 
 export const SalesOrderService = {
-  async getSalesOrders( page: number = 1, perPage: number = 2, token?: string): Promise<{ data: any[]; pagination: any }> {
+  async getSalesOrders( page: number = 1, perPage: number = 4, search: string = ''): Promise<{ data: any[]; pagination: any }> {
     const query = `
-      query OrderMains($first: Int!, $page: Int!) {
-        orderMains(first: $first, page: $page) {
+      query OrderMains($first: Int!, $page: Int!, $search: String) {
+        orderMains(first: $first, page: $page, search: $search) {
           paginatorInfo {
             count
             currentPage
-            firstItem
-            lastItem
             lastPage
             perPage
             total
@@ -43,7 +41,8 @@ export const SalesOrderService = {
     
     const variables = {
       first: perPage,
-      page: page
+      page: page,
+      search: search || null
     };
 
     const data = await GraphQLService.query<{ 
@@ -51,7 +50,7 @@ export const SalesOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.orderMains.data,
@@ -62,8 +61,7 @@ export const SalesOrderService = {
   async getActiveCustomers(
     page: number = 1,
     perPage: number = 2,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query Users($first: Int!, $page: Int!, $search: String) {
@@ -71,9 +69,7 @@ export const SalesOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -101,7 +97,7 @@ export const SalesOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.users.data,
@@ -112,8 +108,7 @@ export const SalesOrderService = {
   async getActiveMaterials(
     page: number = 1,
     perPage: number = 10,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query MaterialMasters($first: Int!, $page: Int, $search: String) {
@@ -121,9 +116,7 @@ export const SalesOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -134,6 +127,17 @@ export const SalesOrderService = {
             image_url
             wsp
             mrp
+            priceChart {
+              id
+              material_id
+              job_or_sales
+              price
+              ext
+              type {
+                id
+                type_name
+              }
+            }
           }
         }
       }
@@ -149,8 +153,8 @@ export const SalesOrderService = {
       materialMasters: {
         paginatorInfo: any;
         data: any[];
-      } 
-    }>(query, variables, token);
+      }
+    }>(query, variables);
 
     return {
       data: data.materialMasters.data,
@@ -158,7 +162,7 @@ export const SalesOrderService = {
     };
   },
 
-  async getMeasurementData(user_id: string, material_master_id: string, token?: string): Promise<any> {
+  async getMeasurementData(user_id: string, material_master_id: string): Promise<any> {
     const query = `
       query GetMeasurementData($user_id: ID!, $material_master_id: ID!) {
         getMeasurementData(user_id: $user_id, material_master_id: $material_master_id) {
@@ -187,12 +191,12 @@ export const SalesOrderService = {
       getMeasurementData: { 
         masters: any[] 
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return data.getMeasurementData.masters;
   },
 
-  async getSalesOrderById(id: string, token?: string): Promise<any> {
+  async getSalesOrderById(id: string): Promise<any> {
     const query = `
       query OrderMain($id: ID!) {
         orderMain(id: $id) {
@@ -233,16 +237,78 @@ export const SalesOrderService = {
             cancelled_qty
             desc1
             ext
+            item_ref
+            orderStatus {
+              id
+              status_name
+            }
+            material {
+              id
+              name
+            }
+            jobOrderDetails {
+              adminSite {
+                  sitename
+              }
+            }
           }
         }
       }
     `;
     const variables = { id };
-    const data = await GraphQLService.query<{ orderMain: any }>(query, variables, token);
+    const data = await GraphQLService.query<{ orderMain: any }>(query, variables);
     return data.orderMain;
   },
 
-  async getOrderMeasurements(orderId: string, token?: string): Promise<any> {
+  async getOrderInfoByOrderId(orderId: string, page: number = 1, perPage: number = 20): Promise<{ data: any[]; pagination: any }> {
+    const query = `
+      query GetOrderInfoByOrderId($order_id: ID!, $first: Int!, $page: Int!) {
+        getOrderInfoByOrderId(order_id: $order_id, first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
+          }
+          data {
+            id
+            docno
+            admsite_code
+            payment_date
+            payment_ref
+            payment_amt
+            payment_type
+            paymentMode {
+              id
+              mode_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      order_id: orderId,
+      first: perPage,
+      page: page
+    };
+
+    const data = await GraphQLService.query<{ 
+      getOrderInfoByOrderId: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables);
+
+    return {
+      data: data.getOrderInfoByOrderId.data,
+      pagination: data.getOrderInfoByOrderId.paginatorInfo
+    };
+  },
+
+  async getOrderMeasurements(orderId: number): Promise<any> {
     const query = `
       query OrderDetail($id: ID!) {
         orderDetail(id: $id) {
@@ -250,62 +316,138 @@ export const SalesOrderService = {
             measurement_date
             measurementDetails {
               measurement_val
+              measurement_main_id
               measurementMaster {
                 id
                 measurement_name
+                data_type
               }
             }
           }
         }
       }
     `;
-  
+
     const variables = {
       id: orderId
     };
-  
-    const response = await GraphQLService.query<any>(query, variables, token);
-    
-    return {
-      data: {
-        orderDetail: {
-          measurementMain: response.data.orderDetail.measurementMain
+
+    try {
+      const response = await GraphQLService.query<any>(query, variables);
+      const result = response || { orderDetail: null };
+      return result;
+    } catch (error) {
+      console.error('Error fetching measurements:', error);
+      return { orderDetail: null };
+    }
+  },
+
+  async updateMeasurementsDetails(
+    id: number,
+    input: {
+      measurement_main_id: number | null;
+      measurement_master_id: number | null;
+      measurement_val: string | null;
+    }[]
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateMeasurementsDetails($id: ID!, $input: [UpdateMeasurementDetailInput!]!) {
+        updateMeasurementsDetails(id: $id, input: $input) {
+          id
         }
       }
-    };
+    `;
+
+    const variables = { id, input };
+    const data = await GraphQLService.query<{ updateMeasurementsDetails: any }>(mutation, variables);
+    return data.updateMeasurementsDetails;
+  },
+
+  async updateOrderDetails(
+    id: string | number,
+    input: {
+      order_id: number | null;
+      measurement_main_id: number | null;
+      material_master_id: number | null;
+      trial_date: string | null;
+      delivery_date: string | null;
+      item_amt: number | null;
+      ord_qty: number | null;
+      desc1: string | null;
+      admsite_code: string | null;
+    }
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateOrderDetail($id: ID!, $input: UpdateOrderDetailInput!) {
+        updateOrderDetail(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateOrderDetails: any }>(
+      mutation,
+      variables
+    );
+
+    return data.updateOrderDetails;
+  },
+
+  async updateSalesOrderStatus(
+    id: number | string,
+    input: {
+      status_id: number | null;
+    }
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateSalesOrderStatus($id: ID!, $input: OrderStatusInput!) {
+        updateSalesOrderStatus(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateSalesOrderStatus: any }>(
+      mutation,
+      variables
+    );
+
+    return data.updateSalesOrderStatus;
   },
 
   async markOrderDelivered(
-      id: string,
-      delivered_qty: number,
-      token?: string
+    id: string,
+    delivered_qty: number
   ): Promise<{ id: string }> {
       const mutation = `
-          mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
-              markOrderDelivered(input: $input, id: $id) {
-                  id
-              }
-          }
-      `;
+        mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
+            markOrderDelivered(input: $input, id: $id) {
+                id
+            }
+        }
+    `;
 
-      const variables = {
-          id: id,
-          input: {
-              delivered_qty: delivered_qty
-          }
-      };
+    const variables = {
+      id: id,
+      input: {
+          delivered_qty: delivered_qty
+      }
+    };
 
-      const data = await GraphQLService.mutation<{ 
-          markOrderDelivered: { id: string } 
-      }>(mutation, variables, token);
+    const data = await GraphQLService.mutation<{ 
+        markOrderDelivered: { id: string } 
+    }>(mutation, variables);
 
-      return data.markOrderDelivered;
+    return data.markOrderDelivered;
   },
 
   async markOrderCancelled(
       id: string,
-      cancelled_qty: number,
-      token?: string
+      cancelled_qty: number
   ): Promise<{ id: string }> {
       const mutation = `
           mutation MarkOrderCancelled($input: MarkOrderCancelledInput!, $id: ID!) {
@@ -324,7 +466,7 @@ export const SalesOrderService = {
 
       const data = await GraphQLService.mutation<{ 
           markOrderCancelled: { id: string } 
-      }>(mutation, variables, token);
+      }>(mutation, variables);
 
       return data.markOrderCancelled;
   },
@@ -333,7 +475,6 @@ export const SalesOrderService = {
     input: {
       user_id: number;
       order_date: string;
-      type_id: number;
       order_details: Array<{
         material_master_id: number;
         image_url: string[];
@@ -345,6 +486,7 @@ export const SalesOrderService = {
         item_ref: string;
         admsite_code: number;
         status_id: number;
+        type_id: number;
         desc1: string;
         desc2: string;
         measurement_main: Array<{
@@ -357,8 +499,7 @@ export const SalesOrderService = {
           }>;
         }>;
       }>;
-    },
-    token?: string
+    }
   ): Promise<{ id: number }> {
     const mutation = `
       mutation CreateOrderWithDetails($input: CreateOrderWithDetailsInput!) {
@@ -373,7 +514,7 @@ export const SalesOrderService = {
     try {
       const data = await GraphQLService.query<{ 
         createOrderWithDetails: { id: number } 
-      }>(mutation, variables, token);
+      }>(mutation, variables);
       
       return data.createOrderWithDetails;
     } catch (error) {

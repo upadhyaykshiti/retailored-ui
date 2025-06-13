@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
+import { useRouter } from 'next/navigation';
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Divider } from 'primereact/divider';
@@ -13,6 +14,7 @@ import { Checkbox } from 'primereact/checkbox';
 import { Galleria } from 'primereact/galleria';
 import { Sidebar } from 'primereact/sidebar';
 import { useState, useEffect, useRef } from 'react';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
@@ -36,6 +38,15 @@ interface Material {
     mrp: number;
 }
 
+interface ExtendedMaterial extends Material {
+    displayPrice: number;
+}
+
+interface SelectedGarmentEntry {
+    garment: Material;
+    instanceId: string;
+}
+
 interface MeasurementMaster {
     id: string;
     measurement_name: string;
@@ -49,9 +60,14 @@ interface MeasurementMaster {
     };
 }
 
+interface MeasurementEntry {
+  val: string | null;
+  master_id: string;
+}
+
 interface MeasurementValues {
     [instanceId: string]: {
-      [measurement: string]: string | null;
+      [measurement_name: string]: MeasurementEntry;
     };
 }
 
@@ -67,7 +83,6 @@ interface ItemData {
   deliveryDate: Date | null;
   trialDate: Date | null;
   isPriority: boolean;
-  quantity: number;
   stitchingPrice: number;
   inspiration: string;
   uploadedImages: string[];
@@ -84,14 +99,15 @@ interface StitchOptions {
 }
 
 const CreateOrder = () => {
+    const router = useRouter();
     const [visible, setVisible] = useState(false);
-    const [selectedGarments, setSelectedGarments] = useState<Material[]>([]);
+    const [selectedGarments, setSelectedGarments] = useState<SelectedGarmentEntry[]>([]);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [currentGarment, setCurrentGarment] = useState<Material | null>(null);
     const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
     const [type, setType] = useState('stitching');
     const [isMaximized, setIsMaximized] = useState(true);
-    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: string | null}>({});
+    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: MeasurementEntry}>({});
     const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
     const [isMesurementSaved, setIsMesurementSaved] = useState<{[instanceId: string]: boolean}>({});
     const [showStitchOptionsDialog, setShowStitchOptionsDialog] = useState(false);
@@ -116,10 +132,11 @@ const CreateOrder = () => {
     const [newCostAmount, setNewCostAmount] = useState<number | null>(null);
     const [showOutfitSelectionDialog, setShowOutfitSelectionDialog] = useState(false);
     const [measurementData, setMeasurementData] = useState<MeasurementMaster[]>([]);
+    const [hasMeasurementEntered, setHasMeasurementEntered] = useState(false);
     const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [customerPage, setCustomerPage] = useState(1);
-    const [materials, setMaterials] = useState<Material[]>([]);
+    const [materials, setMaterials] = useState<ExtendedMaterial[]>([]);
     const [materialSearch, setMaterialSearch] = useState('');
     const [materialPage, setMaterialPage] = useState(1);
     const [garmentRefNames, setGarmentRefNames] = useState<{[instanceId: string]: string}>({});
@@ -134,6 +151,15 @@ const CreateOrder = () => {
     const materialSearchTimeout = useRef<NodeJS.Timeout>();
     const observerTarget = useRef<HTMLDivElement>(null);
     const searchTimeout = useRef<NodeJS.Timeout>();
+    const priceInputRef = useRef(null);
+
+    const getMaterialPrice = (material: Material, type: 'stitching' | 'alteration' = 'stitching'): number => {
+        const priceItem = (material as any).priceChart?.find(
+            (item: any) => item.type?.type_name === (type === 'stitching' ? 'Stitching' : 'Alteration')
+        );
+        
+        return priceItem?.price || material.mrp || 0;
+    };
 
     useEffect(() => {
         return () => {
@@ -146,7 +172,7 @@ const CreateOrder = () => {
     useEffect(() => {
         if (currentInstanceId) {
             const itemData = itemsData[currentInstanceId] || {};
-            const total = ((itemData.quantity || 1) * (itemData.stitchingPrice || 0)) + 
+            const total = (itemData.stitchingPrice || 0) + 
                         ((itemData.additionalCosts || []).reduce((sum, cost) => sum + (cost.amount || 0), 0));
             
             setGarmentTotals(prev => ({
@@ -163,14 +189,14 @@ const CreateOrder = () => {
             page,
             20,
             searchTerm || null
-          );
-          
+         );
+
           if (page === 1) {
             setAllCustomers(data);
           } else {
             setAllCustomers(prev => [...prev, ...data]);
           }
-          
+        
           setCustomerPagination({
             hasMorePages: pagination.hasMorePages,
             currentPage: pagination.currentPage,
@@ -201,7 +227,10 @@ const CreateOrder = () => {
                 searchTerm || null
             );
             
-            const materialsData = response.data;
+            const materialsData: ExtendedMaterial[] = response.data.map((material: Material) => ({
+                ...material,
+                displayPrice: getMaterialPrice(material)
+            }));
             const pagination = response.pagination;
     
             if (page === 1) {
@@ -231,8 +260,8 @@ const CreateOrder = () => {
         fetchMaterials('', 1);
     }, []);
 
-    const fetchMeasurementData = async (materialId: string) => {
-        if (!selectedCustomer) return;
+    const fetchMeasurementData = async (materialId: string): Promise<MeasurementMaster[]> => {
+        if (!selectedCustomer) return [];
         
         setIsLoadingMeasurements(true);
         setIsAddingMeasurements(true);
@@ -242,6 +271,7 @@ const CreateOrder = () => {
             materialId
           );
           setMeasurementData(measurements);
+          return measurements;
         } catch (error) {
           console.error('Error fetching measurements:', error);
           await Toast.show({
@@ -249,6 +279,7 @@ const CreateOrder = () => {
             duration: 'short',
             position: 'top'
           });
+          return [];
         } finally {
           setIsLoadingMeasurements(false);
           setIsAddingMeasurements(false);
@@ -312,30 +343,50 @@ const CreateOrder = () => {
         return `${customer.fname} ${customer.lname}`;
     };
 
-    const generateInstanceId = (garment: Material, index: number) => {
-        return `${garment.id}-${index}`;
+    const generateInstanceId = (garment: Material, index?: number) => {
+        const uniqueId = `${garment.id}-${Date.now()}`;
+        return uniqueId;
     };
 
+    const ensureInstanceDataInitialized = (instanceId: string, garment: Material, currentSelectedCustomer: Customer | null) => {
+        if (!itemsData[instanceId]) {
+            const selectedType = 'stitching';
+            const initialStitchingPrice = getMaterialPrice(garment, selectedType);
+
+            setItemsData(prev => ({
+                ...prev,
+                [instanceId]: {
+                    type: selectedType,
+                    specialInstructions: '',
+                    deliveryDate: null,
+                    trialDate: null,
+                    isPriority: false,
+                    stitchingPrice: initialStitchingPrice,
+                    inspiration: '',
+                    uploadedImages: [],
+                    additionalCosts: []
+                }
+            }));
+        } else {
+            setType(itemsData[instanceId].type);
+        }
+        
+        if (currentSelectedCustomer && !garmentRefNames[instanceId]) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceId]: currentSelectedCustomer.fname
+            }));
+        }
+    };
+ 
     const handleSelectCustomer = (customer: Customer) => {
         setSelectedCustomer(customer);
         setShowCustomerDialog(false);
         setCustomerSearch('');
     };
 
-    const handleAddOutfit = (garment: Material, index: number) => {
-        setCurrentGarment(garment);
-        const instanceId = generateInstanceId(garment, index);
-        setCurrentInstanceId(instanceId);
-        setShowCreateDialog(true);
-    };
-
     const handleClearCustomer = () => {
         setSelectedCustomer(null);
-        setGarmentRefNames({});
-        setSelectedGarments([]);
-        setAllMeasurements({});
-        setIsMesurementSaved({});
-        setStitchOptions({});
     };
 
     const handleRefNameChange = (garmentId: string, newName: string) => {
@@ -352,99 +403,139 @@ const CreateOrder = () => {
         }));
     };
 
-   const handleOutfitSelection = (garment: Material) => {
-        const newGarments = [...selectedGarments, garment];
-        setSelectedGarments(newGarments);
+    const handleCloneGarment = (garmentToClone: Material, originalInstanceId: string) => {
+        const newInstanceId = generateInstanceId(garmentToClone, selectedGarments.length);
+
+        setSelectedGarments(prev => [...prev, { garment: garmentToClone, instanceId: newInstanceId }]);
+
+        const originalItemData = itemsData[originalInstanceId];
+        if (originalItemData) {
+            setItemsData(prev => ({ ...prev, [newInstanceId]: { ...originalItemData } }));
+        }
+
+        const originalMeasurements = allMeasurements[originalInstanceId];
+        if (originalMeasurements) {
+            setAllMeasurements(prev => ({ ...prev, [newInstanceId]: { ...originalMeasurements } }));
+            setIsMesurementSaved(prev => ({ ...prev, [newInstanceId]: true }));
+        }
+
+        const originalStitchOptions = stitchOptions[originalInstanceId];
+        if (originalStitchOptions) {
+            setStitchOptions(prev => ({ ...prev, [newInstanceId]: { ...originalStitchOptions } }));
+        }
+
+        const originalRefName = garmentRefNames[originalInstanceId];
+        if (originalRefName) {
+            setGarmentRefNames(prev => ({ ...prev, [newInstanceId]: originalRefName }));
+        }
+        
+        const originalTotal = garmentTotals[originalInstanceId];
+        if (originalTotal) {
+            setGarmentTotals(prev => ({ ...prev, [newInstanceId]: originalTotal }));
+        }
+    };
+
+    const handleOutfitSelection = (garment: Material) => {
+        const existingCount = selectedGarments.filter(sg => sg.garment.id === garment.id).length;
+        const instanceId = generateInstanceId(garment, existingCount);
+        
+        setSelectedGarments(prev => [...prev, { garment, instanceId }]);
+        
         setShowOutfitSelectionDialog(false);
         setCurrentGarment(garment);
-        
-        const instanceId = generateInstanceId(garment, newGarments.length - 1);
         setCurrentInstanceId(instanceId);
         
-        setItemsData(prev => ({
-            ...prev,
-            [instanceId]: {
-                type: 'stitching',
-                specialInstructions: '',
-                deliveryDate: null,
-                trialDate: null,
-                isPriority: false,
-                quantity: 1,
-                stitchingPrice: 0,
-                inspiration: '',
-                uploadedImages: [],
-                additionalCosts: []
-            }
-        }));
-        
-        if (selectedCustomer) {
-            setGarmentRefNames(prev => ({
-                ...prev,
-                [instanceId]: selectedCustomer.fname
-            }));
+        ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
+
+        if (itemsData[instanceId]) {
+            setType(itemsData[instanceId].type);
+        } else {
+            setType('stitching');
         }
         
         setShowCreateDialog(true);
     };
 
-    const openMeasurementDialog = async (garment: Material, index: number) => {
-        const instanceId = generateInstanceId(garment, index);
-        setCurrentGarment(garment);
-        setCurrentInstanceId(instanceId);
-        await fetchMeasurementData(garment.id);
-        
-        const initialValues: {[key: string]: string} = {};
-        measurementData.forEach(master => {
-          initialValues[master.measurement_name] = 
-            master.measurementDetail?.measurement_val || '';
+    const openMeasurementDialog = async (garmentForDialog: Material, instanceIdForDialog: string) => {
+        setCurrentGarment(garmentForDialog);
+        setCurrentInstanceId(instanceIdForDialog);
+        setHasMeasurementEntered(false);
+    
+        if (!selectedCustomer) return;
+    
+        if (!garmentRefNames[instanceIdForDialog] && selectedCustomer) {
+            setGarmentRefNames(prev => ({
+                ...prev,
+                [instanceIdForDialog]: selectedCustomer.fname
+            }));
+        }
+    
+        const garmentSpecificMasters = await fetchMeasurementData(garmentForDialog.id);
+    
+        const existingMeasurementsForInstance = allMeasurements[instanceIdForDialog] || {};
+        const initialDialogMeasurements: { [key: string]: MeasurementEntry } = {};
+
+        garmentSpecificMasters.forEach(master => {
+            const existingEntry = existingMeasurementsForInstance[master.measurement_name];
+            if (existingEntry) {
+                initialDialogMeasurements[master.measurement_name] = {
+                    val: existingEntry.val,
+                    master_id: existingEntry.master_id
+                };
+            } else {
+                initialDialogMeasurements[master.measurement_name] = {
+                    val: master.measurementDetail?.measurement_val || '',
+                    master_id: master.id
+                };
+            }
         });
-        
-        const existingMeasurements = allMeasurements[instanceId] || {};
-        setCurrentMeasurements({
-            ...initialValues,
-            ...existingMeasurements
-        });
+        setMeasurementData(garmentSpecificMasters);
+        setCurrentMeasurements(initialDialogMeasurements);
         setVisible(true);
     };
 
-    const handleMeasurementChange = (measurement: string, value: string) => {
-        setCurrentMeasurements(prev => ({
-          ...prev,
-          [measurement]: value
-        }));
+    const handleMeasurementChange = (measurementName: string, value: string) => {
+        setCurrentMeasurements(prev => {
+            const existingEntry = prev[measurementName] || { val: null, master_id: '' };
+            const newMeasurements = {
+                ...prev,
+                [measurementName]: { ...existingEntry, val: value }
+            };
+            
+            const hasValue = Object.values(newMeasurements).some(entry => entry.val && entry.val.trim() !== '');
+            setHasMeasurementEntered(hasValue);
+            
+            return newMeasurements;
+        });
     };
 
     const handleSaveMeasurements = () => {
         if (currentGarment && currentInstanceId) {
-          setAllMeasurements(prev => ({
-            ...prev,
-            [currentInstanceId]: {
-              ...prev[currentInstanceId],
-              ...currentMeasurements
-            }
-          }));
-          
-          setIsMesurementSaved(prev => ({
-            ...prev,
-            [currentInstanceId]: true
-          }));
+            const measurementsToSave: { [key: string]: MeasurementEntry } = {};
+            Object.entries(currentMeasurements).forEach(([name, entry]) => {
+                const master = measurementData.find(m => m.measurement_name === name);
+                measurementsToSave[name] = {
+                    val: entry.val,
+                    master_id: master?.id || '0'
+                };
+            });
+
+            setAllMeasurements(prev => ({
+                ...prev,
+                [currentInstanceId]: measurementsToSave
+            }));
+            
+            setIsMesurementSaved(prev => ({
+                ...prev,
+                [currentInstanceId]: true
+            }));
         }
         setVisible(false);
     };
 
     const handleSaveOrder = () => {
-        if (currentGarment && currentInstanceId) {
-            const instanceExists = selectedGarments.some((g, index) => 
-                generateInstanceId(g, index) === currentInstanceId
-            );
-            
-            if (!instanceExists) {
-                setSelectedGarments(prev => [...prev, currentGarment]);
-            }
-            
-            setShowCreateDialog(false);
-            resetDialog();
-        }
+        setShowCreateDialog(false);
+        resetDialog();
     };
 
     const resetDialog = () => {
@@ -598,12 +689,12 @@ const CreateOrder = () => {
     const showToast = async (message: string) => {
         await Toast.show({ 
           text: message,
-          duration: 'long',
-          position: 'top'
+          duration: 'short',
+          position: 'bottom'
         });
     };   
 
-   const handleConfirmOrder = async () => {        
+    const handleConfirmOrder = async () => {        
         try {
             setIsConfirmingOrder(true);
             if (!selectedCustomer) {
@@ -625,8 +716,8 @@ const CreateOrder = () => {
             const currentDate = new Date();
             
             const orderDetails = await Promise.all(
-                selectedGarments.map(async (garment, index) => {
-                    const instanceId = generateInstanceId(garment, index);
+                selectedGarments.map(async (sgEntry) => {
+                    const { garment, instanceId } = sgEntry;
                     const itemData = itemsData[instanceId] || {};
                     
                     const base64Images = await Promise.all(
@@ -646,24 +737,25 @@ const CreateOrder = () => {
                         image_url: base64Images,
                         item_amt: garmentTotals[instanceId] || 0,
                         item_discount: 0,
-                        ord_qty: itemData.quantity || 1,
+                        ord_qty: 1,
                         trial_date: formatDateTime(itemData.trialDate),
                         delivery_date: formatDateTime(itemData.deliveryDate),
                         item_ref: garmentRefNames[instanceId] || '',
                         admsite_code: parseInt(selectedCustomer.admsite_code) || 0,
                         status_id: 1,
+                        type_id: itemData.type === 'stitching' ? 1 : 2,
                         desc1: itemData.specialInstructions || '',
                         desc2: itemData.inspiration || '',
                         measurement_main: [{
                             user_id: parseInt(selectedCustomer.id),
                             material_master_id: parseInt(garment.id),
                             measurement_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                            details: measurementData
-                                .filter(master => allMeasurements[instanceId]?.[master.measurement_name] !== undefined)
-                                .map(master => ({
-                                    measurement_master_id: parseInt(master.id),
-                                    measurement_val: allMeasurements[instanceId][master.measurement_name] || ''
-                                }))
+                            details: Object.entries(allMeasurements[instanceId] || {}).map(([key, measurementEntry]) => {
+                                return {
+                                    measurement_master_id: parseInt(measurementEntry.master_id || '0'),
+                                    measurement_val: measurementEntry.val || ''
+                                };
+                            })
                         }]
                     };
                 })
@@ -672,7 +764,6 @@ const CreateOrder = () => {
             const orderPayload = {
                 user_id: parseInt(selectedCustomer.id),
                 order_date: formatDateTime(currentDate) || currentDate.toISOString().replace('T', ' ').substring(0, 19),
-                type_id: 1,
                 status_id: 1,
                 order_details: orderDetails
             };
@@ -689,12 +780,18 @@ const CreateOrder = () => {
             setAllMeasurements({});
             setIsMesurementSaved({});
             setStitchOptions({});
+
+            router.push('/pages/orders/sales-order');
             
             return response;
-        } catch (error) {
-            console.error('Error confirming order:', error);
-            await showToast('Failed to confirm order. Please try again.');
-            throw error;
+        } catch (err: any) {
+            const errorMessage = err?.message || 'Failed to confirm order. Please try again.';
+            await Toast.show({
+                text: errorMessage,
+                duration: 'short',
+                position: 'bottom'
+            });
+            console.error('Error:', err);
         } finally {
             setIsConfirmingOrder(false);
         }
@@ -709,7 +806,7 @@ const CreateOrder = () => {
     const measurementFooter = (
         <div>
           <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
-          <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus />
+          <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus disabled={!hasMeasurementEntered} />
         </div>
     );
 
@@ -737,11 +834,12 @@ const CreateOrder = () => {
 
     return (
         <div className="flex flex-column p-3 lg:p-5 mb-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            {(isConfirmingOrder) && <FullPageLoader />}
             <h2 className="text-2xl m-0 mb-3">Create Order</h2>
             <Card className="mb-4">
-                <div className="flex flex-column gap-2 p-3 surface-50 border-round">
+                <div className="flex flex-column gap-1 surface-50 border-round">
                     {selectedCustomer ? (
-                        <div className="flex flex-column gap-2">
+                        <div className="flex flex-column">
                             <div className="flex justify-content-between align-items-center">
                                 <div className="flex align-items-center gap-2">
                                     <i className="pi pi-user text-500"></i>
@@ -789,51 +887,48 @@ const CreateOrder = () => {
 
                 {selectedGarments.length > 0 ? (
                     <div className="grid">
-                        {selectedGarments.map((garment, index) => {
-                            const instanceId = generateInstanceId(garment, index);
+                        {selectedGarments.map((sgEntry) => {
+                            const { garment, instanceId } = sgEntry;
                             return (
                                 <div key={instanceId} className="col-12 md:col-6 lg:col-4">
                                     <Card className="h-full">
-                                        <div className="flex flex-column gap-1">
+                                        <div className="flex flex-column">
                                             <div className="flex justify-content-between align-items-center">
                                                 <span className="font-medium">{garment.name}</span>
-                                                <div className="flex gap-2">
-                                                    <Button 
-                                                        icon="pi pi-pencil" 
+                                                <div className="flex">
+                                                    <Button
+                                                        icon="pi pi-copy"
+                                                        rounded
+                                                        text
+                                                        severity="secondary"
+                                                        onClick={() => handleCloneGarment(garment, instanceId)}
+                                                    />
+                                                    <Button
+                                                        icon="pi pi-pencil"
                                                         rounded
                                                         text
                                                         severity="info"
-                                                        onClick={() => handleAddOutfit(garment, index)}
+                                                        onClick={() => {
+                                                            setCurrentGarment(garment);
+                                                            setCurrentInstanceId(instanceId);
+                                                            ensureInstanceDataInitialized(instanceId, garment, selectedCustomer);
+                                                            setType(itemsData[instanceId]?.type || 'stitching');
+                                                            setShowCreateDialog(true);
+                                                        }}
                                                     />
-                                                    <Button 
-                                                        icon="pi pi-trash" 
+                                                    <Button
+                                                        icon="pi pi-trash"
                                                         rounded
-                                                        text 
+                                                        text
                                                         severity="danger"
                                                         onClick={() => {
-                                                            setSelectedGarments(
-                                                                selectedGarments.filter((g, i) => i !== index)
-                                                            );
-                                                            setGarmentRefNames(prev => {
-                                                                const newRefNames = {...prev};
-                                                                delete newRefNames[instanceId];
-                                                                return newRefNames;
-                                                            });
-                                                            setAllMeasurements(prev => {
-                                                                const newMeasurements = {...prev};
-                                                                delete newMeasurements[instanceId];
-                                                                return newMeasurements;
-                                                            });
-                                                            setIsMesurementSaved(prev => {
-                                                                const newSaved = {...prev};
-                                                                delete newSaved[instanceId];
-                                                                return newSaved;
-                                                            });
-                                                            setStitchOptions(prev => {
-                                                                const newOptions = {...prev};
-                                                                delete newOptions[instanceId];
-                                                                return newOptions;
-                                                            });
+                                                            setSelectedGarments(prevSg => prevSg.filter(item => item.instanceId !== instanceId));
+                                                            setGarmentRefNames(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setAllMeasurements(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setIsMesurementSaved(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setStitchOptions(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setItemsData(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
+                                                            setGarmentTotals(prev => { const newState = {...prev}; delete newState[instanceId]; return newState; });
                                                         }}
                                                     />
                                                 </div>
@@ -881,7 +976,7 @@ const CreateOrder = () => {
             >
                 <div className="flex flex-column h-full">
                     <div className="p-3 border-bottom-1 surface-border">
-                        <span className="p-input-icon-left w-full">
+                          <span className="p-input-icon-left p-input-icon-right w-full">
                             <i className="pi pi-search" />
                             <InputText
                                 value={customerSearch}
@@ -889,6 +984,15 @@ const CreateOrder = () => {
                                 placeholder="Search"
                                 className="w-full"
                             />
+                            {customerSearch && (
+                                <i 
+                                    className="pi pi-times cursor-pointer" 
+                                    onClick={() => {
+                                    setCustomerSearch('');
+                                    fetchCustomers('', 1);
+                                    }}
+                                />
+                            )}
                         </span>
                     </div>
 
@@ -963,21 +1067,31 @@ const CreateOrder = () => {
                 className="custom-selector-sidebar"
                 header={
                     <div className="sticky top-0 bg-white z-1 p-2 surface-border flex justify-content-between align-items-center">
-                    <span className="font-bold text-2xl">Select Outfits</span>
+                        <span className="font-bold text-2xl">Select Outfits</span>
                     </div>
                 }
                 blockScroll
                 >
                 <div className="flex flex-column h-full">
                     <div className="p-3 border-bottom-1 surface-border">
-                        <span className="p-input-icon-left w-full">
+                        <span className="p-input-icon-left p-input-icon-right w-full">
                             <i className="pi pi-search" />
                             <InputText
                                 value={materialSearch}
                                 onChange={handleMaterialSearch}
-                                placeholder="Search outfits..."
+                                placeholder="Search"
                                 className="w-full"
                             />
+
+                            {materialSearch && (
+                                <i 
+                                    className="pi pi-times cursor-pointer" 
+                                    onClick={() => {
+                                    setMaterialSearch('');
+                                    fetchMaterials('', 1);
+                                    }}
+                                />
+                            )}
                         </span>
                     </div>
 
@@ -990,7 +1104,7 @@ const CreateOrder = () => {
                             >
                                 <div>
                                     <span className="font-medium text-900">{material.name}</span>
-                                    <div className="text-sm text-500">₹{material.mrp}</div>
+                                    <div className="text-sm text-500">₹{material.displayPrice.toLocaleString('en-IN')}</div>
                                 </div>
                                 <i className="pi pi-plus-circle text-2xl" />
                             </div>
@@ -1005,11 +1119,11 @@ const CreateOrder = () => {
                 </div>
             </Sidebar>
 
-            <Dialog 
-                header='Create Order' 
+            <Dialog
+                header='Create Order'
                 visible={showCreateDialog}
-                onHide={() => { 
-                    setShowCreateDialog(false); 
+                onHide={() => {
+                    setShowCreateDialog(false);
                     resetDialog();
                     setEditingRefName({});
                 }}
@@ -1064,78 +1178,120 @@ const CreateOrder = () => {
                         <label>Type</label>
                         <div className="flex gap-3 mt-2">
                             <div className="flex align-items-center">
-                                <RadioButton inputId="stitching" name="type" value="stitching" onChange={(e) => setType(e.value)} checked={type === 'stitching'} />
+                                <RadioButton 
+                                    inputId="stitching" 
+                                    name="type" 
+                                    value="stitching" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const stitchingPrice = getMaterialPrice(currentGarment, 'stitching');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: stitchingPrice
+                                                }
+                                            }));
+                                        }
+                                    }}
+                                    checked={type === 'stitching'}
+                                />
                                 <label htmlFor="stitching" className="ml-2">Stitching</label>
                             </div>
                             <div className="flex align-items-center">
-                                <RadioButton inputId="alteration" name="type" value="alteration" onChange={(e) => setType(e.value)} checked={type === 'alteration'} />
+                                <RadioButton 
+                                    inputId="alteration"
+                                    name="type" 
+                                    value="alteration" 
+                                    onChange={(e) => {
+                                        setType(e.value);
+                                        if (currentGarment && currentInstanceId) {
+                                            const alterationPrice = getMaterialPrice(currentGarment, 'alteration');
+                                            setItemsData(prev => ({
+                                                ...prev,
+                                                [currentInstanceId]: {
+                                                    ...prev[currentInstanceId],
+                                                    type: e.value,
+                                                    stitchingPrice: alterationPrice
+                                                }
+                                            }));
+                                        }
+                                    }}
+                                    checked={type === 'alteration'}
+                                />
                                 <label htmlFor="alteration" className="ml-2">Alteration</label>
                             </div>
                         </div>
                     </div>
 
-                    {type === 'stitching' && (
-                        <>
-                            <div className="flex flex-column gap-3 mb-4">
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Add Measurements</span>
-                                        <div className="w-3 text-right">
-                                           {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
-                                                <Button 
-                                                    label="Edit"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            ) : (
-                                                <Button 
-                                                    label="Add"
-                                                    icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
-                                                    onClick={() => currentGarment && openMeasurementDialog(currentGarment, selectedGarments.findIndex(g => generateInstanceId(g, selectedGarments.indexOf(g)) === currentInstanceId))}
-                                                    className="p-button-sm p-button-outlined"
-                                                    disabled={isAddingMeasurements}
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-column gap-2">
-                                    <div className="flex align-items-center">
-                                        <span className="font-medium w-9">Stitch Options</span>
-                                        <div className="w-3 text-right">
-                                            <Button 
-                                                label="Add" 
-                                                icon="pi pi-plus" 
-                                                onClick={() => {
-                                                    if (currentInstanceId) {
-                                                        const currentOptions = stitchOptions[currentInstanceId] || {};
-                                                        setCollarOption(currentOptions.collar || null);
-                                                        setSleeveOption(currentOptions.sleeve || null);
-                                                        setBottomOption(currentOptions.bottom || null);
-                                                        setPocketOption(currentOptions.pocket || '');
-                                                        setPocketSquareOption(currentOptions.pocketSquare || '');
-                                                        setCuffsOption(currentOptions.cuffs || '');
-                                                    }
-                                                    setShowStitchOptionsDialog(true);
-                                                }}
-                                                className="p-button-sm p-button-outlined"
-                                            />
-                                        </div>
-                                    </div>
+                    <div className="flex flex-column gap-3 mb-4">
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Add Measurements</span>
+                                <div className="w-3 text-right">
+                                    {currentInstanceId && isMesurementSaved[currentInstanceId] ? (
+                                        <Button
+                                            label="Edit"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-pencil"}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    ) : (
+                                        <Button
+                                            label="Add"
+                                            icon={isAddingMeasurements ? "pi pi-spinner pi-spin" : "pi pi-plus"}
+                                            onClick={() => {
+                                                if (currentGarment && currentInstanceId) {
+                                                    openMeasurementDialog(currentGarment, currentInstanceId);
+                                                }
+                                            }}
+                                            className="p-button-sm p-button-outlined"
+                                            disabled={isAddingMeasurements}
+                                        />
+                                    )}
                                 </div>
                             </div>
-                        </>
-                    )}
+                        </div>
+
+                        <div className="flex flex-column gap-2">
+                            <div className="flex align-items-center">
+                                <span className="font-medium w-9">Stitch Options</span>
+                                <div className="w-3 text-right">
+                                    <Button 
+                                        label="Add" 
+                                        icon="pi pi-plus" 
+                                        onClick={() => {
+                                            if (currentInstanceId) {
+                                                const currentOptions = stitchOptions[currentInstanceId] || {};
+                                                setCollarOption(currentOptions.collar || null);
+                                                setSleeveOption(currentOptions.sleeve || null);
+                                                setBottomOption(currentOptions.bottom || null);
+                                                setPocketOption(currentOptions.pocket || '');
+                                                setPocketSquareOption(currentOptions.pocketSquare || '');
+                                                setCuffsOption(currentOptions.cuffs || '');
+                                            }
+                                            setShowStitchOptionsDialog(true);
+                                        }}
+                                        className="p-button-sm p-button-outlined"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="field mb-4">
                         <label htmlFor="instructions">Special Instructions</label>
                         <InputTextarea 
                             id="instructions" 
                             rows={3} 
-                            value={currentInstanceId ? itemsData[currentInstanceId]?.specialInstructions || '' : ''} 
+                            value={currentInstanceId ? itemsData[currentInstanceId]?.specialInstructions || '' : ''}
                             onChange={(e) => {
                                 if (currentInstanceId) {
                                     setItemsData(prev => ({
@@ -1146,36 +1302,36 @@ const CreateOrder = () => {
                                         }
                                     }));
                                 }
-                            }} 
-                            placeholder="Write instructions..." 
-                            className="w-full" 
+                            }}
+                            placeholder="Write instructions..."
+                            className="w-full"
                         />
                     </div>
 
                     <div className="flex flex-column gap-4 mb-4">
-                        <Button 
-                            icon="pi pi-microphone" 
-                            label="Record Audio" 
-                            className="p-button-outlined w-7" 
+                        <Button
+                            icon="pi pi-microphone"
+                            label="Record Audio"
+                            className="p-button-outlined w-7"
                             disabled
                         />
                         <div>
-                            <input 
-                                type="file" 
+                            <input
+                                type="file"
                                 ref={ref => setImageUploadRef(ref)}
                                 onChange={(e) => {
                                     if (currentInstanceId) {
                                         handleFileUpload(e, currentInstanceId);
                                     }
                                 }}
-                                multiple 
+                                multiple
                                 accept="image/*"
                                 style={{ display: 'none' }}
                             />
-                            <Button 
-                                icon="pi pi-image" 
+                            <Button
+                                icon="pi pi-image"
                                 label="Upload Image"
-                                className="p-button-outlined w-7" 
+                                className="p-button-outlined w-7"
                                 onClick={() => setShowImageSourceDialog(true)}
                             />
                             <p className="mt-1 text-sm text-500">
@@ -1198,9 +1354,9 @@ const CreateOrder = () => {
                                                     setVisibleGalleria(true);
                                                 }}
                                             />
-                                            <Button 
-                                                icon="pi pi-trash" 
-                                                className="p-button-rounded p-button-danger p-button-text absolute" 
+                                            <Button
+                                                icon="pi pi-trash"
+                                                className="p-button-rounded p-button-danger p-button-text absolute"
                                                 style={{ top: '4px', right: '4px', width: '1.5rem', height: '1.5rem' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -1269,6 +1425,7 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Delivery Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
 
@@ -1295,15 +1452,16 @@ const CreateOrder = () => {
                                 hourFormat="12"
                                 placeholder="Select Trial Date"
                                 timeOnly={false}
+                                minDate={new Date()}
                             />
                         </div>
                     </div>
 
                     <div className="field mb-4">
                         <div className="flex align-items-center">
-                            <Checkbox 
-                                inputId="priority" 
-                                checked={currentInstanceId ? itemsData[currentInstanceId]?.isPriority || false : false} 
+                            <Checkbox
+                                inputId="priority"
+                                checked={currentInstanceId ? itemsData[currentInstanceId]?.isPriority || false : false}
                                 onChange={(e) => {
                                     if (currentInstanceId) {
                                         setItemsData(prev => ({
@@ -1314,7 +1472,7 @@ const CreateOrder = () => {
                                             }
                                         }));
                                     }
-                                }} 
+                                }}
                             />
                             <label htmlFor="priority" className="ml-2 mb-0">Prioritize Order</label>
                         </div>
@@ -1324,60 +1482,43 @@ const CreateOrder = () => {
 
                     <div className="flex flex-column gap-3">
                         <div className="field">
-                            <label htmlFor="quantity">Quantity</label>
-                            <InputNumber 
-                                id="quantity"
-                                value={currentInstanceId ? itemsData[currentInstanceId]?.quantity || 1 : 1} 
-                                onValueChange={(e) => {
-                                    if (currentInstanceId) {
-                                        setItemsData(prev => ({
-                                            ...prev,
-                                            [currentInstanceId]: {
-                                                ...prev[currentInstanceId],
-                                                quantity: e.value || 1
-                                            }
-                                        }));
-                                    }
-                                }} 
-                                mode="decimal" 
-                                showButtons 
-                                min={1} 
-                                max={100} 
-                                className="w-full" 
-                            />
-                        </div>
-
-                        <div className="field">
                             <label htmlFor="price">Stitching Price (₹)</label>
-                            <InputNumber 
-                                id="price" 
-                                value={currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0} 
+                            <InputNumber
+                                id="price"
+                                value={currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0}
                                 onValueChange={(e) => {
-                                    if (currentInstanceId) {
-                                        setItemsData(prev => ({
-                                            ...prev,
-                                            [currentInstanceId]: {
-                                                ...prev[currentInstanceId],
-                                                stitchingPrice: e.value || 0
-                                            }
-                                        }));
+                                if (currentInstanceId) {
+                                    setItemsData(prev => ({
+                                    ...prev,
+                                    [currentInstanceId]: {
+                                        ...prev[currentInstanceId],
+                                        stitchingPrice: e.value || 0
                                     }
-                                }} 
-                                mode="currency" 
-                                currency="INR" 
-                                locale="en-IN" 
+                                    }));
+                                }
+                                }}
+                                onFocus={(e) => {
+                                if ((currentInstanceId ? itemsData[currentInstanceId]?.stitchingPrice || 0 : 0) === 0) {
+                                    setTimeout(() => {
+                                    e.target.select();
+                                    }, 0);
+                                }
+                                }}
+                                mode="currency"
+                                currency="INR"
+                                locale="en-IN"
                                 className="w-full"
                                 placeholder="Enter amount"
-                                minFractionDigits={2}
+                                minFractionDigits={0}
                                 maxFractionDigits={2}
                             />
                         </div>
 
                         <div className="field">
-                            <Button 
-                                label="Add Additional Cost" 
-                                icon="pi pi-plus" 
-                                className="p-button-outlined w-8" 
+                            <Button
+                                label="Add Additional Cost"
+                                icon="pi pi-plus"
+                                className="p-button-outlined w-8"
                                 onClick={() => setShowAddCostDialog(true)}
                             />
                         </div>
@@ -1392,8 +1533,7 @@ const CreateOrder = () => {
                                 <div className="flex justify-content-between align-items-center mb-3">
                                     <span className="text-600">Stitching Price</span>
                                     <span>
-                                        {itemsData[currentInstanceId]?.quantity || 1} x ₹{itemsData[currentInstanceId]?.stitchingPrice || 0} = 
-                                        ₹{((itemsData[currentInstanceId]?.quantity || 1) * (itemsData[currentInstanceId]?.stitchingPrice || 0)).toFixed(2)}
+                                        ₹{(itemsData[currentInstanceId]?.stitchingPrice || 0).toFixed(2)}
                                     </span>
                                 </div>
 
@@ -1459,22 +1599,21 @@ const CreateOrder = () => {
                             {master.data_type === 'number' ? (
                             <InputNumber 
                                 id={master.measurement_name}
-                                value={currentMeasurements[master.measurement_name] ? parseFloat(currentMeasurements[master.measurement_name]!) : null}
+                                value={currentMeasurements[master.measurement_name]?.val ? parseFloat(currentMeasurements[master.measurement_name].val!) : null}
                                 onChange={(e) => handleMeasurementChange(
-                                master.measurement_name, 
+                                master.measurement_name,
                                 e.value?.toString() || ''
                                 )}
                                 mode="decimal" 
                                 min={0} 
-                                max={100}
                                 className="w-full"
                             />
                             ) : (
                             <InputText
                                 id={master.measurement_name}
-                                value={currentMeasurements[master.measurement_name] || ''}
+                                value={currentMeasurements[master.measurement_name]?.val || ''}
                                 onChange={(e) => handleMeasurementChange(
-                                master.measurement_name, 
+                                master.measurement_name,
                                 e.target.value
                                 )}
                                 className="w-full"

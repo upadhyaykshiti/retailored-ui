@@ -12,7 +12,7 @@ const AppMenu = () => {
         {
             label: 'Home',
             items: [
-                { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }
+                { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/pages/dashboard' }
             ]
         },
         {
@@ -25,17 +25,16 @@ const AppMenu = () => {
         {
             label: 'Masters',
             items: [
-                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/garments' },
+                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/products' },
                 { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list' },
-                { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' },
-                { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
+                { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' }
             ]
         },
         {
             label: 'Reports',
             items: [
-                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
-                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true },
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales' },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs' },
                 { label: 'Pending Payments', icon: 'pi pi-fw pi-dollar', to: '/pages/reports/pending-payments' }
             ]
         },
@@ -52,17 +51,17 @@ const AppMenu = () => {
         {
             label: 'Masters',
             items: [
-                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/garments' },
+                { label: 'Products', icon: 'pi pi-fw pi-box', to: '/pages/products' },
                 { label: 'Customers', icon: 'pi pi-fw pi-users', to: '/pages/customer/customer-list' },
                 { label: 'Jobbers', icon: 'pi pi-fw pi-wrench', to: '/pages/jobbers' },
-                { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
+                // { label: 'Vendors', icon: 'pi pi-fw pi-truck', to: '/pages/vendors' }
             ]
         },
         {
             label: 'Reports',
             items: [
-                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales', disabled: true },
-                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs', disabled: true }
+                { label: 'Pending Sales Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-sales' },
+                { label: 'Pending Job Orders', icon: 'pi pi-fw pi-clock', to: '/pages/reports/pending-jobs' }
             ]
         },
         {

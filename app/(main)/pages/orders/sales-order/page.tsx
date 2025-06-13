@@ -9,11 +9,17 @@ import { Tag } from 'primereact/tag';
 import { Calendar } from 'primereact/calendar';
 import { Skeleton } from 'primereact/skeleton';
 import { InputText } from 'primereact/inputtext';
+import { InputNumber } from 'primereact/inputnumber';
+import { InputTextarea } from 'primereact/inputtextarea';
 import { Sidebar } from 'primereact/sidebar';
 import { Dropdown } from 'primereact/dropdown';
+import { useSearchParams } from 'next/navigation';
 import { SalesOrderService } from '@/demo/service/sales-order.service';
 import { JobOrderService } from '@/demo/service/job-order.service';
+import FullPageLoader from '@/demo/components/FullPageLoader';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { ProgressSpinner } from 'primereact/progressspinner';
+import { useDebounce } from 'use-debounce';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
@@ -48,14 +54,28 @@ interface Order {
     measurement_main_id: string;
     image_url: string[] | null;
     material_master_id: string;
-    trial_date: string;
-    delivery_date: string;
+    trial_date: string | null;
+    delivery_date: string | null;
     item_amt: number;
     ord_qty: number;
     delivered_qty: number;
     cancelled_qty: number;
     desc1: string | null;
     ext: string;
+    item_ref: string;
+    orderStatus: {
+      id: string;
+      status_name: string;
+    } | null;
+    material: {
+        id: string;
+        name: string;
+    }
+    jobOrderDetails: {
+      adminSite?: {
+        sitename: string;
+      };
+    }[];
   }[];
 }
 
@@ -63,9 +83,11 @@ interface MeasurementData {
   measurement_date: string;
   measurementDetails: {
     measurement_val: string;
+    measurement_main_id: string;
     measurementMaster: {
       id: string;
       measurement_name: string;
+      data_type: string;
     };
   }[];
 }
@@ -75,21 +97,26 @@ const SalesOrder = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 1000);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null | undefined>(new Date());
-  const [receivePaymentDialog, setReceivePaymentDialog] = useState(false);
-  const [receiveAmount, setReceiveAmount] = useState('');
   const [isMaximized, setIsMaximized] = useState(true);
   const [visible, setVisible] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [editOrderDetailDialogVisible, setEditOrderDetailDialogVisible] = useState(false);
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order['orderDetails'][0] | null>(null);
   const [measurementData, setMeasurementData] = useState<MeasurementData | null>(null);
   const [loadingMeasurements, setLoadingMeasurements] = useState(false);
+  const [editMeasurementDialogVisible, setEditMeasurementDialogVisible] = useState(false);
+  const [editedMeasurements, setEditedMeasurements] = useState<{id: string, name: string, value: string}[]>([]);
   const [statusSidebarVisible, setStatusSidebarVisible] = useState(false);
   const [measurementDialogVisible, setMeasurementDialogVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Order['orderDetails'][0] | null>(null);
   const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
   const [paymentModes, setPaymentModes] = useState<{id: string, mode_name: string}[]>([]);
+  const [paymentHistorySidebarVisible, setPaymentHistorySidebarVisible] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPaymentHistory, setLoadingPaymentHistory] = useState(false);
   const [itemActionSidebarVisible, setItemActionSidebarVisible] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<Order['orderDetails'][0] | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -97,10 +124,12 @@ const SalesOrder = () => {
   const [confirmCancelledVisible, setConfirmCancelledVisible] = useState(false);
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [images, setImages] = useState<{itemImageSrc: string}[]>([]);
   const [pagination, setPagination] = useState({
     currentPage: 1,
-    perPage: 2,
+    perPage: 20,
     total: 0,
     hasMorePages: true
   });
@@ -111,15 +140,18 @@ const SalesOrder = () => {
     reference: ''
   });
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
+  const source = searchParams.get('source');
   const observer = useRef<IntersectionObserver | null>(null);
   const lastOrderRef = useRef<HTMLDivElement>(null);
 
   const availableStatuses = [
     { id: '1', name: 'Pending' },
     { id: '2', name: 'In Progress' },
-    { id: '3', name: 'Ready for Trial' },
-    { id: '4', name: 'Completed' },
-    { id: '5', name: 'Cancelled' }
+    { id: '5', name: 'Ready for Trial' },
+    { id: '3', name: 'Completed' },
+    { id: '4', name: 'Cancelled' }
   ];
 
   const fetchOrders = useCallback(async (page: number, perPage: number, loadMore = false) => {
@@ -130,7 +162,7 @@ const SalesOrder = () => {
         setLoading(true);
       }
 
-      const response = await SalesOrderService.getSalesOrders(page, perPage);
+      const response = await SalesOrderService.getSalesOrders(page, perPage, debouncedSearchTerm);
       const newOrders = response.data.map((res: any) => ({
         ...res,
         customer: res.user.fname,
@@ -150,19 +182,13 @@ const SalesOrder = () => {
         total: response.pagination.total,
         hasMorePages: response.pagination.hasMorePages
       });
-
-      await Toast.show({
-        text: `Loaded ${newOrders.length} orders`,
-        duration: 'short',
-        position: 'top'
-      });
     } catch (error) {
       console.error('Error fetching sales orders:', error);
       setError('Failed to fetch orders');
       await Toast.show({
         text: 'Failed to load orders',
-        duration: 'long',
-        position: 'top'
+        duration: 'short',
+        position: 'bottom'
       });
     } finally {
       if (loadMore) {
@@ -171,11 +197,28 @@ const SalesOrder = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [debouncedSearchTerm]);
 
   useEffect(() => {
-    fetchOrders(1, pagination.perPage);
-  }, [fetchOrders, pagination.perPage]);
+    if (!source) {
+      fetchOrders(1, pagination.perPage);
+    }
+  }, [fetchOrders, pagination.perPage, debouncedSearchTerm]);
+
+  useEffect(() => {
+    if (id) {
+      const openDialog = async () => {
+        try {
+          await fetchOrderDetails(id);
+        } finally {
+          setLoading(false);
+          setVisible(true);
+        }
+      };
+
+      openDialog();
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!pagination.hasMorePages || loading || isFetchingMore) return;
@@ -211,32 +254,50 @@ const SalesOrder = () => {
       if (res && res.orderDetails) {
         const detailedOrder: Order = res;
         setSelectedOrder(detailedOrder);
-        setVisible(true);
       } else {
+        setSelectedOrder(null);
         throw new Error('Order details are missing from the response');
       }
     } catch (err) {
       console.error('Failed to fetch order details:', err);
       setError('Failed to fetch order details');
+      setSelectedOrder(null);
     } finally {
       setListLoading(false);
     }
   };
 
-  const fetchMeasurements = async (measurementMainId: string) => {
+  const fetchPaymentHistory = async (orderId: string) => {
+    try {
+      setLoadingPaymentHistory(true);
+      const response = await SalesOrderService.getOrderInfoByOrderId(orderId);
+      setPaymentHistory(response.data);
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      await Toast.show({
+        text: 'Failed to load payment history',
+        duration: 'short',
+        position: 'bottom'
+      });
+    } finally {
+      setLoadingPaymentHistory(false);
+    }
+  };
+
+  const fetchMeasurements = async (OrderID: number) => {
     setLoadingMeasurements(true);
     try {
-      const response = await SalesOrderService.getOrderMeasurements(measurementMainId);
-      const measurementData = response.data.orderDetail.measurementMain;
-      console.log("Measurement data:", measurementData);
+      const response = await SalesOrderService.getOrderMeasurements(OrderID);
       
-      if (measurementData) {
-        setMeasurementData(measurementData);
-      } else {
+      if (!response) {
         setMeasurementData(null);
+        return;
       }
+
+      const measurementData = response?.orderDetail?.measurementMain || null;
+      
+      setMeasurementData(measurementData);
     } catch (error) {
-      console.error('Failed to load measurements:', error);
       setMeasurementData(null);
     } finally {
       setLoadingMeasurements(false);
@@ -258,15 +319,22 @@ const SalesOrder = () => {
       case 'In Progress': return 'info';
       case 'Pending': return 'warning';
       case 'Cancelled': return 'danger';
+      case 'Partial': return 'warning';
+      case 'Unknown': return 'info';
       default: return null;
     }
   };
 
   const openOrderDetails = (order: Order) => {
     fetchOrderDetails(order.id);
-    fetchPaymentModes();
-    setSelectedOrder(order);
     setVisible(true);
+  };
+
+  const handleDialogClose = () => {
+    setVisible(false);
+    if (source) {
+      router.push(`/pages/reports/${source}`);
+    }
   };
 
   const itemTemplate = (item: {itemImageSrc: string}) => {
@@ -316,60 +384,110 @@ const SalesOrder = () => {
     router.push('/pages/orders/create-order');
   };
 
-  const filteredOrders = orders.filter((order) =>
-    order.docno.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const formatDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  };
+
+  const handleEditOrderDetail = (detail: Order['orderDetails'][0]) => {
+    setSelectedOrderDetail(detail);
+    setEditOrderDetailDialogVisible(true);
+  };
+
+  const handleUpdateOrderDetail = async () => {
+    if (!selectedOrderDetail || !selectedOrder || !selectedOrderDetail.id) {
+      await Toast.show({
+        text: 'Invalid order details for update',
+        duration: 'short',
+        position: 'bottom'
+      });
+      return;
+    }
+    
+    try {
+      setIsSavingDetails(true);
+
+      await SalesOrderService.updateOrderDetails(
+        selectedOrderDetail.id,
+        {
+          order_id: Number(selectedOrderDetail.order_id),
+          measurement_main_id: Number(selectedOrderDetail.measurement_main_id),
+          material_master_id: Number(selectedOrderDetail.material_master_id),
+          trial_date: formatDateTime(selectedOrderDetail.trial_date),
+          delivery_date: formatDateTime(selectedOrderDetail.delivery_date),
+          item_amt: selectedOrderDetail.item_amt,
+          ord_qty: selectedOrderDetail.ord_qty,
+          desc1: selectedOrderDetail.desc1,
+          admsite_code: selectedOrder?.user?.admsite_code.toString() || null
+        }
+      );
+
+      await Toast.show({
+        text: 'Order details updated successfully',
+        duration: 'short',
+        position: 'bottom'
+      });
+
+      await fetchOrderDetails(selectedOrder.id);
+      await fetchOrders(pagination.currentPage, pagination.perPage);
+      setEditOrderDetailDialogVisible(false);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update order details';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
+      });
+      console.error('Error:', err);
+    } finally {
+      setIsSavingDetails(false);
+    }
+  };
 
   const getPendingAmountSummary = (order: Order) => {
     return `₹${order.amt_due} (₹${order.ord_amt})`;
   };
 
-  const handleStatusUpdate = async (newStatus: string) => {
+  const handleViewPaymentHistory = async () => {
+    if (selectedOrder) {
+      await fetchPaymentHistory(selectedOrder.id);
+      setPaymentHistorySidebarVisible(true);
+    }
+  };
+
+  const handleItemStatusUpdate = async (statusId: number) => {
+    if (!selectedDetail || !selectedOrder) return;
+
     try {
-      if (!selectedOrder) return;
-  
-      setOrders(orders.map(order => 
-        order.id === selectedOrder.id 
-          ? { 
-              ...order, 
-              orderStatus: order.orderStatus 
-                ? { 
-                    ...order.orderStatus, 
-                    status_name: newStatus 
-                  } 
-                : { 
-                    id: availableStatuses.find(s => s.name === newStatus)?.id || '', 
-                    status_name: newStatus 
-                  }
-            } 
-          : order
-      ));
-      
-      setSelectedOrder({
-        ...selectedOrder,
-        orderStatus: selectedOrder.orderStatus
-          ? {
-              ...selectedOrder.orderStatus,
-              status_name: newStatus
-            }
-          : {
-              id: availableStatuses.find(s => s.name === newStatus)?.id || '',
-              status_name: newStatus
-            }
+      setLoading(true);
+      await SalesOrderService.updateSalesOrderStatus(selectedDetail.id, {
+        status_id: statusId,
       });
-      
+
+      const newStatus = availableStatuses.find(s => parseInt(s.id) === statusId)?.name;
+
       await Toast.show({
-        text: `Status updated to ${newStatus}`,
-        duration: 'long'
+        text: `Item status updated to ${newStatus || 'selected status'}`,
+        duration: 'short',
+        position: 'bottom'
       });
-      
-    } catch (error) {
-      console.error('Error updating status:', error);
+
+      await Promise.all([
+        fetchOrderDetails(selectedOrder.id),
+        fetchOrders(pagination.currentPage, pagination.perPage)
+      ]);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update item status';
       await Toast.show({
-        text: 'Failed to update status',
-        duration: 'short'
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
       });
+      console.error('Error:', err);
     } finally {
+      setLoading(false);
       setStatusSidebarVisible(false);
     }
   };
@@ -378,7 +496,78 @@ const SalesOrder = () => {
     setSelectedItem(item);
     setMeasurementDialogVisible(true);
     if (item.id) {
-      fetchMeasurements(item.id);
+      fetchMeasurements(Number(item.id));
+    }
+  };
+
+  const handleEditMeasurement = () => {
+    if (!measurementData) return;
+    
+    const measurementsToEdit = measurementData.measurementDetails.map(detail => ({
+      id: detail.measurementMaster.id,
+      name: detail.measurementMaster.measurement_name,
+      value: detail.measurement_val
+    }));
+    
+    setEditedMeasurements(measurementsToEdit);
+    setEditMeasurementDialogVisible(true);
+  };
+
+  const handleMeasurementValueChange = (id: string, value: string) => {
+    setEditedMeasurements(prev => 
+      prev.map(item => 
+        item.id === id ? { ...item, value } : item
+      )
+    );
+  };
+
+  const saveEditedMeasurements = async () => {
+    try {
+      if (!selectedItem?.id || !measurementData) return;
+
+      setIsSaving(true);
+
+      const id = Number(measurementData.measurementDetails[0]?.measurement_main_id);
+
+      const measurementUpdates = editedMeasurements.map((item) => ({
+        measurement_main_id: id,
+        measurement_master_id: Number(item.id),
+        measurement_val: item.value,
+      }));
+
+      await SalesOrderService.updateMeasurementsDetails(id, measurementUpdates);
+
+      await Toast.show({
+        text: 'Measurements updated successfully',
+        duration: 'short',
+        position: 'bottom',
+      });
+
+      fetchMeasurements(Number(selectedItem.id));
+      setEditMeasurementDialogVisible(false);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update measurements';
+      await Toast.show({
+        text: errorMessage,
+        duration: 'short',
+        position: 'bottom'
+      });
+      console.error('Error:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePaymentClick = () => {
+    if (selectedOrder) {
+        setPaymentForm({
+            amount: selectedOrder.amt_due.toString(),
+            paymentDate: new Date().toISOString().split('T')[0],
+            paymentMethod: '',
+            reference: ''
+        });
+        setPaymentDialogVisible(true);
+        fetchPaymentModes();
     }
   };
 
@@ -387,7 +576,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Please fill all required fields',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       return;
     }
@@ -408,7 +597,7 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Payment recieved successfully',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
   
       setPaymentForm({
@@ -417,15 +606,17 @@ const SalesOrder = () => {
         reference: '',
         paymentMethod: ''
       });
+      setVisible(false);
       setPaymentDialogVisible(false);
-  
-    } catch (error) {
-      console.error('Error recording payment:', error);
+      await fetchOrders(1, pagination.perPage);
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to record payment';
       await Toast.show({
-        text: 'Failed to record payment',
+        text: errorMessage,
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
@@ -454,17 +645,19 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Item marked as delivered',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       
       await fetchOrderDetails(selectedOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update delivery status';
       await Toast.show({
-        text: 'Failed to update delivery status',
+        text: errorMessage,
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
   
@@ -480,21 +673,23 @@ const SalesOrder = () => {
       await Toast.show({
         text: 'Item marked as cancelled',
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
       
       await fetchOrderDetails(selectedOrder.id);
       setItemActionSidebarVisible(false);
-    } catch (error) {
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to update cancellation status';
       await Toast.show({
-        text: 'Failed to update cancellation status',
+        text: errorMessage,
         duration: 'short',
-        position: 'top'
+        position: 'bottom'
       });
+      console.error('Error:', err);
     }
   };
 
-  if (loading && !isFetchingMore) {
+  if (loading && !isFetchingMore && !debouncedSearchTerm) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3 w-full">
@@ -557,9 +752,10 @@ const SalesOrder = () => {
 
   return (
     <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      {(isSaving || isSavingDetails) && <FullPageLoader />}
       <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
         <h2 className="text-2xl m-0">Sales Orders</h2>
-        <span className="p-input-icon-left w-full">
+        <span className="p-input-icon-left p-input-icon-right w-full">
           <i className="pi pi-search" />
           <InputText 
             value={searchTerm}
@@ -567,6 +763,17 @@ const SalesOrder = () => {
             placeholder="Search"
             className="w-full"
           />
+          
+          {loading && debouncedSearchTerm ? (
+            <i className="pi pi-spin pi-spinner" />
+          ) : searchTerm ? (
+            <i 
+              className="pi pi-times cursor-pointer" 
+              onClick={() => {
+                setSearchTerm('');
+              }}
+            />
+          ) : null}
         </span>
         <Button 
           label="Create Order" 
@@ -578,12 +785,12 @@ const SalesOrder = () => {
       </div>
       
       <div className="grid">
-        {filteredOrders.length > 0 ? (
-          filteredOrders.map((order, index) => (
+        {orders.length > 0 ? (
+          orders.map((order, index) => (
             <div 
               key={order.id} 
               className="col-12 md:col-6 lg:col-4"
-              ref={index === filteredOrders.length - 1 ? lastOrderRef : null}
+              ref={index === orders.length - 1 ? lastOrderRef : null}
             >
               <Card className="h-full">
                 <div className="flex flex-column gap-2">
@@ -657,7 +864,7 @@ const SalesOrder = () => {
       <Dialog 
         header={`Order Details - ${selectedOrder?.docno}`} 
         visible={visible} 
-        onHide={() => setVisible(false)}
+        onHide={handleDialogClose}
         maximized={isMaximized}
         onMaximize={(e) => setIsMaximized(e.maximized)}
         className={isMaximized ? 'maximized-dialog' : ''}
@@ -718,12 +925,21 @@ const SalesOrder = () => {
                 </div>
               </div>
               <div className="col-12">
-                <Button
-                  label="Receive Payment"
-                  icon="pi pi-wallet"
-                  onClick={() => setPaymentDialogVisible(true)}
-                  className="mt-3"
-                />
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    label="Receive Payment"
+                    icon="pi pi-wallet"
+                    onClick={handlePaymentClick}
+                    disabled={selectedOrder?.amt_due === 0 || selectedOrder?.amt_due === undefined}
+                  />
+                  <Button
+                    icon={loadingPaymentHistory ? 'pi pi-spin pi-spinner' : 'pi pi-history'}
+                    style={{ width: '20%' }}
+                    onClick={handleViewPaymentHistory}
+                    className="p-button-secondary"
+                    disabled={loadingPaymentHistory}
+                  />
+                </div>
               </div>
             </div>
 
@@ -736,8 +952,8 @@ const SalesOrder = () => {
                 <div className="grid">
                   <div className="col-6">
                     <div className="field">
-                      <label>Item Name</label>
-                      <p className="m-0 font-medium">Kurta</p>
+                      <label>Item Ref</label>
+                      <p className="m-0 font-medium">{item.item_ref || 'Not Available'}</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -748,8 +964,14 @@ const SalesOrder = () => {
                   </div>
                   <div className="col-6">
                     <div className="field">
+                      <label>Item Name</label>
+                      <p className="m-0 font-medium">{item.material?.name || 'Not Available'}</p>
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="field">
                       <label>Jobber Name</label>
-                      <p className="m-0 font-medium">Amit Kumar</p>
+                      <p className="m-0 font-medium">{item.jobOrderDetails?.[0]?.adminSite?.sitename || 'Not assigned'}</p>
                     </div>
                   </div>
                   <div className="col-6">
@@ -762,29 +984,37 @@ const SalesOrder = () => {
                   </div>
                   <div className="col-6">
                     <div className="field">
-                      <label>Delivered Qty</label>
-                      <p className="m-0 font-medium">{item.delivered_qty}</p>
+                      <label>Amount</label>
+                      <p className="m-0 font-medium">₹ {item.item_amt || 0}</p>
                     </div>
                   </div>
-                  <div className="col-6">
-                    <div className="field">
-                      <label>Cancelled Qty</label>
-                      <p className="m-0 font-medium">{item.cancelled_qty}</p>
-                    </div>
-                  </div>
-                  <div className="col-12">
-                    <div className="field">
-                      <label>Notes</label>
-                      <p className="m-0 font-medium">{item.desc1 || 'No Notes Available'}</p>
+                  <div className="col-12 mt-2">
+                    <div className="grid align-items-start">
+                      <div className="col-9">
+                        <div className="field">
+                          <label>Notes</label>
+                          <p className="m-0 font-medium">{item.desc1 || 'No Notes Available'}</p>
+                        </div>
+                      </div>
+                      <div className="col-3 flex justify-content-end pt-4">
+                        <Button 
+                          icon="pi pi-pencil" 
+                          onClick={() => handleEditOrderDetail(item)}
+                          className="p-button-rounded p-button"
+                        />
+                      </div>
                     </div>
                   </div>
 
                   <div className="col-12 mt-2">
                     <Button
-                      label={`Status (${selectedOrder.orderStatus?.status_name || 'Unknown'})`}
+                      label={`Status (${item.orderStatus?.status_name || 'Unknown'})`}
                       icon="pi pi-sync"
-                      onClick={() => setStatusSidebarVisible(true)}
-                      severity={getStatusSeverity(selectedOrder.orderStatus?.status_name) || undefined}
+                      onClick={() => {
+                        setSelectedDetail(item);
+                        setStatusSidebarVisible(true);
+                      }}
+                      severity={getStatusSeverity(item.orderStatus?.status_name) || undefined}
                     />
                   </div>
 
@@ -866,7 +1096,21 @@ const SalesOrder = () => {
               className="w-full" 
               placeholder="Enter amount"
               value={paymentForm.amount}
-              onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+              onChange={(e) => {
+                const enteredAmount = parseFloat(e.target.value) || 0;
+                const maxAllowed = selectedOrder?.amt_due || 0;
+                if (enteredAmount <= maxAllowed) {
+                  setPaymentForm({...paymentForm, amount: e.target.value});
+                } else {
+                  Toast.show({
+                    text: `Amount cannot exceed ₹${maxAllowed}`,
+                    duration: 'short',
+                    position: 'bottom'
+                  });
+                  setPaymentForm({...paymentForm, amount: maxAllowed.toString()});
+                }
+              }}
+              max={selectedOrder?.amt_due}
             />
           </div>
 
@@ -936,11 +1180,63 @@ const SalesOrder = () => {
               icon="pi pi-check" 
               className="p-button-success"
               onClick={handlePaymentSubmit}
-              disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod}
+              disabled={!paymentForm.amount || !paymentForm.paymentDate || !paymentForm.paymentMethod || parseFloat(paymentForm.amount) > (selectedOrder?.amt_due || 0)}
             />
           </div>
         </div>
       </Dialog>
+
+    <Sidebar 
+        visible={paymentHistorySidebarVisible}
+        onHide={() => setPaymentHistorySidebarVisible(false)}
+        position="bottom"
+        style={{ 
+          width: '100vw',
+          height: '68vh',
+          maxHeight: '68vh',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.1)'
+        }}
+        className="custom-selector-sidebar"
+        header={
+          <div className="flex align-items-center gap-2">
+            <span className="font-bold text-xl">Payment History</span>
+          </div>
+        }
+      >
+        {loadingPaymentHistory ? (
+          <div className="flex justify-content-center p-4">
+            <ProgressSpinner style={{ width: '50px', height: '50px' }} strokeWidth="4" />
+          </div>
+        ) : paymentHistory.length > 0 ? (
+          <div className="flex flex-column gap-2 p-2">
+            {paymentHistory.map((payment, index) => (
+              <div key={index} className="flex justify-content-between align-items-center border-1 surface-border p-3 border-round">
+                <div className="text-sm">
+                  <div className="text-500">Date</div>
+                  <div className="font-medium">{new Date(payment.payment_date).toLocaleDateString('en-IN')}</div>
+                </div>
+                <div className="text-sm text-right">
+                  <div className="text-500">Amount</div>
+                  <div className="font-medium">₹{payment.payment_amt}</div>
+                </div>
+                <div className="text-sm text-right">
+                  <div className="text-500">Method</div>
+                  <div className="font-medium">
+                    {payment.paymentMode?.mode_name || payment.payment_type || 'Unknown'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-column align-items-center justify-content-center p-5">
+            <i className="pi pi-info-circle text-2xl mb-2"></i>
+            <p className="text-500 m-0">No payment history found</p>
+          </div>
+        )}
+      </Sidebar>
 
       <Sidebar 
         visible={itemActionSidebarVisible}
@@ -1030,7 +1326,7 @@ const SalesOrder = () => {
         }}
         header={
           <div className="sticky top-0 bg-white z-1 p-3 border-bottom-1 surface-border flex justify-content-between align-items-center">
-            <span className="font-bold text-xl">Update Order Status</span>
+            <span className="font-bold text-xl">Update Item Status</span>
           </div>
         }
         className="p-0"
@@ -1041,7 +1337,7 @@ const SalesOrder = () => {
               <div key={status.id} className="col-12 md:col-6 lg:col-4 p-2">
                 <Button
                   label={status.name}
-                  onClick={() => handleStatusUpdate(status.name)}
+                  onClick={() => handleItemStatusUpdate(parseInt(status.id))}
                   severity={getStatusSeverity(status.name) || undefined}
                   className="w-full p-3 text-lg justify-content-start p-button-outlined"
                   icon={
@@ -1059,7 +1355,131 @@ const SalesOrder = () => {
       </Sidebar>
 
       <Dialog 
-        header="Measurement Details" 
+        header="Edit Order Details"
+        visible={editOrderDetailDialogVisible}
+        onHide={() => setEditOrderDetailDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+        footer={
+          <div>
+            <Button 
+              label="Update" 
+              icon="pi pi-check" 
+              onClick={handleUpdateOrderDetail}
+              autoFocus 
+              className="w-full"
+              loading={isSavingDetails} 
+              disabled={isSavingDetails}
+            />
+          </div>
+        }
+      >
+        {selectedOrderDetail && (
+          <div className="p-fluid my-4">
+            <div className="field">
+              <label htmlFor="trialDate">Trial Date</label>
+              <Calendar 
+                id="trialDate"
+                value={selectedOrderDetail?.trial_date ? new Date(selectedOrderDetail.trial_date) : null}
+                onChange={(e) => {
+                  if (!selectedOrderDetail) return;
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    trial_date: e.value ? e.value.toISOString() : null
+                  });
+                }}
+                dateFormat="dd/mm/yy"
+                showTime
+                hourFormat="12"
+                showIcon
+                placeholder="Select Trial Date & Time"
+                minDate={new Date()}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="deliveryDate">Delivery Date</label>
+              <Calendar 
+                id="deliveryDate"
+                value={selectedOrderDetail?.delivery_date ? new Date(selectedOrderDetail.delivery_date) : null}
+                onChange={(e) => {
+                  if (!selectedOrderDetail) return;
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    delivery_date: e.value ? e.value.toISOString() : null
+                  });
+                }}
+                dateFormat="dd/mm/yy"
+                showTime
+                hourFormat="12"
+                showIcon
+                placeholder="Select Delivery Date & Time"
+                minDate={new Date()}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="itemAmt">Item Amount</label>
+              <InputNumber 
+                id="itemAmt"
+                value={selectedOrderDetail.item_amt}
+                onValueChange={(e) => setSelectedOrderDetail({
+                  ...selectedOrderDetail,
+                  item_amt: e.value || 0
+                })}
+                mode="currency" 
+                currency="INR" 
+                locale="en-IN"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="ordQty">Order Qty</label>
+              <InputNumber 
+                id="ordQty"
+                value={selectedOrderDetail.ord_qty}
+                onValueChange={(e) => setSelectedOrderDetail({
+                  ...selectedOrderDetail,
+                  ord_qty: e.value || 0
+                })}
+                min={0}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="desc1">Special Instruction</label>
+              <InputTextarea 
+                id="desc1"
+                value={selectedOrderDetail.desc1 || ''} 
+                onChange={(e) =>
+                  setSelectedOrderDetail({
+                    ...selectedOrderDetail,
+                    desc1: e.target.value,
+                  })
+                }
+                rows={4}
+                autoResize
+              />
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog 
+        header={
+          <div className="flex align-items-center w-full">
+            <span>Measurement Details</span>
+            <Button 
+              icon="pi pi-pencil" 
+              onClick={handleEditMeasurement}
+              className="p-button-rounded p-button-text"
+              disabled={!measurementData}
+              style={{ marginLeft: '0.5rem' }}
+            />
+          </div>
+        }
         visible={measurementDialogVisible} 
         onHide={() => {
           setMeasurementDialogVisible(false);
@@ -1076,14 +1496,14 @@ const SalesOrder = () => {
               <div className="col-6 font-bold text-600">Customer Name:</div>
               <div className="col-6 font-medium text-right">{selectedOrder?.user?.fname}</div>
               
-              <div className="col-6 font-bold text-600">Delivery Date:</div>
+            <div className="col-6 font-bold text-600">Delivery Date:</div>
               <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem?.delivery_date))}
+                {selectedItem.delivery_date ? formatDate(new Date(selectedItem.delivery_date)) : 'Not scheduled'}
               </div>
               
               <div className="col-6 font-bold text-600">Trial Date:</div>
               <div className="col-6 font-medium text-right">
-                {formatDate(new Date(selectedItem.trial_date))}
+                {selectedItem.trial_date ? formatDate(new Date(selectedItem.trial_date)) : 'Not scheduled'}
               </div>
             </div>
 
@@ -1170,6 +1590,53 @@ const SalesOrder = () => {
             </div>
           </div>
         )}
+      </Dialog>
+
+      <Dialog 
+        header="Edit Measurement Details"
+        visible={editMeasurementDialogVisible}
+        onHide={() => setEditMeasurementDialogVisible(false)}
+        maximized={isMaximized}
+        onMaximize={(e) => setIsMaximized(e.maximized)}
+        className={isMaximized ? 'maximized-dialog' : ''}
+        blockScroll
+        footer={
+          <div>
+            <Button 
+              label="Update" 
+              icon="pi pi-check" 
+              onClick={saveEditedMeasurements}
+              autoFocus
+              className="w-full"
+              loading={isSaving} 
+              disabled={isSaving}
+            />
+          </div>
+        }
+      >
+        <div className="p-fluid">
+          {editedMeasurements.map((measurement) => {
+            const measurementDetail = measurementData?.measurementDetails.find(
+              detail => detail.measurementMaster.id === measurement.id
+            );
+            
+            const dataType = measurementDetail?.measurementMaster.data_type || 'text';
+            
+            return (
+              <div key={measurement.id} className="field my-3">
+                <label htmlFor={`measurement-${measurement.id}`} className="font-bold block mb-1">
+                  {measurement.name} <span className="text-500 font-normal">({dataType})</span>
+                </label>
+                <InputText
+                  id={`measurement-${measurement.id}`}
+                  value={measurement.value}
+                  onChange={(e) => handleMeasurementValueChange(measurement.id, e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            );
+          })}
+        </div>
       </Dialog>
 
       <Dialog 

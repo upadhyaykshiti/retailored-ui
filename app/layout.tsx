@@ -8,6 +8,7 @@ import '../styles/layout/layout.scss';
 import '../styles/demo/Demos.scss';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { AuthProvider } from '@/demo/utils/AuthProvider';
 
 interface RootLayoutProps {
     children: React.ReactNode;
@@ -65,7 +66,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 <PrimeReactProvider>
                     <LayoutProvider>
                         <ViewportEnforcer />
-                        {children}
+                        <AuthProvider>
+                            {children}
+                        </AuthProvider>
                     </LayoutProvider>
                 </PrimeReactProvider>
                 <script dangerouslySetInnerHTML={{

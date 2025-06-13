@@ -17,7 +17,8 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
     const router = useRouter();
 
     const handleLogout = () => {
-        router.push('/login');
+        localStorage.removeItem('authToken');
+        router.push('/');
     };
 
     useImperativeHandle(ref, () => ({

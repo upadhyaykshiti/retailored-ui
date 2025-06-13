@@ -17,7 +17,7 @@ const MobileFooterMenu = () => {
     const [activeButton, setActiveButton] = useState<string | null>(null);
     
     const menuItems: MenuItem[] = [
-        { label: 'Home', icon: 'pi pi-home', path: '/' },
+        { label: 'Home', icon: 'pi pi-home', path: '/pages/dashboard' },
         { label: 'Sales', icon: 'pi pi-money-bill', path: '/pages/orders/sales-order' },
         { label: 'Jobs', icon: 'pi pi-briefcase', path: '/pages/orders/job-order' },
         { label: 'Payments', icon: 'pi pi-dollar', path: '/pages/reports/pending-payments' },

@@ -4,8 +4,7 @@ export const MaterialService = {
   async getMaterialMasters(
     search: string | null = null,
     first: number = 10,
-    page: number = 1,
-    token?: string
+    page: number = 1
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
       query MaterialMasters($search: String, $first: Int!, $page: Int) {
@@ -13,9 +12,7 @@ export const MaterialService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -36,6 +33,17 @@ export const MaterialService = {
               data_type
               seq
             }
+            priceChart {
+              id
+              material_id
+              job_or_sales
+              price
+              ext
+              type {
+                id
+                type_name
+              }
+            }
             ext
           }
         }
@@ -48,11 +56,52 @@ export const MaterialService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return {
       data: data.materialMasters.data,
       paginatorInfo: data.materialMasters.paginatorInfo
+    };
+  },
+
+  async getOrderTypes(
+    first: number = 50,
+    page: number = 1
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query OrderTypes($first: Int!, $page: Int) {
+        orderTypes(first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
+          }
+          data {
+            id
+            type_name
+            job_or_sales
+            ext
+            created_at
+            updated_at
+          }
+        }
+      }
+    `;
+
+    const variables = { first, page };
+    const data = await GraphQLService.query<{ 
+      orderTypes: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables);
+    
+    return {
+      data: data.orderTypes.data,
+      paginatorInfo: data.orderTypes.paginatorInfo
     };
   },
 
@@ -70,7 +119,12 @@ export const MaterialService = {
       data_type: string;
       seq: number;
     }[];
-  }, token?: string): Promise<any> {
+    priceChart: {
+      type_id: number;
+      job_or_sales: string;
+      price: number;
+    }[];
+  }): Promise<any> {
     const mutation = `
       mutation CreateMaterialWithMeasurements($input: CreateMaterialMasterInput!) {
         createMaterialWithMeasurements(input: $input) {
@@ -80,7 +134,7 @@ export const MaterialService = {
       }
     `;
     const variables = { input };
-    const data = await GraphQLService.query<{ createMaterialMaster: any }>(mutation, variables, token);
+    const data = await GraphQLService.query<{ createMaterialMaster: any }>(mutation, variables);
     return data.createMaterialMaster;
   },
 
@@ -99,7 +153,13 @@ export const MaterialService = {
       data_type?: string;
       seq?: number;
     }[];
-  }, token?: string): Promise<any> {
+    priceChart?: {
+      id?: number;
+      type_id: number;
+      job_or_sales: string;
+      price: number;
+    }[];
+  }): Promise<any> {
     const mutation = `
       mutation UpdateMaterialWithMeasurements($id: ID!, $input: UpdateMaterialMasterInput!) {
         updateMaterialWithMeasurements(id: $id, input: $input) {
@@ -109,7 +169,22 @@ export const MaterialService = {
       }
     `;
     const variables = { id, input };
-    const data = await GraphQLService.query<{ updateMaterialMaster: any }>(mutation, variables, token);
+    const data = await GraphQLService.query<{ updateMaterialMaster: any }>(mutation, variables);
     return data.updateMaterialMaster;
   },
+
+  async updateMaterialStatus(id: string, input: {
+    ext: string;
+  }): Promise<any> {
+    const mutation = `
+      mutation UpdateMaterialMaster($id: ID!, $input: UpdateMaterialMasterInput!) {
+        updateMaterialMaster(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+    const variables = { id, input };
+    const data = await GraphQLService.query<{ updateMaterialMaster: any }>(mutation, variables);
+    return data.updateMaterialMaster;
+  }
 };

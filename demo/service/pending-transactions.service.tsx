@@ -4,8 +4,7 @@ export const PendingPaymentsService = {
   async getPendingReceipts(
     first: number = 5,
     page: number = 1,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query GetPendingReceipts($first: Int!, $page: Int!, $search: String) {
@@ -13,9 +12,7 @@ export const PendingPaymentsService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -45,7 +42,7 @@ export const PendingPaymentsService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
   
     return {
       data: response.getPendingReceipts.data,
@@ -56,8 +53,7 @@ export const PendingPaymentsService = {
   async getPendingPayments(
     first: number = 5,
     page: number = 1,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query GetPendingPayments($first: Int!, $page: Int!, $search: String) {
@@ -65,9 +61,7 @@ export const PendingPaymentsService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -98,7 +92,7 @@ export const PendingPaymentsService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
   
     return {
       data: response.getPendingPayments.data,

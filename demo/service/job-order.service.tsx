@@ -1,7 +1,7 @@
 import { GraphQLService } from "./graphql.service";
 
 export const JobOrderService = {
-  async getJobberList(token?: string): Promise<any[]> {
+  async getJobberList(): Promise<any[]> {
     const query = `
       query JobberList {
         jobberList {
@@ -13,26 +13,19 @@ export const JobOrderService = {
       }
     `;
 
-    const data = await GraphQLService.query<{ jobberList: any[] }>(query, undefined, token);
+    const data = await GraphQLService.query<{ jobberList: any[] }>(query);
 
     return data.jobberList;
   },
 
-  async getOrdersList(
-    page: number = 1,
-    perPage: number = 10,
-    search: string | null = null,
-    token?: string
-  ): Promise<{ data: any[]; pagination: any }> {
+  async getOrdersList(page: number = 1, perPage: number = 10, search: string | null = null, id?: string): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query OrderMains($first: Int!, $page: Int!, $search: String) {
         orderMains(first: $first, page: $page, search: $search) {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -42,6 +35,8 @@ export const JobOrderService = {
             docno
             orderDetails {
               id
+              measurement_main_id
+              item_ref
               material {
                 id
                 name
@@ -67,7 +62,7 @@ export const JobOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
 
     return {
       data: data.orderMains.data,
@@ -75,9 +70,58 @@ export const JobOrderService = {
     };
   },
 
+  async getOrderTypes(
+    first: number = 50,
+    page: number = 1
+  ): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query OrderTypes($first: Int!, $page: Int) {
+        orderTypes(first: $first, page: $page) {
+          paginatorInfo {
+            total
+            count
+            perPage
+            currentPage
+            lastPage
+            hasMorePages
+          }
+          data {
+            id
+            type_name
+            job_or_sales
+            ext
+            created_at
+            updated_at
+            jobPriceCharts {
+              id
+              type_id
+              material_id
+              job_or_sales
+              price
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { first, page };
+    const data = await GraphQLService.query<{ 
+      orderTypes: {
+        paginatorInfo: any;
+        data: any[];
+      } 
+    }>(query, variables);
+    
+    const filteredData = data.orderTypes.data.filter(type => type.job_or_sales === 'J');
+    
+    return {
+      data: filteredData,
+      paginatorInfo: data.orderTypes.paginatorInfo
+    };
+  },
+
   async getOrderDetails(
-    orderId: string,
-    token?: string
+    orderId: string
   ): Promise<any> {
     const query = `
       query OrderDetail($id: ID!) {
@@ -113,15 +157,14 @@ export const JobOrderService = {
       id: orderId
     };
 
-    const data = await GraphQLService.query<{ orderDetail: any }>(query, variables, token);
+    const data = await GraphQLService.query<{ orderDetail: any }>(query, variables);
     return data.orderDetail;
   },
 
   async getJobOrderMains(
     page: number = 1,
     perPage: number = 10,
-    search: string | null = null,
-    token?: string
+    search: string | null = null
   ): Promise<{ data: any[]; pagination: any }> {
     const query = `
       query JobOrderMains($first: Int!, $page: Int!, $search: String) {
@@ -129,9 +172,7 @@ export const JobOrderService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -142,12 +183,19 @@ export const JobOrderService = {
             status_id
             docno
             ord_qty
+            amt_paid,
+            amt_due,
             delivered_qty
             cancelled_qty
             desc1
             status {
               id
               status_name
+            }
+            jobOrderDetails {
+              adminSite {
+                sitename
+              }
             }
           }
         }
@@ -165,7 +213,7 @@ export const JobOrderService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
   
     return {
       data: data.jobOrderMains.data,
@@ -173,11 +221,14 @@ export const JobOrderService = {
     };
   },
   
-  async getJobOrdersDetails(jobOrderId: string, token?: string): Promise<any> {
+  async getJobOrdersDetails(jobOrderId: string): Promise<any> {
     const query = `
       query JobOrderMain($id: ID!) {
         jobOrderMain(id: $id) {
           jobOrderDetails {
+            id
+            job_order_main_id
+            order_details_id
             image_url
             admsite_code
             trial_date
@@ -185,9 +236,14 @@ export const JobOrderService = {
             item_amt
             item_discount
             ord_qty
+            item_ref
             delivered_qty
             cancelled_qty
             desc1
+            status {
+              id
+              status_name
+            }
             orderDetail {
               material {
                 name
@@ -218,13 +274,13 @@ export const JobOrderService = {
       id: jobOrderId
     };
   
-    const data = await GraphQLService.query<any>(query, variables, token);
+    const data = await GraphQLService.query<any>(query, variables);
     return {
       jobOrderDetails: data.jobOrderMain.jobOrderDetails
     };
   },
 
-  async getPaymentModes(token?: string): Promise<any> {
+  async getPaymentModes(): Promise<any> {
     const query = `
       query PaymentModes {
         paymentModes {
@@ -236,8 +292,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.query<any>(
       query,
-      undefined,
-      token
+      undefined
     );
 
     return data.paymentModes;
@@ -253,8 +308,7 @@ export const JobOrderService = {
       payment_mode: string;
       payment_ref?: string | null;
       payment_amt: number;
-    },
-    token?: string
+    }
   ): Promise<{ id: string }> {
     const mutation = `
       mutation CreatePaymentMain($input: CreatePaymentMainInput!) {
@@ -290,15 +344,74 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       createPaymentMain: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.createPaymentMain;
+  },
+
+  async updateJobOrderDetails(
+    jobMainId: number | string,
+    oDetailsId: number | string,
+    input: {
+      trial_date: string | null;
+      delivery_date: string | null;
+      item_amt: number | null;
+      desc1: string | null;
+    }
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateJobOrderDetails(
+        $jobMainId: ID!,
+        $oDetailsId: ID!,
+        $input: UpdateJobDetailsInput!
+      ) {
+        updateJobOrderDetails(
+          jobMainId: $jobMainId,
+          oDetailsId: $oDetailsId,
+          input: $input
+        ) {
+          id
+        }
+      }
+    `;
+
+    const variables = { jobMainId, oDetailsId, input };
+
+    const data = await GraphQLService.query<{ updateJobOrderDetails: any }>(
+      mutation,
+      variables
+    );
+
+    return data.updateJobOrderDetails;
+  },
+
+  async updateJobOrderStatus(
+    id: number | string,
+    input: {
+      status_id: number | null;
+    }
+  ): Promise<any> {
+    const mutation = `
+      mutation UpdateJobOrderStatus($id: ID!, $input: JobOrderStatusInput!) {
+        updateJobOrderStatus(id: $id, input: $input) {
+          id
+        }
+      }
+    `;
+
+    const variables = { id, input };
+
+    const data = await GraphQLService.query<{ updateJobOrderStatus: any }>(
+      mutation,
+      variables,
+    );
+
+    return data.updateJobOrderStatus;
   },
   
   async markJobOrderDelivered(
     id: string,
-    delivered_qty: number,
-    token?: string
+    delivered_qty: number
   ): Promise<{ id: string }> {
     const mutation = `
       mutation MarkOrderDelivered($input: MarkOrderDeliveredInput!, $id: ID!) {
@@ -317,15 +430,14 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       markOrderDelivered: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.markOrderDelivered;
   },
 
   async markJobOrderCancelled(
     id: string,
-    cancelled_qty: number,
-    token?: string
+    cancelled_qty: number
   ): Promise<{ id: string }> {
     const mutation = `
       mutation MarkJobOrderCancelled($input: MarkJobOrderCancelledInput!, $id: ID!) {
@@ -344,7 +456,7 @@ export const JobOrderService = {
 
     const data = await GraphQLService.mutation<{ 
       markJobOrderCancelled: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.markJobOrderCancelled;
   },
@@ -352,10 +464,11 @@ export const JobOrderService = {
   async createJobOrderwithInput(
     input: {
       job_date?: string | null;
-      status_id?: string | null;
+      status_id?: number;
       docno?: string | null;
+      type_id?: number | null;
       job_details: Array<{
-        admsite_code?: number | null;
+        admsite_code?: string;
         order_details_id?: string | null;
         material_master_id: string;
         measurement_main_id?: string;
@@ -364,9 +477,9 @@ export const JobOrderService = {
         ord_qty: number;
         trial_date: string | null;
         delivery_date: string | null;
+        status_id?: number;
       }>;
-    },
-    token?: string
+    }
   ): Promise<{ id: string }> {
     const mutation = `
       mutation CreateJobOrderwithInput($input: CreateJobWithDetailsInput!) {
@@ -381,6 +494,7 @@ export const JobOrderService = {
         job_date: input.job_date || null,
         status_id: input.status_id || null,
         docno: input.docno || null,
+        type_id: input.type_id || null,
         job_details: input.job_details.map(detail => ({
           admsite_code: detail.admsite_code || null,
           order_details_id: detail.order_details_id || null,
@@ -391,13 +505,14 @@ export const JobOrderService = {
           ord_qty: detail.ord_qty,
           trial_date: detail.trial_date,
           delivery_date: detail.delivery_date,
+          status_id: input.status_id || null,
         }))
       }
     };
 
     const data = await GraphQLService.mutation<{ 
       createJobOrderwithInput: { id: string } 
-    }>(mutation, variables, token);
+    }>(mutation, variables);
 
     return data.createJobOrderwithInput;
   }

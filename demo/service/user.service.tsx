@@ -5,8 +5,7 @@ export const UserService = {
   async getUsers(
     search: string | null = null,
     first: number = 10,
-    page: number = 1,
-    token?: string
+    page: number = 1
   ): Promise<{ data: any[]; paginatorInfo: any }> {
     const query = `
       query Users($search: String, $first: Int!, $page: Int) {
@@ -14,9 +13,7 @@ export const UserService = {
           paginatorInfo {
             count
             currentPage
-            firstItem
             hasMorePages
-            lastItem
             lastPage
             perPage
             total
@@ -46,7 +43,7 @@ export const UserService = {
         paginatorInfo: any;
         data: any[];
       } 
-    }>(query, variables, token);
+    }>(query, variables);
     
     return {
       data: data.users.data,
@@ -54,7 +51,7 @@ export const UserService = {
     };
   },
   
-  async createUser(input: Demo.CreateUserInput, token?: string): Promise<Demo.User> {
+  async createUser(input: Demo.CreateUserInput): Promise<Demo.User> {
     const mutation = `
       mutation CreateAdminSite($input: AdminSiteInput!) {
         createAdminSite(input: $input) {
@@ -108,13 +105,12 @@ export const UserService = {
 
     const data = await GraphQLService.query<{ createAdminSite: { customer: Demo.User } }>(
       mutation, 
-      { input: transformedInput }, 
-      token
+      { input: transformedInput }
     );
     return data.createAdminSite.customer;
   },
 
-  async updateUser(id: string, input: Demo.UpdateUserInput, token?: string): Promise<Demo.User> {
+  async updateUser(id: string, input: Demo.UpdateUserInput): Promise<Demo.User> {
     const mutation = `
       mutation UpdateCustomer($id: ID!, $input: UpdateUserInput!) {
         updateCustomer(id: $id, input: $input) {
@@ -141,9 +137,74 @@ export const UserService = {
 
     const data = await GraphQLService.query<{ updateCustomer: Demo.User }>(
       mutation,
-      { id, input },
-      token
+      { id, input }
     );
     return data.updateCustomer;
   },
+
+  async getCustomerInfo(id: string): Promise<any> {
+    const query = `
+      query CustomerInfo($id: ID!) {
+        customerInfo(id: $id) {
+          id
+          fname
+          lname
+          email
+          mobileNumber
+          homeAddress
+          dob
+          gender
+          admsite_code
+        }
+      }
+    `;
+
+    const variables = { id };
+    const data = await GraphQLService.query<any>(query, variables);
+    return data.customerInfo;
+  },
+
+  async getCustomerOrders(admsite_code: string, first: number = 5, page: number = 1): Promise<{ data: any[]; paginatorInfo: any }> {
+    const query = `
+      query CustomerOrders($id: ID!, $first: Int!, $page: Int!) {
+        customerOrders(id: $id, first: $first, page: $page) {
+          paginatorInfo {
+            count
+            currentPage
+            hasMorePages
+            lastPage
+            perPage
+            total
+          }
+          data {
+            id
+            order_id
+            trial_date
+            delivery_date
+            item_amt
+            ord_qty
+            delivered_qty
+            cancelled_qty
+            inProcess_qty
+            item_ref
+            material {
+              id
+              name
+            }
+            orderStatus {
+              id
+              status_name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { id: admsite_code, first, page };
+    const data = await GraphQLService.query<any>(query, variables);
+    return {
+      data: data.customerOrders.data,
+      paginatorInfo: data.customerOrders.paginatorInfo
+    };
+  }
 };

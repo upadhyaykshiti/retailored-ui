@@ -5,360 +5,338 @@ import { Card } from 'primereact/card';
 import { Avatar } from 'primereact/avatar';
 import { Divider } from 'primereact/divider';
 import { Tag } from 'primereact/tag';
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Dialog } from 'primereact/dialog';
-import { InputNumber } from 'primereact/inputnumber';
-import { TabView, TabPanel } from 'primereact/tabview';
+import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { UserService } from '@/demo/service/user.service';
+import { Skeleton } from 'primereact/skeleton';
+import { useInfiniteObserver } from '@/demo/hooks/useInfiniteObserver';
 
 interface Customer {
     id: number;
-    name: string;
+    fname: string;
+    lname: string;
     email: string;
-    phone: string;
+    mobileNumber: string;
     dob: string;
-    address: string;
-    profileImage: string;
+    homeAddress: string;
+    admsite_code: string;
 }
 
 interface Order {
     id: number;
-    cName: string;
-    orderType: string;
-    trialDate: string;
-    deliveryDate: string;
-    status: string;
-    amount: number;
-    type: 'Active' | 'Past Due' | 'Upcoming' | 'Pending Payment' | 'Delivered' | 'Draft';
+    trial_date: string;
+    delivery_date: string;
+    item_amt: number;
+    ord_qty: number;
+    delivered_qty: number;
+    cancelled_qty: number;
+    inProcess_qty: number;
+    itemRef: string;
+    materialName: string;
+    statusName: string;
 }
 
-interface Garment {
-    id: number;
-    name: string;
-    measurements: string[];
-    status: 'active' | 'inactive';
-}
-
-interface MeasurementValues {
-    [garmentName: string]: {
-      [measurement: string]: number | null;
+interface OrdersResponse {
+    data: Order[];
+    paginatorInfo: {
+        hasMorePages: boolean;
+        currentPage: number;
+        pageSize: number;
+        totalItems: number;
     };
-}  
+}
 
 const CustomerDetails = () => {
-    const customer: Customer = {
-        id: 1,
-        name: 'Nishant Kumar',
-        email: 'nishantkr090@gmail.com',
-        phone: '+911234567890',
-        dob: '2000-03-01',
-        address: 'Address not available',
-        profileImage: '/demo/images/avatar.png'
-    };
-
-    const orders: Order[] = [
-        { id: 1001, cName: 'Nishant Kumar', orderType: 'Shirt', trialDate: '2023-05-15', deliveryDate: '2023-05-20', status: 'In Progress', amount: 1200, type: 'Active' },
-        { id: 1002, cName: 'Nishant Kumar', orderType: 'Pant', trialDate: '2023-06-20', deliveryDate: '2023-06-25', status: 'Completed', amount: 800, type: 'Delivered' },
-        { id: 1003, cName: 'Nishant Kumar', orderType: 'Kurta Pajama', trialDate: '', deliveryDate: '', status: 'Pending', amount: 1500, type: 'Draft' },
-    ];
-
-    const [garments, setGarments] = useState<Garment[]>(() => {
-        if (typeof window !== 'undefined') {
-          const saved = localStorage.getItem('garments');
-          return saved ? JSON.parse(saved) : [
-            { id: 1, name: 'Kurta Pajama', measurements: ['Length', 'Chest', 'Shoulder'], status: 'active' },
-            { id: 2, name: 'Pajama', measurements: ['Waist', 'Length', 'Hip'], status: 'active' },
-            { id: 3, name: 'Shirt', measurements: ['Chest', 'Length', 'Sleeve'], status: 'inactive' }
-          ];
-        }
-        return [];
-      });
-
     const router = useRouter();
-    const [selectedGarmentId, setSelectedGarmentId] = useState<number | null>(null);
-    const [visible, setVisible] = useState(false);
-    const [isMaximized, setIsMaximized] = useState(true);
-    const [currentMeasurements, setCurrentMeasurements] = useState<{[key: string]: number | null}>({});
-    const [allMeasurements, setAllMeasurements] = useState<MeasurementValues>({});
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [hasMorePages, setHasMorePages] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const observerTarget = useRef<HTMLDivElement>(null);
+    const searchParams = useSearchParams();
+    const id = searchParams.get('id');
 
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-          const savedMeasurements = localStorage.getItem('garmentMeasurements');
-          if (savedMeasurements) {
-            setAllMeasurements(JSON.parse(savedMeasurements));
-          }
+        if (customer?.admsite_code && typeof window !== 'undefined') {
+            localStorage.setItem('currentCustomerAdmsite', customer.admsite_code);
         }
-    }, []);
+    }, [customer?.admsite_code]);
 
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('garments', JSON.stringify(garments));
+    const fetchCustomerOrders = async (admsiteCode: string, isLoadMore = false, pageNum = 1) => {
+        if (isLoadMore) {
+            setIsLoadingMore(true);
+        } else {
+            setLoading(true);
         }
-    }, [garments]);
-    
-      useEffect(() => {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('garmentMeasurements', JSON.stringify(allMeasurements));
-        }
-    }, [allMeasurements]);
 
-    const openMeasurementDialog = (garmentId: number) => {
-        const selectedGarment = garments.find(g => g.id === garmentId);
-        if (selectedGarment) {
-          setSelectedGarmentId(garmentId);
-          
-          const savedValues = allMeasurements[garmentId] || {};
-          const initialValues: {[key: string]: number | null} = {};
-          
-          selectedGarment.measurements.forEach(measurement => {
-            initialValues[measurement] = savedValues[measurement] || null;
-          });
-          
-          setCurrentMeasurements(initialValues);
-          setVisible(true);
-        }
-    };
+        try {
+            const response: OrdersResponse = await UserService.getCustomerOrders(
+                admsiteCode,
+                5,
+                pageNum
+            );
 
-      const handleMeasurementChange = (measurement: string, value: number | null) => {
-        setCurrentMeasurements(prev => ({
-          ...prev,
-          [measurement]: value
-        }));
-    };
+            setHasMorePages(response.paginatorInfo.hasMorePages);
 
-    const handleSaveMeasurements = () => {
-        if (selectedGarmentId !== null) {
-          setAllMeasurements(prev => ({
-            ...prev,
-            [selectedGarmentId]: {
-              ...prev[selectedGarmentId],
-              ...currentMeasurements
+            const formattedOrders: Order[] = response.data.map((od: any) => ({
+                id: od.id,
+                trial_date: od.trial_date,
+                delivery_date: od.delivery_date,
+                item_amt: parseFloat(od.item_amt),
+                ord_qty: od.ord_qty,
+                delivered_qty: od.delivered_qty,
+                cancelled_qty: od.cancelled_qty,
+                inProcess_qty: od.inProcess_qty,
+                itemRef: od.item_ref,
+                materialName: od.material?.name || 'N/A',
+                statusName: od.orderStatus?.status_name || 'Pending',
+            }));
+
+            if (isLoadMore) {
+                setOrders(prev => [...prev, ...formattedOrders]);
+                setPage(prev => prev + 1);
+            } else {
+                setOrders(formattedOrders);
+                setPage(2);
             }
-          }));
+        } catch (err) {
+            console.error('Failed to fetch customer orders:', err);
+        } finally {
+            if (isLoadMore) {
+                setIsLoadingMore(false);
+            } else {
+                setLoading(false);
+            }
         }
-        setVisible(false);
     };
 
-    const measurementFooter = (
-        <div>
-          <Button label="Cancel" icon="pi pi-times" onClick={() => setVisible(false)} className="p-button-text" />
-          <Button label="Save" icon="pi pi-check" onClick={handleSaveMeasurements} autoFocus />
-        </div>
-    );
+    useEffect(() => {
+        const fetchCustomerData = async () => {
+            if (!id) return;
 
-    const getSelectedGarmentName = () => {
-        return garments.find(g => g.id === selectedGarmentId)?.name || '';
-    };
+            setLoading(true);
+            try {
+                const customerInfo = await UserService.getCustomerInfo(id);
+                setCustomer(customerInfo);
+
+                const admsiteCode = typeof window !== 'undefined' 
+                    ? localStorage.getItem('currentCustomerAdmsite') || customerInfo.admsite_code
+                    : customerInfo.admsite_code;
+
+                if (!admsiteCode) {
+                    console.warn("Missing admsite_code for customer.");
+                    return;
+                }
+
+                await fetchCustomerOrders(admsiteCode, false, 1);
+            } catch (err) {
+                console.error('Failed to fetch customer data:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCustomerData();
+
+        return () => {
+        setCustomer(null);
+        setOrders([]);
+        setPage(1);
+        setHasMorePages(true);
+        localStorage.removeItem('currentCustomerAdmsite');
+      };
+    }, [id]);
+
+    useInfiniteObserver({
+        targetRef: observerTarget,
+        hasMorePages,
+        isLoading: isLoadingMore,
+        onIntersect: () => {
+            if (hasMorePages && !isLoadingMore) {
+                const admsiteCode = customer?.admsite_code || 
+                    (typeof window !== 'undefined' ? localStorage.getItem('currentCustomerAdmsite') : null);
+                
+                if (admsiteCode) {
+                    fetchCustomerOrders(admsiteCode, true, page);
+                }
+            }
+        },
+        deps: [hasMorePages, customer?.admsite_code, page, isLoadingMore]
+    });
 
     return (
         <div className="grid p-2">
             <div className="col-12 flex align-items-center gap-2">
-                <Button 
-                    icon="pi pi-arrow-left" 
-                    severity="secondary"
-                    onClick={() => router.back()} 
-                    className="p-button-text"
-                />
+                <Button icon="pi pi-arrow-left" severity="secondary" onClick={() => router.back()} className="p-button-text" />
                 <h2 className="m-0 text-2xl font-500">Customer Details</h2>
             </div>
             <div className="col-12 md:col-3">
                 <Card className="h-full">
-                    <div className="flex flex-column align-items-center gap-3 mb-2">
-                        <Avatar 
-                            image={customer.profileImage} 
-                            size="xlarge" 
-                            shape="circle" 
-                            className="shadow-4" 
-                        />
-                        <span className="text-2xl font-bold">{customer.name}</span>
-                        
-                        <div className="flex justify-content-center gap-4 mt-2">
-                            <Button 
-                                icon="pi pi-whatsapp" 
-                                rounded 
-                                severity="success"
-                                tooltip="WhatsApp"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
-                            <Button 
-                                icon="pi pi-envelope" 
-                                rounded 
-                                tooltip="Send Email"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
-                            <Button 
-                                icon="pi pi-pencil" 
-                                rounded 
-                                severity="info"
-                                tooltip="Edit Profile"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
-                            <Button 
-                                icon="pi pi-trash" 
-                                rounded 
-                                severity="danger"
-                                tooltip="Delete Profile"
-                                tooltipOptions={{ position: 'bottom' }}
-                            />
+                    {loading ? (
+                        <div className="flex flex-column gap-4">
+                            <div className="flex flex-column align-items-center gap-3 mb-4">
+                                <Skeleton shape="circle" size="5rem" />
+                                <Skeleton width="70%" height="1.75rem" />
+                            </div>
+
+                            <Skeleton width="100%" height="1px" className="bg-gray-300" />
+
+                            <div className="flex flex-column gap-4">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="flex align-items-center gap-3">
+                                <Skeleton width="80%" height="1.25rem" />
+                                </div>
+                            ))}
                         </div>
                     </div>
+                    ) : (
+                        <>
+                            <div className="flex flex-column align-items-center gap-3 mb-2">
+                                <Avatar 
+                                    label={customer?.fname?.charAt(0).toUpperCase() || 'U'} 
+                                    size="xlarge" 
+                                    shape="circle" 
+                                    className="shadow-4 text-xxl font-semibold bg-primary text-white" 
+                                />
+                                <span className="text-2xl font-bold">
+                                    {customer ? `${customer.fname}${customer.lname ? ' ' + customer.lname : ''}` : ''}
+                                </span>
+                            </div>
 
-                    <Divider />
+                            <Divider />
 
-                    <div className="flex flex-column gap-3">
-                        <div className="flex align-items-center gap-3">
-                            <i className="pi pi-phone text-500" style={{ fontSize: '1.2rem' }}></i>
-                            <div>{customer.phone}</div>
-                        </div>
+                            <div className="flex flex-column gap-3">
+                                <div className="flex align-items-center gap-3">
+                                    <i className="pi pi-phone text-500" style={{ fontSize: '1.2rem' }}></i>
+                                    <div>{customer?.mobileNumber || 'Not Available'}</div>
+                                </div>
 
-                        <div className="flex align-items-center gap-3">
-                            <i className="pi pi-envelope text-500" style={{ fontSize: '1.2rem' }}></i>
-                            <div>{customer.email}</div>
-                        </div>
+                                <div className="flex align-items-center gap-3">
+                                    <i className="pi pi-envelope text-500" style={{ fontSize: '1.2rem' }}></i>
+                                    <div>{customer?.email || 'Not Available'}</div>
+                                </div>
 
-                        <div className="flex align-items-center gap-3">
-                            <i className="pi pi-calendar text-500" style={{ fontSize: '1.2rem' }}></i>
-                            <div>{customer.dob}</div>
-                        </div>
+                                <div className="flex align-items-center gap-3">
+                                    <i className="pi pi-calendar text-500" style={{ fontSize: '1.2rem' }}></i>
+                                    <div>{customer?.dob || 'Not Available'}</div>
+                                </div>
 
-                        <div className="flex align-items-center gap-3">
-                            <i className="pi pi-map-marker text-500" style={{ fontSize: '1.2rem' }}></i>
-                            <div>{customer.address}</div>
-                        </div>
-                    </div>
+                                <div className="flex align-items-center gap-3">
+                                    <i className="pi pi-map-marker text-500" style={{ fontSize: '1.2rem' }}></i>
+                                    <div>{customer?.homeAddress || 'Not Available'}</div>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </Card>
             </div>
 
             <div className="col-12 md:col-9">
                 <Card>
-                    <TabView>
-                        <TabPanel header="Orders">
-                            <div className="mb-4">
-                                <Divider align="left">
-                                    <span className="text-600 font-medium">Outfit Status</span>
-                                </Divider>
-                            </div>
+                    <div className="flex align-items-center justify-content-between mb-4">
+                        <h2 className="m-0 text-2xl font-500">Orders</h2>
+                    </div>
 
-                            <div className="grid">
-                                {orders.map((order) => (
-                                <div key={order.id} className="col-12 mb-3">
-                                    <Card className="shadow-1 hover:shadow-3 transition-shadow transition-duration-200">
+                    <div className="grid">
+                        {loading ? [...Array(3)].map((_, i) => (
+                            <div key={i} className="col-12 mb-3">
+                                <Card className="shadow-1">
+                                    <div className="flex flex-column gap-2">
+                                    <div className="flex justify-content-between align-items-center">
+                                        <div>
+                                        <Skeleton width="6rem" height="1.25rem" />
+                                        <Skeleton
+                                            width="4rem"
+                                            height="1rem"
+                                            style={{ marginTop: '0.25rem' }}
+                                        />
+                                        </div>
+                                        <Skeleton
+                                        width="5rem"
+                                        height="1.5rem"
+                                        style={{ borderRadius: '12px' }}
+                                        />
+                                    </div>
+
+                                    <Divider className="my-2" />
+
+                                    <div className="flex flex-column gap-1">
+                                        {[...Array(7)].map((__, idx) => (
+                                        <div key={idx} className="flex justify-content-between">
+                                            <Skeleton width="20%" height="1rem" />
+                                            <Skeleton width="25%" height="1rem" />
+                                        </div>
+                                        ))}
+                                    </div>
+                                    </div>
+                                </Card>
+                            </div>
+                        )) : orders.map((order) => (
+                            <div key={order.id} className="col-12 mb-3">
+                                <Card className="shadow-1 hover:shadow-3 transition-shadow transition-duration-200">
                                     <div className="flex flex-column gap-2">
                                         <div className="flex justify-content-between align-items-center">
                                             <div>
                                                 <span className="font-bold block">Order #{order.id}</span>
-                                                <span className="text-sm text-500">{order.cName}</span>
+                                                <span className="text-sm text-500">{order.itemRef}</span>
                                             </div>
-                                        <Tag 
-                                            value={order.status} 
-                                            severity={
-                                            order.status === 'Completed' ? 'success' : 
-                                            order.status === 'In Progress' ? 'info' : 'warning'
-                                            }
-                                        />
+                                            <Tag value={order.statusName} severity={order.statusName === 'Completed' ? 'success' : order.statusName === 'In Progress' ? 'info' : 'warning'} />
                                         </div>
 
                                         <Divider className="my-2" />
-                                        
+
                                         <div className="flex flex-column gap-1">
                                             <div className="flex justify-content-between">
-                                                <span className="text-500">Customer</span>
-                                                <span>{order.cName}</span>
+                                                <span className="text-500">Item</span>
+                                                <span>{order.materialName}</span>
                                             </div>
 
-                                            <div className="flex justify-content-between">
-                                                <span className="text-500">Order Type</span>
-                                                <span>{order.orderType}</span>
-                                            </div>
-                                            
                                             <div className="flex justify-content-between">
                                                 <span className="text-500">Trial Date:</span>
-                                                <span>{order.trialDate || '-'}</span>
+                                                <span>{order.trial_date || '-'}</span>
                                             </div>
-                                            
+
                                             <div className="flex justify-content-between">
                                                 <span className="text-500">Delivery Date:</span>
-                                                <span>{order.deliveryDate || '-'}</span>
+                                                <span>{order.delivery_date || '-'}</span>
                                             </div>
-                                            
+
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Delivered:</span>
+                                                <span>{order.delivered_qty || 0}</span>
+                                            </div>
+
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Cancelled:</span>
+                                                <span>{order.cancelled_qty || 0}</span>
+                                            </div>
+
+                                            <div className="flex justify-content-between">
+                                                <span className="text-500">Qty:</span>
+                                                <span>{order.ord_qty || 0}</span>
+                                            </div>
+
                                             <div className="flex justify-content-between">
                                                 <span className="text-500">Amount:</span>
-                                                <span className="font-bold text-primary">₹{order.amount.toLocaleString('en-IN')}</span>
+                                                <span className="font-bold text-primary">₹{order.item_amt.toLocaleString('en-IN')}</span>
                                             </div>
                                         </div>
                                     </div>
-                                    </Card>
-                                </div>
-                                ))}
+                                </Card>
                             </div>
-                        </TabPanel>
+                        ))}
+                    </div>
 
-                        <TabPanel header="Measurements">
-                            <div className="p-4">
-                                <h4 className="mb-4">Measurements</h4>
-                                
-                                <div className="mb-5">
-                                    <label className="block text-500 font-medium mb-2">Select Outfit Type:</label>
-                                    <div className="grid">
-                                        {garments.filter(g => g.status === 'active').map((garment) => (
-                                        <div key={garment.id} className="col-6 sm:col-4 md:col-3 lg:col-2 text-center mb-4">
-                                            <div 
-                                            className="p-3 border-round cursor-pointer transition-all transition-duration-200 bg-surface border-1 border-transparent hover:bg-gray-100"
-                                            onClick={() => openMeasurementDialog(garment.id)}
-                                            >
-                                            <div className="flex flex-column align-items-center gap-3">
-                                                <img 
-                                                src={`https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/${garment.name.toLowerCase().replace(/\s+/g, '_')}.png`}
-                                                alt={garment.name}
-                                                className="w-8rem h-8rem shadow-2"
-                                                style={{ 
-                                                    borderRadius: '4px',
-                                                    padding: '8px',
-                                                    boxSizing: 'border-box',
-                                                    objectFit: 'cover'
-                                                }}
-                                                onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    target.src = 'https://s3.us-east-1.amazonaws.com/darzee.backend.static/OutfitType/OutfitType/kurta_pajama.png';
-                                                }}
-                                                />
-                                                <span className="font-medium">{garment.name}</span>
-                                            </div>
-                                            </div>
-                                        </div>
-                                        ))}
-                                    </div>
-                                </div>
+                    <div ref={observerTarget} className="col-12">
+                        {isLoadingMore && (
+                            <div className="flex justify-content-center p-4">
+                                <i className="pi pi-spinner pi-spin text-2xl"></i>
                             </div>
-
-                            <Dialog 
-                                header={`${getSelectedGarmentName()} Measurements`}
-                                visible={visible} 
-                                maximized={isMaximized}
-                                footer={measurementFooter}
-                                onHide={() => setVisible(false)}
-                                blockScroll
-                                onMaximize={(e) => setIsMaximized(e.maximized)}
-                            >
-                                <div className="p-fluid">
-                                {selectedGarmentId && garments.find(g => g.id === selectedGarmentId)?.measurements.map((measurement) => (
-                                  <div key={measurement} className="field mb-4">
-                                  <label htmlFor={measurement} className="block mb-2 font-medium">{measurement} (in inches)</label>
-                                    <InputNumber 
-                                        id={measurement}
-                                        value={currentMeasurements[measurement] || null}
-                                        onChange={(e) => handleMeasurementChange(measurement, e.value)}
-                                        mode="decimal" 
-                                        min={0} 
-                                        max={100}
-                                        className="w-full"
-                                    />
-                                    </div>
-                                ))}
-                                </div>
-                            </Dialog>
-                        </TabPanel>
-                    </TabView>
+                        )}
+                    </div>
                 </Card>
             </div>
         </div>
