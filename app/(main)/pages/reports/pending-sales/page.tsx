@@ -254,6 +254,24 @@ const PendingSalesReport = () => {
     router.push(`/pages/orders/sales-order?id=${orderId}&source=pending-sales`);
   };
 
+  
+const [longPressedCardId, setLongPressedCardId] = useState<string | null>(null);
+
+const handleLongPressStart = (id: string) => {
+  pressTimerRef.current = setTimeout(() => {
+    setLongPressedCardId(id);
+  }, 700); // 600ms = long press
+};
+
+const handlePressEnd = () => {
+  clearTimeout(pressTimerRef.current);
+};
+
+const pressTimerRef = useRef<any>(null);
+
+
+
+
   if (loading && !isFetchingMore && !debouncedSearchTerm) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -333,7 +351,7 @@ const PendingSalesReport = () => {
         </span>
       </div>
       
-      <div className="grid">
+      {/* <div className="grid">
         {orders.length > 0 ? (
           orders.map((item, index) => (
             <div 
@@ -425,7 +443,275 @@ const PendingSalesReport = () => {
             </div>
           </div>
         )}
+      </div> */}
+
+
+      {/* <div className="grid">
+  {orders.length > 0 ? (
+    orders.map((item, index) => (
+      <div
+        key={`${item.order_id}-${item.id}`}
+        className="col-12 md:col-6 lg:col-4"
+        ref={index === orders.length - 1 ? lastOrderRef : null}
+      >
+     
+
+
+<Card className="p-3" style={{borderRadius: '6px', padding:'0px'}}>
+
+ <div className = "p-card p-card-body"
+
+    style={{
+      border: '1px solid #fed7aa',
+      borderRadius: '6px',
+      padding: '10px'
+      
+    }}
+  >
+      
+  <div className="flex justify-between items-start">
+    <div className="flex items-center">
+   
+      <div
+  style={{
+    width: '56px',
+    height: '56px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8dfd5',
+    border: '1.5px solid #bfae9b',
+    borderRadius: '12px', 
+    padding: '4px'
+  }}
+>
+  <span> {item.customerName?.slice(0, 2).toUpperCase() || '--'} </span>
+
+</div>
+
+
+
+      <div className="ml-4" style={{ paddingTop: '10px' }}>
+        <div className="flex items-center font-medium text-gray-800 gap-2">
+          <i className="pi pi-user" />
+          {item.customerName}
+        </div>
+        <div className="text-xs text-gray-500">Order No: {item.order_id}</div>
       </div>
+    </div>
+
+
+   <div className="flex text-sm font-medium text-right flex-1 truncate" style={{paddingLeft:'60px',paddingTop:'10px'}}>
+  <div className="flex items-center gap-1 text-red-800 rounded-full">
+    <i className="pi pi-pencil text-xs" />
+    <span>Stitching</span>
+  </div>
+</div>
+
+    
+  </div>
+
+<div className="flex justify-between items-center mt-2" >
+
+  <div className="flex items-center text-sm text-gray-800">
+    <span className="mr-2 text-lg">🧍</span>
+    {item.productName}
+  </div>
+
+
+  <div className="text-sm text-right flex-1 truncate">
+  <span
+    className="bg-orange-200 text-orange-800 font-semibold px-3 py-1" style={{borderRadius:'6px'}}
+  >
+    {item.status || 'Pending'}
+  </span>
+</div>
+
+
+</div>
+
+
+
+
+
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-700 mt-3">
+    <div className="flex items-center gap-1">
+      <i className="pi pi-calendar text-sm" />
+      <span>Trial: 11 Jun 2025</span>
+    </div>
+    <div className="flex items-center gap-1" style={{ paddingLeft: '45px' }}>
+      <i className="pi pi-calendar-plus text-sm" />
+      <span>Delivery: {item.deliveryDate|| "N/A"}</span>
+    </div>
+    <div className="flex items-center gap-1" style={{ paddingTop: '12px' }}>
+      <i className="pi pi-clock text-sm" />
+      <span>Received: 12 Jun 2025</span>
+    </div>
+  </div>
+  </div>
+</Card>
+
+
+
+
+
+
+
+      </div>
+    ))
+  ) : (
+    <div className="col-12">
+      <div className="p-4 text-center surface-100 border-round">
+        <i className="pi pi-search text-3xl mb-1" />
+        <h4>No pending orders found</h4>
+      </div>
+    </div>
+  )}
+</div> */}
+
+<div className="grid">
+        {orders.length > 0 ? (
+          orders.map((item, index) => (
+            <div 
+              key={`${item.order_id}-${item.id}`} 
+              className="col-12 md:col-6 lg:col-4"
+              ref={index === orders.length - 1 ? lastOrderRef : null}
+            >
+              <Card className="p-3" style={{borderRadius: '6px', padding:'0px'}}
+
+  onMouseDown={() => handleLongPressStart(item.id)}
+  onMouseUp={handlePressEnd}
+  onMouseLeave={handlePressEnd}
+  onTouchStart={() => handleLongPressStart(item.id)}
+  onTouchEnd={handlePressEnd}
+  onClick={() => viewSalesOrder(item.order_id)}
+
+>
+  <div className="p-card p-card-body" style={{ border: '1px solid #fed7aa', borderRadius: '6px', padding: '10px' }}>
+    {/* Header Section */}
+    <div className="flex justify-between items-start">
+      <div className="flex items-center">
+        <div
+          style={{
+            width: '56px',
+            height: '56px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#e8dfd5',
+            border: '1.5px solid #bfae9b',
+            borderRadius: '12px',
+            padding: '4px',
+          }}
+        >
+          <span>{item.customerName?.slice(0, 2).toUpperCase() || '--'}</span>
+        </div>
+
+        <div className="ml-4 pt-2">
+          <div className="flex items-center font-medium text-gray-800 gap-2">
+            <i className="pi pi-user" />
+            {item.customerName}
+          </div>
+          <div className="text-xs text-gray-500">Order No: {item.order_id}</div>
+        </div>
+      </div>
+
+      {/* <div className="flex items-center gap-1 text-sm text-red-800 font-medium pt-2 ">
+        <i className="pi pi-pencil text-sm " />
+        <span>Stitching</span>
+      </div> */}
+
+      <div className="text-sm  text-right flex-1 truncate  text-red-800 pt-2">
+        <i className="pi pi-pencil text-sm mr-1" />
+        <span>Stitching</span>
+      </div>
+    </div>
+
+    {/* Product & Status */}
+    <div className="flex justify-between items-center mt-2">
+      <div className="flex items-center text-sm text-gray-800">
+        <span className="mr-2 text-lg">🧍</span>
+        {item.productName}
+      </div>
+      <div className="text-sm text-right flex-1 truncate">
+        <span className="bg-orange-200 text-orange-800 font-semibold px-3 py-1" style={{ border: '1px solid maroon', borderRadius: '20px' }}
+>
+          {item.status || 'Pending'}
+        </span>
+      </div>
+    </div>
+
+    {/* Dates */}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-700 mt-3">
+      <div className="flex items-center gap-1">
+        <i className="pi pi-calendar text-sm" />
+        <span>Trial: 11 Jun 2025</span>
+      </div>
+      <div className="flex items-center gap-1" style={{ paddingLeft: '25px' }}>
+        <i className="pi pi-calendar-plus text-sm" />
+        <span>Delivery: {item.deliveryDate || 'Not set'}</span>
+      </div>
+      <div className="flex items-center gap-1" style={{ paddingTop: '12px' }}>
+        <i className="pi pi-clock text-sm" />
+        <span>Received: 12 Jun 2025</span>
+      </div>
+    </div>
+
+    {/* Show buttons only when long pressed */}
+    {longPressedCardId === item.id && (
+      <div className="flex flex-column gap-2 mt-3">
+        <Button
+          label={item.jobOrderStatus.length > 0 ? 'View Job Order' : 'Create Job Order'}
+          icon={item.jobOrderStatus.length > 0 ? 'pi pi-eye' : 'pi pi-plus'}
+          onClick={() => handleCreateViewJO(item)}
+          className={`w-full ${item.jobOrderStatus.length > 0 ? 'p-button-info' : 'p-button-warning'}`}
+        />
+
+        <Button
+          label="Change Status"
+          icon="pi pi-cog"
+          onClick={() => openStatusChangeDialog(item)}
+          className="w-full p-button-secondary"
+        />
+
+        <div className="flex gap-2">
+          <Button
+            label="View Sales Order"
+            icon="pi pi-eye"
+            onClick={() => viewSalesOrder(item.order_id)}
+            className="w-full"
+          />
+          <Button
+            icon="pi pi-trash"
+            onClick={() => confirmDelete(item)}
+            className="p-button-danger"
+            style={{ width: '20%' }}
+            disabled={
+              item.jobOrderStatus.length > 0 &&
+              item.jobOrderStatus[item.jobOrderStatus.length - 1].status_name === 'Completed'
+            }
+          />
+        </div>
+      </div>
+    )}
+  </div>
+</Card>
+
+            </div>
+          ))
+        ) : (
+          <div className="col-12">
+            <div className="p-4 text-center surface-100 border-round">
+              <i className="pi pi-search text-3xl mb-1" />
+              <h4>No pending orders found</h4>
+            </div>
+          </div>
+        )}
+      </div>
+
+
+
+
 
       {isFetchingMore && (
         <div className="flex justify-content-center mt-3">

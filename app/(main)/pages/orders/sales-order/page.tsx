@@ -23,6 +23,9 @@ import { useDebounce } from 'use-debounce';
 import { Galleria } from 'primereact/galleria';
 import { Toast } from '@capacitor/toast';
 
+
+
+
 interface Order {
   id: string;
   user_id: string;
@@ -78,6 +81,8 @@ interface Order {
     }[];
   }[];
 }
+
+
 
 interface MeasurementData {
   measurement_date: string;
@@ -248,6 +253,8 @@ const SalesOrder = () => {
 
   const fetchOrderDetails = async (orderId: string) => {
     try {
+          console.log('Fetching order for ID:', orderId); 
+
       setListLoading(true);
       const res = await SalesOrderService.getSalesOrderById(orderId);
     
@@ -689,6 +696,109 @@ const SalesOrder = () => {
     }
   };
 
+
+const [orderItemDialogVisible, setOrderItemDialogVisible] = useState(false);
+
+
+const handleViewOrderItem = async (item: Order['orderDetails'][0]) => {
+  try {
+    setSelectedItem(item); // for the dialog
+    setOrderItemDialogVisible(true); // ✅ Must match the dialog that shows Item Ref / Job Order No
+    if (item.id) {
+      await fetchMeasurements(Number(item.id)); // optional if you want to preload measurement
+    }
+  } catch (err) {
+    console.error('Error opening item detail:', err);
+  }
+};
+
+const [itemMeasurements, setItemMeasurements] = useState<{ [id: string]: MeasurementData }>({});
+
+
+
+
+
+
+const getMeasurementValue = (name: string, measurement: MeasurementData): string => {
+  return (
+    measurement.measurementDetails.find(
+      (m) => m.measurementMaster.measurement_name.toLowerCase() === name.toLowerCase()
+    )?.measurement_val || 'N/A'
+  );
+};
+
+
+
+const fetchMeasurementDirect = async (orderDetailId: number): Promise<MeasurementData | null> => {
+  try {
+    const res = await SalesOrderService.getOrderMeasurements(orderDetailId);
+    return res?.orderDetail?.measurementMain || null;
+  } catch {
+    return null;
+  }
+};
+
+
+
+useEffect(() => {
+  const fetchAllMeasurements = async () => {
+    if (!selectedOrder) return;
+
+    for (const detail of selectedOrder.orderDetails) {
+      const res = await fetchMeasurementDirect(Number(detail.id));
+      if (res) {
+        setItemMeasurements(prev => ({
+          ...prev,
+          [detail.id]: res,
+        }));
+      }
+    }
+  };
+
+  if (orderItemDialogVisible) {
+    fetchAllMeasurements();
+  }
+}, [orderItemDialogVisible, selectedOrder]);
+
+// inside the component that renders the dropdown
+const [localStatusId, setLocalStatusId] = useState<string | undefined>(selectedDetail?.orderStatus?.id);
+
+useEffect(() => {
+  // update local state if selectedDetail changes
+  setLocalStatusId(selectedDetail?.orderStatus?.id);
+}, [selectedDetail]);
+
+const searchParams1 = useSearchParams();
+const oid = searchParams.get('id');
+
+useEffect(() => {
+  if (oid) {
+    fetchOrderDetails(oid); // Your existing method
+    setVisible(true); // This opens the dialog
+  }
+}, [oid]);
+
+
+
+//   setLoadingMeasurements(true);
+//   await fetchMeasurements(Number(orderDetailId)); // this sets global `measurementData`
+
+//   if (measurementData) {
+//     setItemMeasurements(prev => ({
+//       ...prev,
+//       [orderDetailId]: measurementData
+//     }));
+//   }
+
+//   setLoadingMeasurements(false);
+// };
+
+
+
+
+
+
+
   if (loading && !isFetchingMore && !debouncedSearchTerm) {
     return (
       <div className="flex flex-column p-3 lg:p-5" style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -861,7 +971,7 @@ const SalesOrder = () => {
         </div>
       )}
 
-      <Dialog 
+      {/* <Dialog 
         header={`Order Details - ${selectedOrder?.docno}`} 
         visible={visible} 
         onHide={handleDialogClose}
@@ -1056,7 +1166,385 @@ const SalesOrder = () => {
             <p>No order details available</p>
           </div>
         )}
-      </Dialog>
+      </Dialog> */}
+
+<Dialog 
+  header={`Order Details - ${selectedOrder?.docno}`} 
+  visible={visible} 
+  onHide={handleDialogClose}
+  maximized={isMaximized}
+  onMaximize={(e) => setIsMaximized(e.maximized)}
+  className={isMaximized ? 'maximized-dialog' : ''}
+  blockScroll
+>
+  {listLoading ? (
+    <Skeleton height="400px" />
+  ) : selectedOrder ? (
+    <>
+    {console.log('✅ selectedOrder:', selectedOrder)}
+    <div className="p-4">
+      
+
+      {/* Order Info Section */}
+      <div className="space-y-4">
+
+  {/* Name Row */}
+
+<div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Name</span>
+  <span className="text-sm font-medium text-right flex-1 truncate">
+    {selectedOrder?.user?.fname || 'N/A'}
+  </span>
+</div>
+
+
+
+  {/* Phone Number Row */}
+  <div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Phone No</span>
+  <span className="text-sm font-medium text-right flex-1 truncate">
+    {selectedOrder?.customer|| 'N/A'}
+  </span>
+</div>
+
+
+  {/* Order Number Row */}
+  <div className="flex justify-between items-center border-b pb-1 w-full">
+  <p className="text-sm text-gray-600 w-28">Order Number</p>
+  <a
+    href="#"
+    className="text-blue-600 font-semibold text-right flex-1 truncate"
+  >
+    {selectedOrder?.docno || 'N/A'}
+  </a>
+</div>
+
+
+</div>
+
+
+      {/* Order Items Section */}
+
+
+<div className="mb-4">
+  <h5 className="m-0 mb-3">Order Items</h5>
+
+  {selectedOrder?.orderDetails?.map((item) => (
+
+
+<div className="flex items-center justify-between mb-2">
+ 
+  <a
+    href="#"
+    onClick={(e) => {
+      e.preventDefault();
+      handleViewOrderItem(item);
+    }}
+    className="text-sm font-semibold text-blue-600 hover:underline"
+  >
+    #{item.material?.name || 'Item'}
+  </a>
+
+ 
+  <div className="flex items-center gap-3 ml-auto text-blue-600 text-sm">
+    <a
+      href="#"
+      onClick={(e) => {
+        e.preventDefault();
+      handleViewOrderItem(item);
+      }}
+      className="hover:text-blue-800"
+      title="Print Bill"
+    >
+      <i className="pi pi-print text-base" />
+    </a>
+
+    <a
+      href="#"
+      onClick={(e) => {
+        e.preventDefault();
+        handleViewOrderItem(item);
+      }}
+      className="font-medium hover:underline"
+    >
+      View
+    </a>
+  </div>
+</div>
+
+  ))}
+</div>
+
+
+
+{selectedOrder?.orderDetails?.map((item) => (
+  <div
+    key={item.id}
+    className="bg-gray-50 p-4 rounded mb-4 shadow-sm text-sm text-gray-800"
+  >
+   
+
+    <div className="flex justify-between items-center border-b pb-1 w-full">
+      <span className="text-sm text-gray-600 w-28">#{item.material?.name || 'Item'}</span>
+    <span className="text-sm font-medium text-right flex-1 truncate">₹{Number(item.item_amt)}</span>
+    </div>
+
+   
+
+<div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Stitching Cost</span>
+<span className="text-sm font-medium text-right flex-1 truncate">    1 × ₹{Number(item.item_amt)} = ₹{Number(item.item_amt)}</span>
+</div>
+
+
+
+   
+
+<div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Total</span>
+<span className="text-sm font-medium text-right flex-1 truncate">₹{Number(item.item_amt)}</span>
+</div>
+
+  </div>
+))}
+
+
+
+
+
+
+
+
+
+
+
+
+
+      {/* Amount Info */}
+      <div className="bg-blue-50 p-3 rounded text-sm mb-4">
+      
+<div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Advance Amount</span>
+<span className="text-sm font-medium text-right flex-1 truncate">₹{selectedOrder?.amt_paid || 0}</span>
+</div>
+
+      
+
+        <div className="flex justify-between items-center border-b pb-1 w-full">
+  <span className="text-sm text-gray-600 w-28">Balance Due</span>
+<span className="text-sm font-medium text-red-500 font-bold text-right flex-1 truncate">₹{selectedOrder?.amt_due || 0}</span>
+</div>
+      </div>
+
+      
+
+<div className="text-center text-sm text-gray-600 my-6">
+  {/* Top row: icon + Transactions */}
+  <div className="flex justify-center items-center gap-1 mb-1">
+    <span className="text-gray-500 text-base">📄</span> {/* or an icon */}
+    <span className="font-semibold text-gray-700">Transactions</span>
+  </div>
+
+  {/* Bottom row: message */}
+  <div className="text-gray-400">No Record Found!</div>
+</div>
+
+
+      
+
+
+
+<div className="flex mb-4 gap-2">
+  <Button className="p-button-success m"   style={{ width: "50%" }} label="Send Bill" icon="pi pi-send" />
+  <Button className="p-button-outlined"   style={{ width: "50%" }} label="Print Bill" icon="pi pi-print" />
+</div>
+
+
+
+<Button
+  label="Receive Payment" 
+  className="w-full p-button-info"
+  onClick={handlePaymentClick}
+/>
+
+
+
+    </div>
+    </>
+  ) : (
+    <div className="text-center p-4">
+      <p>No order details available</p>
+    </div>
+  )}
+</Dialog>
+
+
+<Dialog
+  header={
+    <div className="flex justify-between items-center w-full">
+      <div className="flex items-center gap-4">
+        <div
+          className="flex items-center gap-2 text-blue-600 cursor-pointer"
+          onClick={() => {
+            if (selectedItem) handleEditOrderDetail(selectedItem);
+          }}
+        >
+          <i className="pi pi-pencil" />
+          <span className="font-medium">Edit</span>
+        </div>
+        <div className="text-red-600 cursor-pointer" title="Delete">
+          <i className="pi pi-trash" />
+        </div>
+      </div>
+      {/* <div className="flex gap-5" style={{ paddingLeft: '625px' }}>
+       
+        <i className="pi pi-print text-blue-600 cursor-pointer" title="Print" />     
+        <i className="pi pi-whatsapp text-green-600 cursor-pointer" title="WhatsApp" />
+        <i className="pi pi-download text-gray-600 cursor-pointer" title="Download" />
+      </div> */}
+      <div className="flex justify-end gap-5">
+  <div className="text-blue-600 cursor-pointer" title="Print">
+    <i className="pi pi-print" />
+  </div>
+  <div className="text-green-600 cursor-pointer" title="WhatsApp">
+    <i className="pi pi-whatsapp" />
+  </div>
+  <div className="text-gray-600 cursor-pointer" title="Download">
+    <i className="pi pi-download" />
+  </div>
+</div>
+
+    </div>
+  }
+  visible={orderItemDialogVisible}
+  onHide={() => setOrderItemDialogVisible(false)}
+  style={{ width: '60vw' }}
+  breakpoints={{ '960px': '95vw' }}
+>
+  <div className="bg-white p-4 rounded">
+    {/* Show metadata ONCE */}
+    <div className="mb-4">
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Name</span>
+        <span className="text-sm font-medium text-right flex-1 truncate">
+          {selectedOrder?.user?.fname || 'Customer'}
+        </span>
+      </div>
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Order Number</span>
+        <span className="text-sm font-medium text-right flex-1 truncate">
+          {selectedOrder?.docno}
+        </span>
+      </div>
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Delivery date</span>
+        <span className="text-sm font-medium text-right flex-1 truncate">
+          {selectedOrder?.delivery_date
+            ? new Date(selectedOrder.delivery_date).toLocaleString('en-IN')
+            : 'Not scheduled'}
+        </span>
+      </div>
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Trial date</span>
+        <span className="text-sm font-medium text-right flex-1 truncate">
+          {selectedOrder?.tentitive_delivery_date
+            ? new Date(selectedOrder.tentitive_delivery_date).toLocaleString('en-IN')
+            : 'Not scheduled'}
+        </span>
+      </div>
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Type</span>
+        <span className="text-sm font-medium text-right flex-1 truncate">Stitching</span>
+      </div>
+      <div className="flex justify-between items-center border-b pb-1 w-full">
+        <span className="text-sm text-gray-600 w-28">Status</span>
+       <span className='text-sm font-medium text-right flex-1 truncate'>
+  <select
+    value={localStatusId}
+    onChange={(e) => {
+      const newId = e.target.value;
+      setLocalStatusId(newId);
+      handleItemStatusUpdate(Number(newId));
+    }}
+    style={{
+      backgroundColor: 'antiquewhite'  
+    }}
+    className="border border-gray-300 rounded px-3 py-1 text-sm text-red-600 text-center"
+  >
+    {availableStatuses.map((status) => (
+      <option key={status.id} value={status.id}>
+        {status.name}
+      </option>
+    ))}
+  </select>
+  </span>
+      </div>
+    </div>
+
+    {/* Loop each item and show measurements */}
+    {selectedOrder?.orderDetails?.map((detail) => {
+      const measurement = itemMeasurements[detail.id];
+
+      return (
+        <div key={detail.id} className="mb-4">
+          <div className="text-sm font-semibold text-gray-800 mb-2 mt-4 bg-gray-200 px-3 py-2 rounded">
+            {detail.material?.name || 'Item'}
+          </div>
+
+          {measurement && (
+            <div className="bg-gray-100 p-3 rounded border border-gray-300 mb-4">
+              <div className="flex justify-between items-center border-b pb-1 w-full">
+                <span className="text-sm font-semibold text-gray-800 mb-2">Measurements</span>
+                <span className="text-xs text-gray-500 mb-2 text-right flex-1 truncate">
+                  Taken on: {new Date(measurement.measurement_date).toLocaleString()}
+                </span>
+              </div>
+
+              {measurement.measurementDetails.map((m, index) => (
+                <div key={index} className="flex justify-between items-center border-b pb-1 w-full">
+                  <span className="text-sm text-gray-600">{m.measurementMaster.measurement_name}</span>
+                  <span className="text-sm font-medium text-right flex-1 truncate">{m.measurement_val}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })}
+
+   {/* Combined Price Breakup */}
+<div className="border-t border-gray-200 pt-3 mt-6" style={{ backgroundColor: '#f3f4f6' }}>
+  <div className="flex justify-between items-center border-b pb-1 w-full">
+    <span className="text-sm font-semibold mb-2 text-gray-900">Price Breakup</span>
+  </div>
+
+  {selectedOrder?.orderDetails?.map((detail, index) => (
+    <div key={index} className="flex justify-between items-center border-b pb-1 w-full">
+      <span className="text-sm text-gray-800">{detail.material?.name || `Item ${index + 1}`}</span>
+      <span className="text-sm font-medium text-right flex-1 truncate">
+        {detail.ord_qty || 1} × ₹{detail.item_amt?.toFixed(2) || '0.00'}
+      </span>
+    </div>
+  ))}
+
+  <div className="flex justify-between font-bold text-sm text-gray-900 border-t border-dashed mt-2 pt-2">
+    <span className="text-sm font-semibold">Total:</span>
+    <span className="text-sm font-medium text-right flex-1 truncate">
+      ₹
+      {selectedOrder?.orderDetails
+        ?.reduce((acc, item) => acc + (item.item_amt || 0) * (item.ord_qty || 1), 0)
+        .toFixed(2)}
+    </span>
+  </div>
+</div>
+</div>
+</Dialog>
+
+
+
+
+
+
 
       <Dialog 
         visible={imagePreviewVisible} 
